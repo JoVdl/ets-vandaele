@@ -35,6 +35,7 @@ export default function GanttChart({
 }: Props) {
   const scrollRef    = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<number | null>(null);
+  const prevDayWidth  = useRef(dayWidth);
 
   // ── Days array ────────────────────────────────────────────────────────────
   const days = useMemo(() => {
@@ -94,27 +95,49 @@ export default function GanttChart({
     if (end >= new Date(c.dateDebut)) onResizeChantier(id, format(end, 'yyyy-MM-dd'));
   }, [chantiers, onResizeChantier]);
 
-  // ── Wheel zoom (Ctrl + scroll) ────────────────────────────────────────────
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    if (!e.ctrlKey) return;
-    e.preventDefault();
-    const el = scrollRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left - SIDE_W; // relative to grid area
-    const contentX = el.scrollLeft + mouseX;
-    const dayAtMouse = contentX / dayWidth;
-    const factor = e.deltaY > 0 ? 1 / 1.18 : 1.18;
-    const nw = Math.max(3, Math.min(100, dayWidth * factor));
-    pendingScroll.current = dayAtMouse * nw - mouseX;
-    onDayWidthChange(nw);
-  }, [dayWidth, onDayWidthChange]);
+  // ── Wheel zoom — native non-passive listener so preventDefault() works ────
+  // (React's synthetic onWheel is passive in modern browsers, blocking preventDefault)
+  const dayWidthRef        = useRef(dayWidth);
+  const onDayWidthChangeRef = useRef(onDayWidthChange);
+  dayWidthRef.current        = dayWidth;
+  onDayWidthChangeRef.current = onDayWidthChange;
 
   useEffect(() => {
-    if (pendingScroll.current !== null && scrollRef.current) {
-      scrollRef.current.scrollLeft = Math.max(0, pendingScroll.current);
+    const el = scrollRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const mouseX   = e.clientX - rect.left - SIDE_W;
+      const contentX = el.scrollLeft + mouseX;
+      const dw       = dayWidthRef.current;
+      const dayAtMouse = contentX / dw;
+      const factor = e.deltaY > 0 ? 1 / 1.18 : 1.18;
+      const nw = Math.max(3, Math.min(100, dw * factor));
+      pendingScroll.current = dayAtMouse * nw - mouseX;
+      onDayWidthChangeRef.current(nw);
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []); // attach once
+
+  // ── After every render: apply scroll corrections ───────────────────────────
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    if (pendingScroll.current !== null) {
+      // Wheel zoom → scroll to keep day-under-mouse fixed
+      el.scrollLeft = Math.max(0, pendingScroll.current);
       pendingScroll.current = null;
+    } else if (prevDayWidth.current !== dayWidth) {
+      // Button zoom → maintain the center of the visible area
+      const center     = el.scrollLeft + el.clientWidth / 2;
+      const dayAtCenter = center / prevDayWidth.current;
+      el.scrollLeft = Math.max(0, dayAtCenter * dayWidth - el.clientWidth / 2);
     }
+    prevDayWidth.current = dayWidth;
   });
 
   // Scroll to today on mount
@@ -129,7 +152,6 @@ export default function GanttChart({
     <div
       ref={scrollRef}
       className="flex-1 overflow-auto"
-      onWheel={handleWheel}
       style={{ cursor: 'default' }}
     >
       {/* Inner content: SIDE_W + timeline width */}
@@ -228,7 +250,7 @@ export default function GanttChart({
               </div>
 
               {/* Grid cell */}
-              <div className="relative flex-shrink-0" style={{ width: totalW, height: ROW_H }}>
+              <div className="relative flex-shrink-0 overflow-hidden" style={{ width: totalW, height: ROW_H }}>
                 {/* Grid lines */}
                 {!denseGrid
                   ? days.map((d, di) => (
