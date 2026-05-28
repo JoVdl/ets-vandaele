@@ -1,17 +1,19 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   startOfDay, addDays, differenceInCalendarDays,
-  format, isToday, isWeekend,
+  format, isToday, isWeekend, getDay,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { Chantier } from '../types';
-import { CHANTIER_TYPES, DAY_WIDTH, MONTH_FR } from '../lib/constants';
+import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import ChantierBlock from './ChantierBlock';
 
 interface Props {
   chantiers: Chantier[];
   periodStart: Date;
   periodEnd: Date;
+  dayWidth: number;
+  onDayWidthChange: (w: number) => void;
   onMoveChantier: (id: string, newStart: string, newEnd: string) => void;
   onResizeChantier: (id: string, newEnd: string) => void;
   onClickChantier: (c: Chantier) => void;
@@ -19,22 +21,22 @@ interface Props {
 }
 
 interface MonthGroup {
-  label: string;
-  year: number;
-  month: number;
-  startIndex: number;
-  count: number;
+  label: string; year: number; month: number; startIndex: number; count: number;
 }
 
-const ROW_HEIGHT = 52;
-const HEADER_HEIGHT = 64;
-const SIDEBAR_W = 260;
+const ROW_H   = 52;
+const HEAD_H  = 56;  // month row 22 + day row 34
+const SIDE_W  = 260;
 
 export default function GanttChart({
   chantiers, periodStart, periodEnd,
+  dayWidth, onDayWidthChange,
   onMoveChantier, onResizeChantier, onClickChantier, onClickDay,
 }: Props) {
-  // Build array of days in period
+  const scrollRef    = useRef<HTMLDivElement>(null);
+  const pendingScroll = useRef<number | null>(null);
+
+  // ── Days array ────────────────────────────────────────────────────────────
   const days = useMemo(() => {
     const arr: Date[] = [];
     let cur = startOfDay(periodStart);
@@ -43,230 +45,242 @@ export default function GanttChart({
     return arr;
   }, [periodStart, periodEnd]);
 
-  const totalWidth = days.length * DAY_WIDTH;
+  const totalW     = days.length * dayWidth;
   const todayIndex = differenceInCalendarDays(startOfDay(new Date()), startOfDay(periodStart));
 
-  // Group days by month for the header
+  // ── Month groups ──────────────────────────────────────────────────────────
   const monthGroups = useMemo<MonthGroup[]>(() => {
-    const groups: MonthGroup[] = [];
+    const g: MonthGroup[] = [];
     days.forEach((d, i) => {
-      const m = d.getMonth();
-      const y = d.getFullYear();
-      const last = groups[groups.length - 1];
-      if (last && last.month === m && last.year === y) {
-        last.count++;
-      } else {
-        groups.push({ label: MONTH_FR[m], year: y, month: m, startIndex: i, count: 1 });
-      }
+      const m = d.getMonth(), y = d.getFullYear();
+      const last = g[g.length - 1];
+      if (last && last.month === m && last.year === y) last.count++;
+      else g.push({ label: MONTH_FR[m], year: y, month: m, startIndex: i, count: 1 });
     });
-    return groups;
+    return g;
   }, [days]);
 
-  // Sort chantiers by start date
+  // ── Density thresholds ────────────────────────────────────────────────────
+  const showDayNums  = dayWidth >= 14;
+  const showWeekMark = dayWidth >= 6;
+  const showDOW      = dayWidth >= 22;
+  const denseGrid    = dayWidth < 8;
+
+  // ── Sorted rows ───────────────────────────────────────────────────────────
   const sorted = useMemo(
     () => [...chantiers].sort((a, b) => a.dateDebut.localeCompare(b.dateDebut)),
     [chantiers]
   );
 
-  const getBlockProps = useCallback((c: Chantier) => {
+  const blockProps = useCallback((c: Chantier) => {
     const s = differenceInCalendarDays(startOfDay(new Date(c.dateDebut)), startOfDay(periodStart));
-    const e = differenceInCalendarDays(startOfDay(new Date(c.dateFin)), startOfDay(periodStart));
-    const left = s * DAY_WIDTH;
-    const width = (e - s + 1) * DAY_WIDTH;
-    return { left, width };
-  }, [periodStart]);
+    const e = differenceInCalendarDays(startOfDay(new Date(c.dateFin)),   startOfDay(periodStart));
+    return { left: s * dayWidth, width: (e - s + 1) * dayWidth };
+  }, [periodStart, dayWidth]);
 
-  const handleMoveEnd = useCallback((id: string, deltaDays: number) => {
+  // ── Callbacks ─────────────────────────────────────────────────────────────
+  const handleMoveEnd = useCallback((id: string, delta: number) => {
     const c = chantiers.find(x => x.id === id);
     if (!c) return;
-    const newStart = addDays(new Date(c.dateDebut), deltaDays);
-    const newEnd = addDays(new Date(c.dateFin), deltaDays);
-    onMoveChantier(id, format(newStart, 'yyyy-MM-dd'), format(newEnd, 'yyyy-MM-dd'));
+    onMoveChantier(id,
+      format(addDays(new Date(c.dateDebut), delta), 'yyyy-MM-dd'),
+      format(addDays(new Date(c.dateFin),   delta), 'yyyy-MM-dd'));
   }, [chantiers, onMoveChantier]);
 
-  const handleResizeEnd = useCallback((id: string, deltaDays: number) => {
+  const handleResizeEnd = useCallback((id: string, delta: number) => {
     const c = chantiers.find(x => x.id === id);
     if (!c) return;
-    const newEnd = addDays(new Date(c.dateFin), deltaDays);
-    if (newEnd >= new Date(c.dateDebut)) {
-      onResizeChantier(id, format(newEnd, 'yyyy-MM-dd'));
-    }
+    const end = addDays(new Date(c.dateFin), delta);
+    if (end >= new Date(c.dateDebut)) onResizeChantier(id, format(end, 'yyyy-MM-dd'));
   }, [chantiers, onResizeChantier]);
 
+  // ── Wheel zoom (Ctrl + scroll) ────────────────────────────────────────────
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const el = scrollRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left - SIDE_W; // relative to grid area
+    const contentX = el.scrollLeft + mouseX;
+    const dayAtMouse = contentX / dayWidth;
+    const factor = e.deltaY > 0 ? 1 / 1.18 : 1.18;
+    const nw = Math.max(3, Math.min(100, dayWidth * factor));
+    pendingScroll.current = dayAtMouse * nw - mouseX;
+    onDayWidthChange(nw);
+  }, [dayWidth, onDayWidthChange]);
+
+  useEffect(() => {
+    if (pendingScroll.current !== null && scrollRef.current) {
+      scrollRef.current.scrollLeft = Math.max(0, pendingScroll.current);
+      pendingScroll.current = null;
+    }
+  });
+
+  // Scroll to today on mount
+  useEffect(() => {
+    if (scrollRef.current && todayIndex > 0)
+      scrollRef.current.scrollLeft = Math.max(0, todayIndex * dayWidth - 160);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Gantt container with sticky sidebar */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar */}
-        <div
-          className="flex-shrink-0 bg-white border-r border-slate-200 z-20 flex flex-col"
-          style={{ width: SIDEBAR_W, minWidth: SIDEBAR_W }}
-        >
-          {/* Sidebar header */}
-          <div
-            className="flex items-end px-4 pb-2 border-b border-slate-200 bg-slate-50 flex-shrink-0"
-            style={{ height: HEADER_HEIGHT }}
-          >
+    <div
+      ref={scrollRef}
+      className="flex-1 overflow-auto"
+      onWheel={handleWheel}
+      style={{ cursor: 'default' }}
+    >
+      {/* Inner content: SIDE_W + timeline width */}
+      <div style={{ minWidth: SIDE_W + totalW, width: SIDE_W + totalW }}>
+
+        {/* ── STICKY HEADER ROW ─────────────────────────────────────────── */}
+        <div className="sticky top-0 z-30 flex border-b border-slate-200"
+          style={{ height: HEAD_H }}>
+
+          {/* Sidebar header corner — sticky left inside sticky top */}
+          <div className="sticky left-0 z-40 flex items-end px-4 pb-2
+            bg-slate-50 border-r border-slate-200 flex-shrink-0"
+            style={{ width: SIDE_W, minWidth: SIDE_W }}>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Chantier</span>
           </div>
 
-          {/* Sidebar rows */}
-          <div className="overflow-y-auto flex-1 overflow-x-hidden">
-            {sorted.map((c, i) => {
-              const meta = CHANTIER_TYPES[c.type];
-              const isPotentiel = c.status === 'potentiel';
-              return (
-                <div
-                  key={c.id}
-                  className="flex items-center gap-2 px-3 border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors"
-                  style={{ height: ROW_HEIGHT, backgroundColor: i % 2 === 0 ? 'white' : '#fafafa' }}
-                  onClick={() => onClickChantier(c)}
-                >
-                  <div
-                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                    style={{
-                      backgroundColor: meta.color,
-                      opacity: isPotentiel ? 0.5 : 1,
-                      border: isPotentiel ? `1.5px dashed ${meta.color}` : 'none',
-                    }}
-                  />
-                  <div className="min-w-0">
-                    <p className={`text-xs font-semibold truncate ${isPotentiel ? 'text-slate-400' : 'text-slate-700'}`}>
-                      {c.nom}
-                    </p>
-                    {c.client && (
-                      <p className="text-xs text-slate-400 truncate">{c.client}</p>
-                    )}
-                  </div>
+          {/* Timeline header */}
+          <div style={{ width: totalW, minWidth: totalW }}>
+            {/* Month row */}
+            <div className="flex bg-slate-100" style={{ height: 22 }}>
+              {monthGroups.map(mg => (
+                <div key={`${mg.year}-${mg.month}`}
+                  className="flex items-center justify-center border-r border-slate-200 overflow-hidden"
+                  style={{ width: mg.count * dayWidth }}>
+                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider truncate px-1">
+                    {mg.count * dayWidth > 50
+                      ? `${mg.label} ${mg.year}`
+                      : mg.count * dayWidth > 20
+                        ? mg.label.slice(0, 3)
+                        : ''}
+                  </span>
                 </div>
-              );
-            })}
-
-            {/* Empty state */}
-            {sorted.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                <p className="text-sm">Aucun chantier</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Scrollable grid */}
-        <div className="flex-1 overflow-auto relative">
-          <div style={{ width: totalWidth, minWidth: totalWidth }}>
-            {/* Header: months row + days row */}
-            <div
-              className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200"
-              style={{ height: HEADER_HEIGHT }}
-            >
-              {/* Month row */}
-              <div className="flex" style={{ height: 28 }}>
-                {monthGroups.map((mg) => (
-                  <div
-                    key={`${mg.year}-${mg.month}`}
-                    className="flex items-center justify-center border-r border-slate-200 bg-slate-100"
-                    style={{ width: mg.count * DAY_WIDTH, height: 28 }}
-                  >
-                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider truncate px-1">
-                      {mg.label} {mg.year}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Day numbers row */}
-              <div className="flex" style={{ height: 36 }}>
-                {days.map((d, i) => {
-                  const isWkd = isWeekend(d);
-                  const isToday_ = isToday(d);
-                  return (
-                    <div
-                      key={i}
-                      className={`flex flex-col items-center justify-center border-r cursor-pointer transition-colors
-                        ${isWkd ? 'bg-slate-100' : 'bg-white'}
-                        ${isToday_ ? 'bg-blue-50' : ''}
-                        hover:bg-blue-50
-                      `}
-                      style={{ width: DAY_WIDTH, height: 36, borderColor: '#e2e8f0' }}
-                      onClick={() => onClickDay(format(d, 'yyyy-MM-dd'))}
-                    >
-                      <span className={`text-xs leading-none ${isToday_ ? 'font-bold text-blue-600' : isWkd ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {format(d, 'd')}
-                      </span>
-                      <span className={`text-[9px] leading-none mt-0.5 ${isToday_ ? 'text-blue-400' : 'text-slate-300'}`}>
-                        {format(d, 'EEE', { locale: fr }).slice(0, 2)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              ))}
             </div>
-
-            {/* Rows */}
-            <div>
-              {sorted.map((c, i) => {
-                const { left, width } = getBlockProps(c);
+            {/* Day row */}
+            <div className="flex bg-white" style={{ height: 34 }}>
+              {days.map((d, i) => {
+                const isWkd = isWeekend(d);
+                const isTod = isToday(d);
+                const isMon = getDay(d) === 1;
+                const show  = showDayNums || (showWeekMark && (isMon || d.getDate() === 1));
                 return (
-                  <div
-                    key={c.id}
-                    className="relative border-b border-slate-100"
-                    style={{
-                      height: ROW_HEIGHT,
-                      backgroundColor: i % 2 === 0 ? 'white' : '#fafafa',
-                    }}
-                  >
-                    {/* Day vertical lines + weekend shading */}
-                    {days.map((d, di) => (
-                      <div
-                        key={di}
-                        className="absolute top-0 bottom-0 border-r border-slate-50"
-                        style={{
-                          left: di * DAY_WIDTH,
-                          width: DAY_WIDTH,
-                          backgroundColor: isWeekend(d) ? 'rgba(148,163,184,0.07)' : undefined,
-                          ...(isToday(d) ? { backgroundColor: 'rgba(59,130,246,0.05)' } : {}),
-                        }}
-                      />
-                    ))}
-
-                    {/* Today line */}
-                    {todayIndex >= 0 && todayIndex < days.length && (
-                      <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-20 pointer-events-none"
-                        style={{ left: todayIndex * DAY_WIDTH + DAY_WIDTH / 2 }}
-                      />
-                    )}
-
-                    {/* Chantier block */}
-                    {left + width > 0 && left < totalWidth && (
-                      <ChantierBlock
-                        chantier={c}
-                        left={left}
-                        width={width}
-                        onMoveEnd={handleMoveEnd}
-                        onResizeEnd={handleResizeEnd}
-                        onClick={onClickChantier}
-                      />
+                  <div key={i}
+                    className={`flex flex-col items-center justify-center overflow-hidden border-r
+                      ${isWkd ? 'bg-slate-50' : 'bg-white'}
+                      ${isTod ? '!bg-blue-50' : ''}
+                      ${show ? 'cursor-pointer hover:bg-blue-50' : ''}
+                    `}
+                    style={{ width: dayWidth, height: 34, borderColor: '#e2e8f0' }}
+                    onClick={() => show && onClickDay(format(d, 'yyyy-MM-dd'))}>
+                    {show && (
+                      <>
+                        <span className={`leading-none
+                          ${isTod ? 'font-bold text-blue-600' : isWkd ? 'text-slate-400' : 'text-slate-500'}
+                          ${dayWidth < 18 ? 'text-[9px]' : 'text-xs'}
+                        `}>{format(d, 'd')}</span>
+                        {showDOW && (
+                          <span className={`text-[9px] leading-none mt-0.5 ${isTod ? 'text-blue-400' : 'text-slate-300'}`}>
+                            {format(d, 'EEE', { locale: fr }).slice(0, 2)}
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
                 );
               })}
-
-              {/* Empty rows for visual breathing room */}
-              {Array.from({ length: Math.max(0, 5 - sorted.length) }).map((_, i) => (
-                <div key={`empty-${i}`}
-                  className="border-b border-slate-50 relative"
-                  style={{ height: ROW_HEIGHT, backgroundColor: (sorted.length + i) % 2 === 0 ? 'white' : '#fafafa' }}>
-                  {days.map((d, di) => (
-                    <div key={di} className="absolute top-0 bottom-0 border-r border-slate-50"
-                      style={{ left: di * DAY_WIDTH, width: DAY_WIDTH,
-                        backgroundColor: isWeekend(d) ? 'rgba(148,163,184,0.07)' : undefined }} />
-                  ))}
-                </div>
-              ))}
             </div>
           </div>
         </div>
+
+        {/* ── DATA ROWS ─────────────────────────────────────────────────── */}
+        {sorted.map((c, i) => {
+          const meta = CHANTIER_TYPES[c.type];
+          const isPotentiel = c.status === 'potentiel';
+          const { left, width } = blockProps(c);
+          return (
+            <div key={c.id} className="flex border-b border-slate-100"
+              style={{ height: ROW_H, backgroundColor: i % 2 === 0 ? 'white' : '#fafafa' }}>
+
+              {/* Sidebar cell — sticky left */}
+              <div
+                className="sticky left-0 z-10 flex items-center gap-2 px-3 border-r border-slate-100
+                  cursor-pointer hover:bg-slate-50 transition-colors flex-shrink-0"
+                style={{ width: SIDE_W, minWidth: SIDE_W,
+                  backgroundColor: i % 2 === 0 ? 'white' : '#fafafa' }}
+                onClick={() => onClickChantier(c)}>
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: meta.color, opacity: isPotentiel ? 0.5 : 1,
+                    border: isPotentiel ? `1.5px dashed ${meta.color}` : 'none' }} />
+                <div className="min-w-0">
+                  <p className={`text-xs font-semibold truncate ${isPotentiel ? 'text-slate-400' : 'text-slate-700'}`}>
+                    {c.nom}
+                  </p>
+                  {c.client && <p className="text-xs text-slate-400 truncate">{c.client}</p>}
+                </div>
+              </div>
+
+              {/* Grid cell */}
+              <div className="relative flex-shrink-0" style={{ width: totalW, height: ROW_H }}>
+                {/* Grid lines */}
+                {!denseGrid
+                  ? days.map((d, di) => (
+                      <div key={di} className="absolute top-0 bottom-0 border-r border-slate-50"
+                        style={{ left: di * dayWidth, width: dayWidth,
+                          backgroundColor: isWeekend(d) ? 'rgba(148,163,184,0.06)' : undefined,
+                          ...(isToday(d) ? { backgroundColor: 'rgba(59,130,246,0.04)' } : {}) }} />
+                    ))
+                  : monthGroups.map(mg => (
+                      <div key={`${mg.year}-${mg.month}`}
+                        className="absolute top-0 bottom-0 border-r border-slate-100"
+                        style={{ left: mg.startIndex * dayWidth, width: mg.count * dayWidth }} />
+                    ))
+                }
+                {/* Today line */}
+                {todayIndex >= 0 && todayIndex < days.length && (
+                  <div className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-20 pointer-events-none"
+                    style={{ left: todayIndex * dayWidth + dayWidth / 2 }} />
+                )}
+                {/* Block */}
+                {left + width > 0 && left < totalW && (
+                  <ChantierBlock
+                    chantier={c} left={left} width={width} dayWidth={dayWidth}
+                    onMoveEnd={handleMoveEnd} onResizeEnd={handleResizeEnd}
+                    onClick={onClickChantier}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Empty rows padding */}
+        {Array.from({ length: Math.max(0, 5 - sorted.length) }).map((_, i) => (
+          <div key={`e-${i}`} className="flex border-b border-slate-50"
+            style={{ height: ROW_H, backgroundColor: (sorted.length + i) % 2 === 0 ? 'white' : '#fafafa' }}>
+            <div className="sticky left-0 flex-shrink-0 border-r border-slate-100"
+              style={{ width: SIDE_W, backgroundColor: (sorted.length + i) % 2 === 0 ? 'white' : '#fafafa' }} />
+            <div className="flex-shrink-0" style={{ width: totalW }} />
+          </div>
+        ))}
+
+        {sorted.length === 0 && (
+          <div className="flex">
+            <div className="sticky left-0 flex-shrink-0 border-r border-slate-100"
+              style={{ width: SIDE_W }} />
+            <div className="flex items-center justify-center py-16 text-slate-400"
+              style={{ width: totalW }}>
+              <p className="text-sm">Aucun chantier sur cette période</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
