@@ -8,7 +8,7 @@ import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import ChantierBlock from './ChantierBlock';
 import ChantierTooltip from './ChantierTooltip';
-import { isWorkingDay, findGaps } from '../lib/workingDays';
+import { isWorkingDay, findGaps, nextWorkingDay, prevWorkingDay } from '../lib/workingDays';
 
 interface Props {
   chantiers: Chantier[];
@@ -120,16 +120,21 @@ export default function GanttChart({
   const handleMoveEnd = useCallback((id: string, delta: number) => {
     const c = chantiers.find(x => x.id === id);
     if (!c) return;
+    const start = nextWorkingDay(addDays(new Date(c.dateDebut), delta));
+    const end   = prevWorkingDay(addDays(new Date(c.dateFin),   delta));
     onMoveChantier(id,
-      format(addDays(new Date(c.dateDebut), delta), 'yyyy-MM-dd'),
-      format(addDays(new Date(c.dateFin),   delta), 'yyyy-MM-dd'));
+      format(start, 'yyyy-MM-dd'),
+      format(end < start ? start : end, 'yyyy-MM-dd'));
   }, [chantiers, onMoveChantier]);
 
   const handleResizeEnd = useCallback((id: string, delta: number) => {
     const c = chantiers.find(x => x.id === id);
     if (!c) return;
-    const end = addDays(new Date(c.dateFin), delta);
-    if (end >= new Date(c.dateDebut)) onResizeChantier(id, format(end, 'yyyy-MM-dd'));
+    const rawEnd = addDays(new Date(c.dateFin), delta);
+    const start  = new Date(c.dateDebut);
+    if (rawEnd < start) return;
+    const end = prevWorkingDay(rawEnd);
+    onResizeChantier(id, format(end < start ? start : end, 'yyyy-MM-dd'));
   }, [chantiers, onResizeChantier]);
 
   // ── Wheel zoom — native non-passive listener ──────────────────────────────
@@ -251,7 +256,7 @@ export default function GanttChart({
                         ${show ? 'cursor-pointer hover:bg-blue-50' : ''}
                       `}
                       style={{ width: dayWidth, height: 34, borderColor: '#e2e8f0' }}
-                      onClick={() => show && onClickDay(format(d, 'yyyy-MM-dd'))}>
+                      onClick={() => show && onClickDay(format(nextWorkingDay(d), 'yyyy-MM-dd'))}>
                       {show && (
                         <>
                           <span className={`leading-none

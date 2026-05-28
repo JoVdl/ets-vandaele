@@ -4,7 +4,7 @@ import {
 } from 'date-fns';
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, BarChart2,
-  TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2, Moon, Sun,
+  TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2, Moon, Sun, MapPin,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { useChantiers } from '../hooks/useChantiers';
@@ -15,6 +15,7 @@ import MapView from './MapView';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import { reorganize } from '../lib/reorganize';
+import { geocode, extractLocation } from '../lib/geocoder';
 import { countWorkingDays } from '../lib/workingDays';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
@@ -98,6 +99,7 @@ export default function PlanDeCharge() {
     open: false, chantier: null,
   });
   const [filterStatus, setFilterStatus] = useState<'all' | 'confirme' | 'potentiel'>('all');
+  const [geocoding, setGeocoding] = useState<{ done: number; total: number } | null>(null);
   const { theme, toggle: toggleTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -212,6 +214,31 @@ export default function PlanDeCharge() {
     }
   };
 
+  const handleGeocodeBatch = async () => {
+    const toGeocode = chantiers.filter(c => !c.latitude || !c.longitude);
+    if (!toGeocode.length) { alert('Tous les chantiers ont déjà une localisation.'); return; }
+    if (!confirm(`Géolocaliser ${toGeocode.length} chantier(s) sans coordonnées ?\nCela peut prendre quelques secondes (1 req/s).`)) return;
+    setGeocoding({ done: 0, total: toGeocode.length });
+    let done = 0;
+    for (const c of toGeocode) {
+      const q = extractLocation(c.nom, c.adresse || c.lieu);
+      if (q) {
+        const res = await geocode(q);
+        if (res) {
+          await updateChantier(c.id, {
+            latitude: res.lat,
+            longitude: res.lon,
+            adresse: c.adresse || res.displayName.split(',').slice(0, 2).join(',').trim(),
+          });
+        }
+      }
+      done++;
+      setGeocoding({ done, total: toGeocode.length });
+      if (done < toGeocode.length) await new Promise(r => setTimeout(r, 1100));
+    }
+    setGeocoding(null);
+  };
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500">
@@ -283,6 +310,15 @@ export default function PlanDeCharge() {
               ))}
             </div>
             <ImportButton />
+            <button
+              onClick={handleGeocodeBatch}
+              disabled={!!geocoding}
+              title="Géolocaliser automatiquement les chantiers sans coordonnées"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40">
+              {geocoding
+                ? <><Loader2 size={14} className="animate-spin"/> {geocoding.done}/{geocoding.total}</>
+                : <><MapPin size={14}/> Géolocaliser</>}
+            </button>
             <button
               onClick={handleReorganize}
               disabled={reorganizing || potentiels.length === 0}

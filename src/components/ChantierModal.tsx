@@ -5,6 +5,7 @@ import type { Chantier, ChantierType, TypePelle } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { format } from 'date-fns';
 import { geocode, geocodeSearch, extractLocation, type GeoResult } from '../lib/geocoder';
+import { nextWorkingDay, prevWorkingDay } from '../lib/workingDays';
 
 interface Props {
   isOpen: boolean;
@@ -24,8 +25,8 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   lieu: '',
   type: 'curage_mecanique',
   status: 'potentiel',
-  dateDebut: format(new Date(), 'yyyy-MM-dd'),
-  dateFin: format(new Date(), 'yyyy-MM-dd'),
+  dateDebut: format(nextWorkingDay(new Date()), 'yyyy-MM-dd'),
+  dateFin: format(nextWorkingDay(new Date()), 'yyyy-MM-dd'),
   periodePreconiseeDebut: '',
   periodePreconiseeFin: '',
   adresse: '',
@@ -68,7 +69,11 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
       setForm({ ...emptyForm(), ...rest });
     } else {
       const f = emptyForm();
-      if (defaultDateDebut) { f.dateDebut = defaultDateDebut; f.dateFin = defaultDateDebut; }
+      if (defaultDateDebut) {
+        const snapped = format(nextWorkingDay(new Date(defaultDateDebut + 'T00:00:00')), 'yyyy-MM-dd');
+        f.dateDebut = snapped;
+        f.dateFin   = snapped;
+      }
       setForm(f);
     }
   }, [chantier, defaultDateDebut, isOpen]);
@@ -271,12 +276,20 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date début</span>
-                <input type="date" required value={form.dateDebut} onChange={e => set('dateDebut', e.target.value)}
+                <input type="date" required value={form.dateDebut}
+                  onChange={e => {
+                    if (!e.target.value) return;
+                    set('dateDebut', format(nextWorkingDay(new Date(e.target.value + 'T00:00:00')), 'yyyy-MM-dd'));
+                  }}
                   className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date fin</span>
-                <input type="date" required value={form.dateFin} onChange={e => set('dateFin', e.target.value)}
+                <input type="date" required value={form.dateFin}
+                  onChange={e => {
+                    if (!e.target.value) return;
+                    set('dateFin', format(prevWorkingDay(new Date(e.target.value + 'T00:00:00')), 'yyyy-MM-dd'));
+                  }}
                   className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </label>
             </div>
