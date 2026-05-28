@@ -1,6 +1,6 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import {
-  startOfMonth, endOfMonth, addMonths, subMonths, startOfDay,
+  startOfMonth, endOfMonth, addMonths, subMonths, startOfDay, differenceInCalendarDays,
 } from 'date-fns';
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, BarChart2,
@@ -24,9 +24,6 @@ import {
 type ZoomPreset = 1 | 2 | 3 | 6 | 'year';
 type ViewTab = 'gantt' | 'carte';
 
-const PRESET_DAY_WIDTHS: Record<string, number> = {
-  '1': 40, '2': 24, '3': 16, '6': 9, 'year': 5,
-};
 
 // ── Equipment utilization ─────────────────────────────────────────────────────
 
@@ -89,7 +86,12 @@ export default function PlanDeCharge() {
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [zoomPreset, setZoomPreset]     = useState<ZoomPreset>(2);
-  const [dayWidth, setDayWidth]         = useState(PRESET_DAY_WIDTHS['2']);
+  const [dayWidth, setDayWidth]         = useState(() => {
+    const start = startOfMonth(new Date());
+    const end   = endOfMonth(addMonths(start, 1));
+    const numDays = differenceInCalendarDays(end, start) + 1;
+    return Math.max(3, (window.innerWidth - 260) / numDays);
+  });
   const [activeTab, setActiveTab]       = useState<ViewTab>('gantt');
   const [reorganizing, setReorganizing] = useState(false);
   const [modal, setModal] = useState<{ open: boolean; chantier: Chantier | null; defaultDate?: string }>({
@@ -97,6 +99,7 @@ export default function PlanDeCharge() {
   });
   const [filterStatus, setFilterStatus] = useState<'all' | 'confirme' | 'potentiel'>('all');
   const { theme, toggle: toggleTheme } = useTheme();
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // ── Period ─────────────────────────────────────────────────────────────────
   const periodStart = startOfMonth(currentMonth);
@@ -145,22 +148,32 @@ export default function PlanDeCharge() {
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   const step       = zoomPreset === 'year' ? 12 : zoomPreset as number;
-  const prevPeriod = () => setCurrentMonth(m => subMonths(m, step));
-  const nextPeriod = () => setCurrentMonth(m => addMonths(m, step));
-  const goToday    = () => setCurrentMonth(new Date());
+  const prevPeriod = () => setCurrentMonth(m => { const next = subMonths(m, step); setDayWidth(fitDayWidth(zoomPreset, next)); return next; });
+  const nextPeriod = () => setCurrentMonth(m => { const next = addMonths(m, step); setDayWidth(fitDayWidth(zoomPreset, next)); return next; });
+  const goToday    = () => { const t = new Date(); setCurrentMonth(t); setDayWidth(fitDayWidth(zoomPreset, t)); };
 
   // ── Zoom ───────────────────────────────────────────────────────────────────
+  const fitDayWidth = useCallback((p: ZoomPreset, baseMonth: Date): number => {
+    const start = startOfMonth(baseMonth);
+    const end = p === 'year'
+      ? new Date(baseMonth.getFullYear(), 11, 31)
+      : endOfMonth(addMonths(start, (p as number) - 1));
+    const numDays = differenceInCalendarDays(end, start) + 1;
+    const availableW = (containerRef.current?.clientWidth ?? window.innerWidth) - 260;
+    return Math.max(3, availableW / numDays);
+  }, []);
+
   const applyPreset = (p: ZoomPreset) => {
+    const base = p === 'year' ? startOfDay(new Date()) : currentMonth;
     setZoomPreset(p);
-    setDayWidth(PRESET_DAY_WIDTHS[String(p)]);
-    if (p === 'year') setCurrentMonth(startOfDay(new Date()));
+    setDayWidth(fitDayWidth(p, base));
+    if (p === 'year') setCurrentMonth(base);
   };
   const handleDayWidthChange = useCallback((w: number) => {
     setDayWidth(w);
-    setZoomPreset('year');
   }, []);
-  const zoomIn  = () => handleDayWidthChange(Math.min(100, dayWidth * 1.3));
-  const zoomOut = () => handleDayWidthChange(Math.max(3,   dayWidth / 1.3));
+  const zoomIn  = () => setDayWidth(w => Math.min(100, w * 1.3));
+  const zoomOut = () => setDayWidth(w => Math.max(3,   w / 1.3));
 
   // ── Period label ──────────────────────────────────────────────────────────
   const periodLabel = zoomPreset === 'year'
@@ -204,7 +217,7 @@ export default function PlanDeCharge() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
+    <div ref={containerRef} className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
