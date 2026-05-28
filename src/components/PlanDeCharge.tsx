@@ -219,13 +219,6 @@ export default function PlanDeCharge() {
               <h1 className="text-base font-bold text-slate-800 dark:text-slate-100">Plan de charge</h1>
               <p className="text-xs text-slate-400">ETS Vandaele</p>
             </div>
-            {/* Theme toggle */}
-            <button
-              onClick={toggleTheme}
-              title={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
-              className="ml-2 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-              {theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}
-            </button>
           </div>
 
           {/* CA summary */}
@@ -422,6 +415,14 @@ export default function PlanDeCharge() {
           </div>
         </div>
       )}
+
+      {/* ── Theme toggle (fixed bottom-right) ───────────────────────────── */}
+      <button
+        onClick={toggleTheme}
+        title={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+        className="fixed bottom-4 right-4 z-50 p-2.5 rounded-full bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-800 shadow-lg hover:scale-110 transition-transform">
+        {theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}
+      </button>
 
       <ChantierModal
         isOpen={modal.open}
