@@ -73,7 +73,7 @@ const VERB_PREFIXES = [
   'Pose de drains ', 'Pose de buses ', 'Pose de ',
   'Location matériel ', 'Location engins ', 'Location ',
   'Réfection chaussée ', 'Réfections ', 'Réfection ',
-  'Entretien ', 'Nettoyage ', 'Travaux ', 'Aménagement ', 'Construction ',
+  'Déboisement ', 'Entretien ', 'Nettoyage ', 'Travaux ', 'Aménagement ', 'Construction ',
 ];
 
 // Words that are NOT place/commune names

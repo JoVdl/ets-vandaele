@@ -4,6 +4,7 @@ export type ChantierType =
   | 'broyage_chenillette_sans'
   | 'broyage_chenillette_avec'
   | 'broyage_forestier'
+  | 'deboisement'
   | 'terrassement'
   | 'faucardage'
   | 'defenses_berges'
