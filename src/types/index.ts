@@ -20,6 +20,16 @@ export interface Chantier {
   status: ChantierStatus;
   dateDebut: string; // 'YYYY-MM-DD'
   dateFin: string;   // 'YYYY-MM-DD'
+
+  // Période d'intervention préconisée
+  periodePreconiseeDebut?: string; // 'YYYY-MM-DD'
+  periodePreconiseeFin?: string;   // 'YYYY-MM-DD'
+
+  // Localisation géographique
+  adresse?: string;
+  latitude?: number;
+  longitude?: number;
+
   chiffreAffaire: number;
   devisSigne: boolean;
   acomptePaye: boolean;

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
-import { X, Trash2, CheckCircle } from 'lucide-react';
+import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle } from 'lucide-react';
 import type { Chantier, ChantierType, TypePelle } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { format } from 'date-fns';
+import { geocode, extractLocation } from '../lib/geocoder';
 
 interface Props {
   isOpen: boolean;
@@ -25,6 +26,11 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   status: 'potentiel',
   dateDebut: format(new Date(), 'yyyy-MM-dd'),
   dateFin: format(new Date(), 'yyyy-MM-dd'),
+  periodePreconiseeDebut: '',
+  periodePreconiseeFin: '',
+  adresse: '',
+  latitude: undefined,
+  longitude: undefined,
   chiffreAffaire: 0,
   devisSigne: false,
   acomptePaye: false,
@@ -43,8 +49,14 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   nombreJoursPrepa: 0,
 });
 
+function isOutOfPreconisee(form: ReturnType<typeof emptyForm>): boolean {
+  if (!form.periodePreconiseeDebut || !form.periodePreconiseeFin) return false;
+  return form.dateDebut < form.periodePreconiseeDebut || form.dateFin > form.periodePreconiseeFin;
+}
+
 export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDebut, onSave, onDelete, onConfirm }: Props) {
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm]       = useState(emptyForm());
+  const [geocoding, setGeocoding] = useState(false);
 
   useEffect(() => {
     if (chantier) {
@@ -67,13 +79,29 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
     set('pelles', cur.includes(p) ? cur.filter(x => x !== p) : [...cur, p]);
   };
 
+  const handleGeocode = async () => {
+    setGeocoding(true);
+    const q = extractLocation(form.nom, form.adresse || form.lieu);
+    const res = await geocode(q);
+    if (res) {
+      setForm(prev => ({ ...prev, latitude: res.lat, longitude: res.lon, adresse: prev.adresse || res.displayName.split(',').slice(0, 3).join(',').trim() }));
+    }
+    setGeocoding(false);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(form);
+    // Clean up empty date strings
+    const clean = { ...form };
+    if (!clean.periodePreconiseeDebut) clean.periodePreconiseeDebut = undefined;
+    if (!clean.periodePreconiseeFin) clean.periodePreconiseeFin = undefined;
+    if (!clean.adresse) clean.adresse = undefined;
+    onSave(clean);
     onClose();
   };
 
   const pelleOptions = meta.pellesOptions ?? PELLES_ALL;
+  const warn = isOutOfPreconisee(form);
 
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
@@ -87,20 +115,15 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             </Dialog.Title>
             <div className="flex items-center gap-2">
               {chantier?.status === 'potentiel' && onConfirm && (
-                <button
-                  type="button"
-                  onClick={() => { onConfirm(); onClose(); }}
-                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 font-medium transition-colors"
-                >
+                <button type="button" onClick={() => { onConfirm(); onClose(); }}
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 font-medium transition-colors">
                   <CheckCircle size={15} /> Valider
                 </button>
               )}
               {chantier && onDelete && (
-                <button
-                  type="button"
+                <button type="button"
                   onClick={() => { if (confirm('Supprimer ce chantier ?')) { onDelete(); onClose(); } }}
-                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                >
+                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                   <Trash2 size={16} />
                 </button>
               )}
@@ -112,6 +135,15 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
 
           {/* Body */}
           <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+
+            {/* Période hors préconisée warning */}
+            {warn && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-orange-700 text-xs">
+                <AlertTriangle size={14} />
+                Ce chantier est en dehors de sa période d'intervention préconisée.
+              </div>
+            )}
+
             {/* Nom & Client */}
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
@@ -126,12 +158,32 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
               </label>
             </div>
 
-            {/* Lieu */}
-            <label className="block">
-              <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Lieu</span>
-              <input value={form.lieu ?? ''} onChange={e => set('lieu', e.target.value)}
-                className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </label>
+            {/* Lieu + Adresse/Localisation */}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Lieu</span>
+                <input value={form.lieu ?? ''} onChange={e => set('lieu', e.target.value)}
+                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </label>
+              <div className="block">
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Adresse (géolocalisation)</span>
+                <div className="mt-1 flex gap-1">
+                  <input value={form.adresse ?? ''} onChange={e => set('adresse', e.target.value)}
+                    placeholder="Ex: Gambais, 78950"
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <button type="button" onClick={handleGeocode} disabled={geocoding}
+                    title="Géocoder depuis le nom / adresse"
+                    className="px-2 py-2 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors">
+                    {geocoding ? <Loader2 size={15} className="animate-spin"/> : <MapPin size={15}/>}
+                  </button>
+                </div>
+                {form.latitude && form.longitude && (
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
+                  </p>
+                )}
+              </div>
+            </div>
 
             {/* Type & Status */}
             <div className="grid grid-cols-2 gap-3">
@@ -154,7 +206,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
               </label>
             </div>
 
-            {/* Dates */}
+            {/* Dates intervention */}
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date début</span>
@@ -166,6 +218,23 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 <input type="date" required value={form.dateFin} onChange={e => set('dateFin', e.target.value)}
                   className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </label>
+            </div>
+
+            {/* Période préconisée */}
+            <div className="border border-dashed border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Période d'intervention préconisée (optionnel)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs text-slate-500">Du</span>
+                  <input type="date" value={form.periodePreconiseeDebut ?? ''} onChange={e => set('periodePreconiseeDebut', e.target.value)}
+                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-slate-500">Au</span>
+                  <input type="date" value={form.periodePreconiseeFin ?? ''} onChange={e => set('periodePreconiseeFin', e.target.value)}
+                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+                </label>
+              </div>
             </div>
 
             {/* Financier */}
@@ -199,14 +268,12 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             <div className="border border-slate-100 rounded-xl p-4 bg-slate-50 space-y-3">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Matériel & Personnel</p>
 
-              {/* Pelles */}
               {meta.hasPelles && (
                 <div>
                   <p className="text-sm text-slate-600 mb-1.5">Pelles :</p>
                   <div className="flex flex-wrap gap-2">
                     {pelleOptions.map(p => (
-                      <button key={p} type="button"
-                        onClick={() => togglePelle(p as TypePelle)}
+                      <button key={p} type="button" onClick={() => togglePelle(p as TypePelle)}
                         className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                           (form.pelles ?? []).includes(p as TypePelle)
                             ? 'bg-slate-700 text-white border-slate-700'
@@ -219,7 +286,6 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 </div>
               )}
 
-              {/* Engins avec compteur */}
               <div className="grid grid-cols-3 gap-2">
                 {meta.hasDumper && (
                   <label className="block">
@@ -247,7 +313,6 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 )}
               </div>
 
-              {/* Matériels booléens */}
               <div className="flex flex-wrap gap-3">
                 {meta.hasChenillette && (
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -283,7 +348,6 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 )}
               </div>
 
-              {/* Curage aspiration spécifique */}
               {meta.hasPrepBassin && (
                 <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200">
                   <label className="block">
@@ -304,7 +368,6 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 </div>
               )}
 
-              {/* Personnes */}
               <label className="block">
                 <span className="text-xs text-slate-500">Nombre de personnes</span>
                 <input type="number" min="1" max="20" value={form.nombrePersonnes ?? 1}
@@ -327,8 +390,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
               className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
               Annuler
             </button>
-            <button
-              onClick={handleSubmit as unknown as React.MouseEventHandler}
+            <button onClick={handleSubmit as unknown as React.MouseEventHandler}
               className="px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
               {chantier ? 'Enregistrer' : 'Créer'}
             </button>

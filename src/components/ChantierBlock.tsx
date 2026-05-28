@@ -1,7 +1,11 @@
 import { useRef, useCallback } from 'react';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
-import { CheckCircle2, Clock, Users, User } from 'lucide-react';
+import { CheckCircle2, Clock, Users, User, AlertTriangle } from 'lucide-react';
+import {
+  ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
+  CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon,
+} from './EquipmentIcons';
 
 interface Props {
   chantier: Chantier;
@@ -11,23 +15,43 @@ interface Props {
   onMoveEnd: (id: string, deltaDays: number) => void;
   onResizeEnd: (id: string, deltaDays: number) => void;
   onClick: (chantier: Chantier) => void;
+  outOfPreconisee?: boolean;
 }
 
-// ── Small equipment icon chips ─────────────────────────────────────────────
-function equipIcons(c: Chantier, small: boolean): string[] {
-  const icons: string[] = [];
-  if (c.pelles?.length)        icons.push(...c.pelles.map(p => `🚜${p}`));
-  if (c.dumpers && c.dumpers > 0)      icons.push(...Array(c.dumpers).fill('🚛'));
-  if (c.tractoBennes && c.tractoBennes > 0) icons.push(...Array(c.tractoBennes).fill('🚚'));
-  if (c.bulls && c.bulls > 0)          icons.push(...Array(c.bulls).fill('🏗️'));
-  if (c.chenillette)           icons.push('🦾');
-  if (c.drague)                icons.push('⛵');
-  if (c.bateauFaucardeur)      icons.push('🚤');
-  if (c.telesco)               icons.push('🏗️');
-  return small ? icons.slice(0, 4) : icons;
+interface EquipChip {
+  icon: React.ReactNode;
+  label?: string;
+  key: string;
 }
 
-export default function ChantierBlock({ chantier, left, width, dayWidth, onMoveEnd, onResizeEnd, onClick }: Props) {
+function buildEquipChips(c: Chantier): EquipChip[] {
+  const chips: EquipChip[] = [];
+  if (c.pelles?.length) {
+    c.pelles.forEach((t, i) =>
+      chips.push({ key: `p${i}`, icon: <ExcavatorIcon size={12}/>, label: t })
+    );
+  }
+  if (c.dumpers && c.dumpers > 0) {
+    for (let i = 0; i < Math.min(c.dumpers, 3); i++)
+      chips.push({ key: `d${i}`, icon: <DumperIcon size={12}/>, label: c.dumpers > 1 && i === 0 ? `×${c.dumpers}` : undefined });
+    if (c.dumpers > 1) chips.splice(1); // keep only first chip with count label
+  }
+  if (c.tractoBennes && c.tractoBennes > 0) {
+    chips.push({ key: 'tb', icon: <TractoBenneIcon size={12}/>, label: c.tractoBennes > 1 ? `×${c.tractoBennes}` : undefined });
+  }
+  if (c.bulls && c.bulls > 0) {
+    chips.push({ key: 'bull', icon: <BullIcon size={12}/>, label: c.bulls > 1 ? `×${c.bulls}` : undefined });
+  }
+  if (c.chenillette) chips.push({ key: 'ch', icon: <CheniletteIcon size={12}/> });
+  if (c.bateauFaucardeur) chips.push({ key: 'bf', icon: <BateauFaucardeurIcon size={12}/> });
+  if (c.drague) chips.push({ key: 'dr', icon: <DragueIcon size={12}/> });
+  if (c.telesco) chips.push({ key: 'tl', icon: <TelescoIcon size={12}/> });
+  return chips;
+}
+
+export default function ChantierBlock({
+  chantier, left, width, dayWidth, onMoveEnd, onResizeEnd, onClick, outOfPreconisee,
+}: Props) {
   const meta        = CHANTIER_TYPES[chantier.type];
   const isPotentiel = chantier.status === 'potentiel';
 
@@ -73,16 +97,15 @@ export default function ChantierBlock({ chantier, left, width, dayWidth, onMoveE
     if (!dragRef.current) onClick(chantier);
   }, [chantier, onClick]);
 
-  // ── Display decisions based on available width ──────────────────────────
-  const showText    = width > 20;
-  const showIcons   = width > 40;
-  const showCA      = width > 120 && chantier.chiffreAffaire > 0;
-  const nb          = chantier.nombrePersonnes ?? 1;
-  const equip       = equipIcons(chantier, true);
+  const showText  = width > 20;
+  const showIcons = width > 50;
+  const showCA    = width > 130 && chantier.chiffreAffaire > 0;
+  const nb        = chantier.nombrePersonnes ?? 1;
+  const chips     = buildEquipChips(chantier);
 
   const bg    = isPotentiel ? 'white' : meta.color;
   const fg    = isPotentiel ? meta.color : 'white';
-  const alpha = isPotentiel ? 0.8 : 1;
+  const alpha = isPotentiel ? 0.85 : 1;
 
   return (
     <div
@@ -93,9 +116,9 @@ export default function ChantierBlock({ chantier, left, width, dayWidth, onMoveE
         width: Math.max(width, 4),
         height: 'calc(100% - 8px)',
         backgroundColor: bg,
-        borderColor: meta.color,
+        borderColor: outOfPreconisee ? '#F97316' : meta.color,
         borderStyle: isPotentiel ? 'dashed' : 'solid',
-        borderWidth: 1.5,
+        borderWidth: outOfPreconisee ? 2 : 1.5,
         opacity: alpha,
         zIndex: 10,
         boxShadow: isPotentiel ? 'none' : '0 1px 3px rgba(0,0,0,0.18)',
@@ -108,8 +131,15 @@ export default function ChantierBlock({ chantier, left, width, dayWidth, onMoveE
     >
       <div className="h-full flex items-center gap-1 px-1.5 overflow-hidden" style={{ color: fg }}>
 
+        {/* Out-of-recommended-period warning */}
+        {outOfPreconisee && showText && (
+          <div className="flex-shrink-0" title="Hors période préconisée">
+            <AlertTriangle size={10} style={{ color: isPotentiel ? '#F97316' : '#FED7AA' }} />
+          </div>
+        )}
+
         {/* Status icon */}
-        {showText && (
+        {showText && !outOfPreconisee && (
           <div className="flex-shrink-0 opacity-80">
             {chantier.status === 'confirme'
               ? <CheckCircle2 size={10} />
@@ -131,23 +161,24 @@ export default function ChantierBlock({ chantier, left, width, dayWidth, onMoveE
           </span>
         )}
 
-        {/* Icons zone — pushed to right */}
+        {/* Right zone: personnel + equipment */}
         {showIcons && (
           <div className="flex items-center gap-0.5 ml-auto flex-shrink-0">
             {/* Personnel */}
             <div className="flex items-center gap-0.5 opacity-85"
               title={`${nb} personne${nb > 1 ? 's' : ''}`}>
-              {nb >= 2
-                ? <Users  size={11} />
-                : <User   size={11} />}
+              {nb >= 2 ? <Users size={11}/> : <User size={11}/>}
               {nb > 1 && <span className="text-[9px] font-bold leading-none">{nb}</span>}
             </div>
 
-            {/* Équipement (emoji, max 3 pour ne pas déborder) */}
-            {equip.slice(0, 3).map((ic, idx) => (
-              <span key={idx} className="text-[10px] leading-none" title={ic}>
-                {ic.startsWith('🚜') ? '🚜' : ic}
-              </span>
+            {/* Equipment chips (max 3 to avoid overflow) */}
+            {chips.slice(0, 3).map(chip => (
+              <div key={chip.key} className="flex items-center gap-0.5 opacity-90">
+                <span className="leading-none">{chip.icon}</span>
+                {chip.label && (
+                  <span className="text-[8px] font-bold leading-none">{chip.label}</span>
+                )}
+              </div>
             ))}
           </div>
         )}
