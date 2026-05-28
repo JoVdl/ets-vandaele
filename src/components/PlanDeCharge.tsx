@@ -15,7 +15,7 @@ import MapView from './MapView';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import { reorganize } from '../lib/reorganize';
-import { geocode, extractLocation } from '../lib/geocoder';
+import { geocode, extractLocationCandidates } from '../lib/geocoder';
 import { countWorkingDays } from '../lib/workingDays';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
@@ -227,12 +227,15 @@ export default function PlanDeCharge() {
   const handleGeocodeBatch = async () => {
     const toGeocode = chantiers.filter(c => !c.latitude || !c.longitude);
     if (!toGeocode.length) { alert('Tous les chantiers ont déjà une localisation.'); return; }
-    if (!confirm(`Géolocaliser ${toGeocode.length} chantier(s) sans coordonnées ?\nCela peut prendre quelques secondes (1 req/s).`)) return;
+    if (!confirm(`Géolocaliser ${toGeocode.length} chantier(s) sans coordonnées ?\nCela peut prendre quelques secondes.`)) return;
     setGeocoding({ done: 0, total: toGeocode.length });
     let done = 0;
+    let reqCount = 0;
     for (const c of toGeocode) {
-      const q = extractLocation(c.nom, c.adresse || c.lieu);
-      if (q) {
+      const candidates = extractLocationCandidates(c.nom, c.adresse || c.lieu);
+      for (const q of candidates) {
+        if (reqCount > 0) await new Promise(r => setTimeout(r, 1100)); // Nominatim: 1 req/s
+        reqCount++;
         const res = await geocode(q);
         if (res) {
           await updateChantier(c.id, {
@@ -240,11 +243,11 @@ export default function PlanDeCharge() {
             longitude: res.lon,
             adresse: c.adresse || res.displayName.split(',').slice(0, 2).join(',').trim(),
           });
+          break;
         }
       }
       done++;
       setGeocoding({ done, total: toGeocode.length });
-      if (done < toGeocode.length) await new Promise(r => setTimeout(r, 1100));
     }
     setGeocoding(null);
   };

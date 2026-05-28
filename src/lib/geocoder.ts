@@ -53,22 +53,107 @@ export async function geocode(query: string): Promise<GeoResult | null> {
   }
 }
 
-/** Extract a plausible location string from a chantier name or lieu */
-export function extractLocation(nom: string, lieu?: string): string {
-  if (lieu && lieu.trim()) return lieu.trim();
-  // Strip common prefixes and return the rest as location hint
-  const prefixes = [
-    'Curage ', 'Curage aspiration ', 'Broyage ', 'Terrassement ', 'Faucardage ',
-    'Défenses de berges ', 'Defenses de berges ', 'Location ',
-  ];
-  let s = nom.trim();
-  for (const p of prefixes) {
-    if (s.toLowerCase().startsWith(p.toLowerCase())) {
-      s = s.slice(p.length).trim();
+// ── Location extraction ───────────────────────────────────────────────────────
+
+const VERB_PREFIXES = [
+  'Curage aspiration fossés ', 'Curage aspiration fossé ', 'Curage aspiration ',
+  'Curage fossés ', 'Curage fossé ', 'Curage ',
+  'Broyage bords de berges ', 'Broyage bords de route ', 'Broyage accotements ',
+  'Broyage talus ', 'Broyage ',
+  'Faucardage ', 'Fauchage ', 'Faucardage / Curage ', 'Faucardage/Curage ',
+  'Terrassements ', 'Terrassement ',
+  'Défenses de berges ', 'Defenses de berges ', 'Défense de berges ', 'Défense de berge ',
+  'Protection de berges ', 'Confortement de berges ', 'Enrochements ', 'Enrochement ',
+  'Dragage ', 'Dragages ', 'Reprofilage fossé ', 'Reprofilage ',
+  'Création fossés ', 'Création de fossés ', 'Création fossé ', 'Création de fossé ',
+  'Création de ', 'Création ',
+  'Pose de drains ', 'Pose de buses ', 'Pose de ',
+  'Location matériel ', 'Location engins ', 'Location ',
+  'Réfection chaussée ', 'Réfections ', 'Réfection ',
+  'Entretien ', 'Nettoyage ', 'Travaux ', 'Aménagement ', 'Construction ',
+];
+
+// Words that are NOT place/commune names
+const NON_PLACE_LOWER = new Set([
+  'fossé', 'fossés', 'ruisseau', 'rivière', 'riviere', 'canal', 'chemin',
+  'route', 'rue', 'avenue', 'boulevard', 'voie', 'impasse', 'allée',
+  'talus', 'berge', 'berges', 'bord', 'bords', 'rive', 'rives',
+  'lotissement', 'parking', 'terrain', 'zone', 'zac', 'zae',
+  'communal', 'communaux', 'communale', 'municipal', 'municipale',
+  'drain', 'drains', 'buse', 'buses', 'dalot', 'dalots',
+  'chenal', 'marais', 'étang', 'bassin', 'retenue',
+]);
+
+function isLikelyPlaceWord(w: string): boolean {
+  if (!w) return false;
+  // Must start with uppercase (including accented)
+  if (!/^[A-ZÁÀÂÄÉÈÊËÎÏÔÙÛÜÇŒÆ]/u.test(w)) return false;
+  // Road/department numbers: D943, RD65, N17, etc.
+  if (/\d/.test(w)) return false;
+  return !NON_PLACE_LOWER.has(w.toLowerCase());
+}
+
+/**
+ * Extract multiple location candidates from a chantier name, in priority order.
+ * The batch geocoder tries them until one returns a result.
+ */
+export function extractLocationCandidates(nom: string, lieu?: string): string[] {
+  // Explicit lieu field is the best source
+  if (lieu?.trim()) return [lieu.trim()];
+
+  const s = nom.trim();
+  const candidates: string[] = [];
+
+  // 1. "… à [Commune]" pattern — very common in French ("Curage à Arras")
+  const atMatch = s.match(/\bà\s+([A-ZÁÀÂÄÉÈÊËÎÏÔÙÛÜÇŒÆ][^,()–\n]+?)(?:\s*[-–(]|$)/u);
+  if (atMatch) {
+    const place = atMatch[1].trim().replace(/\s+$/, '');
+    if (place.length > 2) candidates.push(place);
+  }
+
+  // Strip verb prefix from name
+  let stripped = s;
+  for (const p of VERB_PREFIXES) {
+    if (stripped.toLowerCase().startsWith(p.toLowerCase())) {
+      stripped = stripped.slice(p.length).trim();
       break;
     }
   }
-  // Remove trailing parenthetical or extra words
-  s = s.replace(/\s*[-–(].*$/, '').trim();
-  return s;
+  // Remove trailing parenthetical or dash comment
+  stripped = stripped.replace(/\s*[-–(].*$/, '').trim();
+
+  // 2. Last run of "place-like" words (capitalized, non-road, non-generic)
+  //    Works for names like "Curage fossé communal Hénin-Beaumont" → "Hénin-Beaumont"
+  const words = stripped.split(/\s+/);
+  let placeStart = words.length;
+  for (let i = words.length - 1; i >= 0; i--) {
+    if (isLikelyPlaceWord(words[i])) {
+      placeStart = i;
+    } else {
+      break;
+    }
+  }
+  if (placeStart < words.length && placeStart > 0) {
+    const placeName = words.slice(placeStart).join(' ');
+    if (!candidates.includes(placeName)) candidates.push(placeName);
+  }
+
+  // 3. Last single word (catches cases where only commune remains after prefix strip)
+  const lastWord = words[words.length - 1];
+  if (lastWord && isLikelyPlaceWord(lastWord) && !candidates.some(c => c.endsWith(lastWord))) {
+    candidates.push(lastWord);
+  }
+
+  // 4. Full stripped string as broader fallback
+  if (stripped && !candidates.includes(stripped)) candidates.push(stripped);
+
+  // 5. Original name as last resort
+  if (!candidates.includes(s)) candidates.push(s);
+
+  return candidates.filter(c => c.length > 2);
+}
+
+/** Best single location candidate (for single-shot geocode or display) */
+export function extractLocation(nom: string, lieu?: string): string {
+  return extractLocationCandidates(nom, lieu)[0] ?? nom;
 }
