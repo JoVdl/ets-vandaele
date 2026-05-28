@@ -110,6 +110,7 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
   const ref  = useRef<HTMLDivElement>(null);
   const meta = CHANTIER_TYPES[c.type];
   const isPotentiel = c.status === 'potentiel';
+  const isArchived  = c.status === 'refuse' || c.status === 'annule';
   const nb   = c.nombrePersonnes ?? 1;
   const hasMap = !!(c.latitude && c.longitude);
 
@@ -154,8 +155,12 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
             <div className="flex items-center gap-1.5 mb-1">
               <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: meta.color }} />
               <span className="text-[10px] text-slate-400">{meta.label}</span>
-              <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${isPotentiel ? 'bg-slate-100 text-slate-500' : 'bg-green-50 text-green-700'}`}>
-                {isPotentiel ? 'Potentiel' : 'Confirmé'}
+              <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${
+                isArchived  ? 'bg-slate-100 text-slate-400 line-through' :
+                isPotentiel ? 'bg-slate-100 text-slate-500' :
+                              'bg-green-50 text-green-700'
+              }`}>
+                {c.status === 'refuse' ? 'Refusé' : c.status === 'annule' ? 'Annulé' : isPotentiel ? 'Potentiel' : 'Confirmé'}
               </span>
             </div>
 

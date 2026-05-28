@@ -42,12 +42,15 @@ export interface ReorganizeSummary {
 export function reorganize(chantiers: Chantier[]): ReorganizeSummary {
   const warnings: string[] = [];
 
+  // Refused/annulled are ignored entirely
+  const active = chantiers.filter(c => c.status !== 'refuse' && c.status !== 'annule');
+
   // Separate confirmed (anchors) from potentiels (moveable)
-  const anchors = chantiers
+  const anchors = active
     .filter(c => c.status === 'confirme')
     .map(c => ({ ...c }));
 
-  const moveable = chantiers
+  const moveable = active
     .filter(c => c.status === 'potentiel')
     .map(c => ({ ...c }));
 

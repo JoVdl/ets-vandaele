@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
 import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle } from 'lucide-react';
-import type { Chantier, ChantierType, TypePelle } from '../types';
+import type { Chantier, ChantierType, ChantierStatus, TypePelle } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { format } from 'date-fns';
 import { geocode, geocodeSearch, extractLocation, type GeoResult } from '../lib/geocoder';
@@ -159,7 +159,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
               {chantier ? 'Modifier le chantier' : 'Nouveau chantier'}
             </Dialog.Title>
             <div className="flex items-center gap-2">
-              {chantier?.status === 'potentiel' && onConfirm && (
+              {chantier?.status === 'potentiel' && onConfirm && form.status === 'potentiel' && (
                 <button type="button" onClick={() => { onConfirm(); onClose(); }}
                   className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 font-medium transition-colors">
                   <CheckCircle size={15} /> Valider
@@ -264,10 +264,12 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Statut</span>
-                <select value={form.status} onChange={e => set('status', e.target.value as 'potentiel' | 'confirme')}
+                <select value={form.status} onChange={e => set('status', e.target.value as ChantierStatus)}
                   className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                   <option value="potentiel">Potentiel</option>
                   <option value="confirme">Confirmé / Signé</option>
+                  <option value="refuse">Refusé</option>
+                  <option value="annule">Annulé</option>
                 </select>
               </label>
             </div>

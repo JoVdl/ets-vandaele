@@ -11,7 +11,7 @@ export type ChantierType =
 
 export type TypeRouleau = '700kg';
 
-export type ChantierStatus = 'potentiel' | 'confirme';
+export type ChantierStatus = 'potentiel' | 'confirme' | 'refuse' | 'annule';
 export type TypePelle = '1.5t' | '3t' | '8t' | '16t';
 
 export interface Chantier {

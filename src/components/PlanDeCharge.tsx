@@ -98,7 +98,7 @@ export default function PlanDeCharge() {
   const [modal, setModal] = useState<{ open: boolean; chantier: Chantier | null; defaultDate?: string }>({
     open: false, chantier: null,
   });
-  const [filterStatus, setFilterStatus] = useState<'all' | 'confirme' | 'potentiel'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'confirme' | 'potentiel' | 'archive'>('all');
   const [geocoding, setGeocoding] = useState<{ done: number; total: number } | null>(null);
   const { theme, toggle: toggleTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -111,7 +111,14 @@ export default function PlanDeCharge() {
 
   // ── Filtered chantiers ─────────────────────────────────────────────────────
   const filtered = chantiers.filter(c => {
-    if (filterStatus !== 'all' && c.status !== filterStatus) return false;
+    if (filterStatus === 'archive') {
+      if (c.status !== 'refuse' && c.status !== 'annule') return false;
+    } else if (filterStatus !== 'all') {
+      if (c.status !== filterStatus) return false;
+    } else {
+      // Default "all" hides archived unless explicitly selected
+      if (c.status === 'refuse' || c.status === 'annule') return false;
+    }
     return new Date(c.dateDebut) <= periodEnd && new Date(c.dateFin) >= periodStart;
   });
 
@@ -300,12 +307,21 @@ export default function PlanDeCharge() {
 
           <div className="flex items-center gap-2">
             <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs">
-              {(['all', 'confirme', 'potentiel'] as const).map(s => (
-                <button key={s} onClick={() => setFilterStatus(s)}
+              {([
+                { key: 'all',      label: 'Tous' },
+                { key: 'confirme', label: 'Confirmés' },
+                { key: 'potentiel',label: 'Potentiels' },
+                { key: 'archive',  label: 'Archivés' },
+              ] as const).map(({ key, label }) => (
+                <button key={key} onClick={() => setFilterStatus(key)}
                   className={`px-3 py-1.5 font-medium transition-colors ${
-                    filterStatus === s ? 'bg-slate-800 text-white dark:bg-slate-600' : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                    filterStatus === key
+                      ? key === 'archive'
+                        ? 'bg-slate-400 text-white'
+                        : 'bg-slate-800 text-white dark:bg-slate-600'
+                      : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
                   }`}>
-                  {s === 'all' ? 'Tous' : s === 'confirme' ? 'Confirmés' : 'Potentiels'}
+                  {label}
                 </button>
               ))}
             </div>

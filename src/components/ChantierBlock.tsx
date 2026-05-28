@@ -60,6 +60,7 @@ export default function ChantierBlock({
 }: Props) {
   const meta        = CHANTIER_TYPES[chantier.type];
   const isPotentiel = chantier.status === 'potentiel';
+  const isArchived  = chantier.status === 'refuse' || chantier.status === 'annule';
 
   const dragRef   = useRef<{ startX: number; mode: 'move' | 'resize' } | null>(null);
   const blockRef  = useRef<HTMLDivElement>(null);
@@ -131,9 +132,9 @@ export default function ChantierBlock({
   const showCaPerDay = width > 200 && caParJour > 0;
   const chips     = buildEquipChips(chantier);
 
-  const bg    = isPotentiel ? 'white' : meta.color;
-  const fg    = isPotentiel ? meta.color : 'white';
-  const alpha = isPotentiel ? 0.85 : 1;
+  const bg    = isArchived ? '#f1f5f9' : isPotentiel ? 'white' : meta.color;
+  const fg    = isArchived ? '#94a3b8' : isPotentiel ? meta.color : 'white';
+  const alpha = isArchived ? 0.6 : isPotentiel ? 0.85 : 1;
 
   return (
     <div
@@ -144,12 +145,12 @@ export default function ChantierBlock({
         width: Math.max(width, 4),
         height: 'calc(100% - 8px)',
         backgroundColor: bg,
-        borderColor: outOfPreconisee ? '#F97316' : meta.color,
-        borderStyle: isPotentiel ? 'dashed' : 'solid',
+        borderColor: isArchived ? '#cbd5e1' : outOfPreconisee ? '#F97316' : meta.color,
+        borderStyle: isPotentiel || isArchived ? 'dashed' : 'solid',
         borderWidth: outOfPreconisee ? 2 : 1.5,
         opacity: alpha,
         zIndex: 10,
-        boxShadow: isPotentiel ? 'none' : '0 1px 3px rgba(0,0,0,0.18)',
+        boxShadow: isPotentiel || isArchived ? 'none' : '0 1px 3px rgba(0,0,0,0.18)',
         overflow: 'hidden',
       }}
       onPointerDown={e => handlePointerDown(e, 'move')}
@@ -180,7 +181,7 @@ export default function ChantierBlock({
 
         {/* Nom */}
         {showText && (
-          <span className="text-xs font-semibold truncate leading-none flex-shrink min-w-0">
+          <span className={`text-xs font-semibold truncate leading-none flex-shrink min-w-0 ${isArchived ? 'line-through' : ''}`}>
             {chantier.nom}
           </span>
         )}
