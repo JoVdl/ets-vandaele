@@ -149,9 +149,9 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
   const warn = isOutOfPreconisee(form);
 
   return (
-    <Dialog open={isOpen} onClose={onClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
+    <Dialog open={isOpen} onClose={onClose} className="relative z-[2000]">
+      <div className="fixed inset-0 z-[2000] bg-black/40 backdrop-blur-sm" aria-hidden="true" />
+      <div className="fixed inset-0 z-[2001] flex items-center justify-center p-4">
         <Dialog.Panel className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
