@@ -76,8 +76,12 @@ export default function GanttChart({
   const blockProps = useCallback((c: Chantier) => {
     const s = differenceInCalendarDays(startOfDay(new Date(c.dateDebut)), startOfDay(periodStart));
     const e = differenceInCalendarDays(startOfDay(new Date(c.dateFin)),   startOfDay(periodStart));
-    return { left: s * dayWidth, width: (e - s + 1) * dayWidth };
-  }, [periodStart, dayWidth]);
+    const rawLeft  = s * dayWidth;
+    const rawRight = (e + 1) * dayWidth;
+    const dispLeft  = Math.max(0, rawLeft);
+    const dispWidth = Math.max(dayWidth, Math.min(totalW, rawRight) - dispLeft);
+    return { left: dispLeft, width: dispWidth };
+  }, [periodStart, dayWidth, totalW]);
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
   const handleMoveEnd = useCallback((id: string, delta: number) => {
