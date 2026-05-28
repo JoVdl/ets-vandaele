@@ -56,6 +56,9 @@ export async function geocode(query: string): Promise<GeoResult | null> {
 // ── Location extraction ───────────────────────────────────────────────────────
 
 const VERB_PREFIXES = [
+  // Client/org prefixes
+  'CEN - ', 'CEN – ', 'CEN ',
+  // Action prefixes
   'Curage aspiration fossés ', 'Curage aspiration fossé ', 'Curage aspiration ',
   'Curage fossés ', 'Curage fossé ', 'Curage ',
   'Broyage bords de berges ', 'Broyage bords de route ', 'Broyage accotements ',
@@ -82,6 +85,8 @@ const NON_PLACE_LOWER = new Set([
   'communal', 'communaux', 'communale', 'municipal', 'municipale',
   'drain', 'drains', 'buse', 'buses', 'dalot', 'dalots',
   'chenal', 'marais', 'étang', 'bassin', 'retenue',
+  // Organisation abbreviations that should not be treated as place names
+  'cen', 'vnf', 'onf', 'dreal', 'ddtm', 'asa', 'smco', 'safer', 'sml',
 ]);
 
 function isLikelyPlaceWord(w: string): boolean {
@@ -90,6 +95,8 @@ function isLikelyPlaceWord(w: string): boolean {
   if (!/^[A-ZÁÀÂÄÉÈÊËÎÏÔÙÛÜÇŒÆ]/u.test(w)) return false;
   // Road/department numbers: D943, RD65, N17, etc.
   if (/\d/.test(w)) return false;
+  // All-caps short words are likely org abbreviations (CEN, VNF, ONF…), not communes
+  if (w.length <= 5 && w === w.toUpperCase()) return false;
   return !NON_PLACE_LOWER.has(w.toLowerCase());
 }
 

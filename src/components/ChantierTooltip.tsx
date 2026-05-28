@@ -166,7 +166,14 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
 
             {/* Name */}
             <p className="font-semibold text-slate-800 text-sm leading-tight">{c.nom}</p>
-            {c.client && <p className="text-xs text-slate-500 mt-0.5">{c.client}</p>}
+            {c.client && (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {c.client.toUpperCase().includes('CEN') && (
+                  <img src="/cen-logo.png" alt="CEN" style={{ height: 14, width: 'auto' }} />
+                )}
+                <p className="text-xs text-slate-500">{c.client}</p>
+              </div>
+            )}
 
             {/* Dates */}
             <div className="flex items-center gap-1 mt-1.5 text-xs text-slate-500">

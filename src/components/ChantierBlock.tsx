@@ -196,6 +196,17 @@ export default function ChantierBlock({
           </span>
         )}
 
+        {/* CEN logo */}
+        {showIcons && chantier.client?.toUpperCase().includes('CEN') && (
+          <img
+            src="/cen-logo.png"
+            alt="CEN"
+            title="Conservatoire d'Espaces Naturels"
+            style={{ height: 12, width: 'auto', flexShrink: 0, opacity: isPotentiel ? 0.7 : 0.9,
+              filter: isPotentiel ? 'none' : 'brightness(0) invert(1)' }}
+          />
+        )}
+
         {/* Right zone: personnel + equipment */}
         {showIcons && (
           <div className="flex items-center gap-0.5 ml-auto flex-shrink-0">
