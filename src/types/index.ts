@@ -57,6 +57,9 @@ export interface Chantier {
   // Personnel
   nombrePersonnes?: number;
 
+  // Dates verrouillées : exclues de la réorganisation automatique
+  datesVerrouillees?: boolean;
+
   // Curage aspiration
   pellePrepaBassin?: '8t' | '16t';
   nombreJoursPrepa?: number;

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { MapPin, Users, User, Calendar, Euro } from 'lucide-react';
+import { MapPin, Users, User, Calendar, Euro, Lock } from 'lucide-react';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { countWorkingDays } from '../lib/workingDays';
@@ -162,6 +162,11 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
               }`}>
                 {c.status === 'refuse' ? 'Refusé' : c.status === 'annule' ? 'Annulé' : isPotentiel ? 'Potentiel' : 'Confirmé'}
               </span>
+              {c.datesVerrouillees && (
+                <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700" title="Dates verrouillées — exclues de la réorganisation">
+                  <Lock size={9}/> Verrouillé
+                </span>
+              )}
             </div>
 
             {/* Name */}

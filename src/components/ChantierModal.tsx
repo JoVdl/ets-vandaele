@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
-import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle } from 'lucide-react';
+import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen } from 'lucide-react';
 import type { Chantier, ChantierType, ChantierStatus, TypePelle } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { format } from 'date-fns';
@@ -49,6 +49,7 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   nombrePersonnes: 1,
   pellePrepaBassin: '8t',
   nombreJoursPrepa: 0,
+  datesVerrouillees: false,
 });
 
 function isOutOfPreconisee(form: ReturnType<typeof emptyForm>): boolean {
@@ -295,6 +296,27 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                   className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </label>
             </div>
+
+            {/* Verrouillage des dates */}
+            <button
+              type="button"
+              onClick={() => set('datesVerrouillees', !form.datesVerrouillees)}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-sm transition-colors ${
+                form.datesVerrouillees
+                  ? 'bg-amber-50 border-amber-300 text-amber-800'
+                  : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
+              }`}
+            >
+              {form.datesVerrouillees
+                ? <Lock size={14} className="text-amber-600 flex-shrink-0"/>
+                : <LockOpen size={14} className="flex-shrink-0"/>}
+              <span className="font-medium">
+                {form.datesVerrouillees ? 'Dates verrouillées' : 'Verrouiller les dates'}
+              </span>
+              <span className="ml-auto text-xs opacity-60">
+                {form.datesVerrouillees ? 'Exclues de la réorganisation' : 'La réorganisation peut déplacer ce chantier'}
+              </span>
+            </button>
 
             {/* Période préconisée */}
             <div className="border border-dashed border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2">

@@ -1,7 +1,7 @@
 import { useRef, useCallback } from 'react';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
-import { CheckCircle2, Clock, Users, User, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Clock, Users, User, AlertTriangle, Lock } from 'lucide-react';
 import { countWorkingDays } from '../lib/workingDays';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
@@ -173,9 +173,11 @@ export default function ChantierBlock({
         {/* Status icon */}
         {showText && !outOfPreconisee && (
           <div className="flex-shrink-0 opacity-80">
-            {chantier.status === 'confirme'
-              ? <CheckCircle2 size={10} />
-              : <Clock size={10} />}
+            {chantier.datesVerrouillees
+              ? <Lock size={10} style={{ color: isPotentiel ? '#F59E0B' : undefined }} />
+              : chantier.status === 'confirme'
+                ? <CheckCircle2 size={10} />
+                : <Clock size={10} />}
           </div>
         )}
 

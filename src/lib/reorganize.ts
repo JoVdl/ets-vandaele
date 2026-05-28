@@ -45,17 +45,17 @@ export function reorganize(chantiers: Chantier[]): ReorganizeSummary {
   // Refused/annulled are ignored entirely
   const active = chantiers.filter(c => c.status !== 'refuse' && c.status !== 'annule');
 
-  // Separate confirmed (anchors) from potentiels (moveable)
+  // Anchors: confirmed chantiers + potentiels with locked dates
   const anchors = active
-    .filter(c => c.status === 'confirme')
+    .filter(c => c.status === 'confirme' || c.datesVerrouillees)
     .map(c => ({ ...c }));
 
   const moveable = active
-    .filter(c => c.status === 'potentiel')
+    .filter(c => c.status === 'potentiel' && !c.datesVerrouillees)
     .map(c => ({ ...c }));
 
   if (moveable.length === 0) {
-    return { moved: 0, warnings: ['Aucun chantier potentiel à réorganiser.'], results: [] };
+    return { moved: 0, warnings: ['Aucun chantier potentiel (non verrouillé) à réorganiser.'], results: [] };
   }
 
   // Step 1: For moveable chantiers with a recommended period, pin to recommended start
