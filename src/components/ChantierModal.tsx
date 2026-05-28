@@ -33,6 +33,7 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   latitude: undefined,
   longitude: undefined,
   chiffreAffaire: 0,
+  nombreAnnees: 1,
   devisSigne: false,
   acomptePaye: false,
   montantAcompte: 0,
@@ -336,22 +337,41 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             </div>
 
             {/* Financier */}
-            <div className="grid grid-cols-3 gap-3">
-              <label className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">CA (€)</span>
-                <input type="number" min="0" value={form.chiffreAffaire} onChange={e => set('chiffreAffaire', Number(e.target.value))}
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </label>
-              <label className="flex items-center gap-3 mt-5 cursor-pointer">
-                <input type="checkbox" checked={form.devisSigne} onChange={e => set('devisSigne', e.target.checked)}
-                  className="w-4 h-4 rounded accent-blue-600" />
-                <span className="text-sm text-slate-600">Devis signé</span>
-              </label>
-              <label className="flex items-center gap-3 mt-5 cursor-pointer">
-                <input type="checkbox" checked={form.acomptePaye} onChange={e => set('acomptePaye', e.target.checked)}
-                  className="w-4 h-4 rounded accent-blue-600" />
-                <span className="text-sm text-slate-600">Acompte payé</span>
-              </label>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                    CA {(form.nombreAnnees ?? 1) > 1 ? 'total contrat (€)' : '(€)'}
+                  </span>
+                  <input type="number" min="0" value={form.chiffreAffaire} onChange={e => set('chiffreAffaire', Number(e.target.value))}
+                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Durée contrat (années)</span>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input type="number" min="1" max="10" value={form.nombreAnnees ?? 1}
+                      onChange={e => set('nombreAnnees', Math.max(1, Number(e.target.value)))}
+                      className="w-20 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    {(form.nombreAnnees ?? 1) > 1 && form.chiffreAffaire > 0 && (
+                      <span className="text-sm text-slate-500">
+                        = <strong>{Math.round(form.chiffreAffaire / (form.nombreAnnees ?? 1)).toLocaleString('fr-FR')} €</strong>/an
+                      </span>
+                    )}
+                  </div>
+                </label>
+              </div>
+              <div className="flex gap-6">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={form.devisSigne} onChange={e => set('devisSigne', e.target.checked)}
+                    className="w-4 h-4 rounded accent-blue-600" />
+                  <span className="text-sm text-slate-600">Devis signé</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={form.acomptePaye} onChange={e => set('acomptePaye', e.target.checked)}
+                    className="w-4 h-4 rounded accent-blue-600" />
+                  <span className="text-sm text-slate-600">Acompte payé</span>
+                </label>
+              </div>
             </div>
 
             {form.acomptePaye && (

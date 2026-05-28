@@ -34,7 +34,8 @@ export interface Chantier {
   latitude?: number;
   longitude?: number;
 
-  chiffreAffaire: number;
+  chiffreAffaire: number;   // CA total du contrat
+  nombreAnnees?: number;    // si contrat pluriannuel (CA affiché = chiffreAffaire / nombreAnnees)
   devisSigne: boolean;
   acomptePaye: boolean;
   montantAcompte?: number;

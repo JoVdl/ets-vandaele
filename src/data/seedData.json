@@ -141,7 +141,8 @@
     "acomptePaye": false,
     "notes": "Contrat 3 ans",
     "createdAt": "2026-05-28T08:00:00.000Z",
-    "updatedAt": "2026-05-28T08:00:00.000Z"
+    "updatedAt": "2026-05-28T08:00:00.000Z",
+    "nombreAnnees": 3
   },
   {
     "id": "import_11",
@@ -181,7 +182,8 @@
     "acomptePaye": false,
     "notes": "Contrat 3 ans",
     "createdAt": "2026-05-28T08:00:00.000Z",
-    "updatedAt": "2026-05-28T08:00:00.000Z"
+    "updatedAt": "2026-05-28T08:00:00.000Z",
+    "nombreAnnees": 3
   },
   {
     "id": "import_14",
@@ -364,7 +366,8 @@
     "acomptePaye": false,
     "notes": "Contrat 3 ans",
     "createdAt": "2026-05-28T08:00:00.000Z",
-    "updatedAt": "2026-05-28T08:00:00.000Z"
+    "updatedAt": "2026-05-28T08:00:00.000Z",
+    "nombreAnnees": 3
   },
   {
     "id": "import_28",
@@ -378,7 +381,8 @@
     "acomptePaye": false,
     "notes": "Contrat 3 ans",
     "createdAt": "2026-05-28T08:00:00.000Z",
-    "updatedAt": "2026-05-28T08:00:00.000Z"
+    "updatedAt": "2026-05-28T08:00:00.000Z",
+    "nombreAnnees": 3
   },
   {
     "id": "wait_0",

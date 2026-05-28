@@ -3,7 +3,7 @@ import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { CheckCircle2, Clock, Users, User, AlertTriangle, Lock } from 'lucide-react';
 import cenLogoUrl from '../assets/cen-logo.png';
-import { countWorkingDays } from '../lib/workingDays';
+import { countWorkingDays, caAnnuel } from '../lib/workingDays';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
   CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon, RouleauIcon,
@@ -130,11 +130,13 @@ export default function ChantierBlock({
 
   const showText    = width > 20;
   const showIcons   = width > 50;
-  const showCA      = width > 130 && chantier.chiffreAffaire > 0;
-  const nb          = chantier.nombrePersonnes ?? 1;
-  const wd          = countWorkingDays(new Date(chantier.dateDebut), new Date(chantier.dateFin));
-  const caParJour   = wd > 0 && chantier.chiffreAffaire > 0 ? Math.round(chantier.chiffreAffaire / wd) : 0;
+  const showCA       = width > 130 && chantier.chiffreAffaire > 0;
+  const nb           = chantier.nombrePersonnes ?? 1;
+  const wd           = countWorkingDays(new Date(chantier.dateDebut), new Date(chantier.dateFin));
+  const caAn         = caAnnuel(chantier.chiffreAffaire, chantier.nombreAnnees);
+  const caParJour    = wd > 0 && caAn > 0 ? Math.round(caAn / wd) : 0;
   const showCaPerDay = width > 200 && caParJour > 0;
+  const isMultiYear  = (chantier.nombreAnnees ?? 1) > 1;
   const chips     = buildEquipChips(chantier);
 
   const bg    = isArchived ? '#f1f5f9' : isPotentiel ? 'white' : meta.color;
@@ -196,7 +198,8 @@ export default function ChantierBlock({
         {/* CA */}
         {showCA && (
           <span className="text-[10px] opacity-75 ml-1 flex-shrink-0 font-medium">
-            {chantier.chiffreAffaire.toLocaleString('fr-FR')} €
+            {caAn.toLocaleString('fr-FR')} €
+            {isMultiYear && <span className="opacity-60 ml-0.5">/an</span>}
             {showCaPerDay && (
               <span className="opacity-70 ml-0.5">· {caParJour.toLocaleString('fr-FR')} €/j</span>
             )}

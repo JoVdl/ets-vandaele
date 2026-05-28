@@ -150,3 +150,9 @@ export function findGaps(
   }
   return gaps;
 }
+
+/** Annual CA for display: total divided by contract years (default 1) */
+export function caAnnuel(chiffreAffaire: number, nombreAnnees?: number): number {
+  const n = nombreAnnees && nombreAnnees > 1 ? nombreAnnees : 1;
+  return n > 1 ? Math.round(chiffreAffaire / n) : chiffreAffaire;
+}

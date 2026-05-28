@@ -16,7 +16,7 @@ import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import { reorganize } from '../lib/reorganize';
 import { geocode, extractLocationCandidates } from '../lib/geocoder';
-import { countWorkingDays } from '../lib/workingDays';
+import { countWorkingDays, caAnnuel } from '../lib/workingDays';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
   CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon, RouleauIcon,
@@ -128,8 +128,8 @@ export default function PlanDeCharge() {
   // ── Stats ──────────────────────────────────────────────────────────────────
   const confirmes   = chantiers.filter(c => c.status === 'confirme');
   const potentiels  = chantiers.filter(c => c.status === 'potentiel');
-  const caConfirme  = confirmes.reduce((s, c)  => s + (c.chiffreAffaire ?? 0), 0);
-  const caPotentiel = potentiels.reduce((s, c) => s + (c.chiffreAffaire ?? 0), 0);
+  const caConfirme  = confirmes.reduce((s, c)  => s + caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees), 0);
+  const caPotentiel = potentiels.reduce((s, c) => s + caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees), 0);
 
   const warnCount = chantiers.filter(c =>
     c.periodePreconiseeDebut && c.periodePreconiseeFin &&
