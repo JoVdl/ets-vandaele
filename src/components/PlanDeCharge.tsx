@@ -146,13 +146,7 @@ export default function PlanDeCharge() {
   const handleMove   = useCallback(async (id: string, s: string, e: string) => updateChantier(id, { dateDebut: s, dateFin: e }), [updateChantier]);
   const handleResize = useCallback(async (id: string, e: string) => updateChantier(id, { dateFin: e }), [updateChantier]);
 
-  // ── Navigation ─────────────────────────────────────────────────────────────
-  const step       = zoomPreset === 'year' ? 12 : zoomPreset as number;
-  const prevPeriod = () => setCurrentMonth(m => { const next = subMonths(m, step); setDayWidth(fitDayWidth(zoomPreset, next)); return next; });
-  const nextPeriod = () => setCurrentMonth(m => { const next = addMonths(m, step); setDayWidth(fitDayWidth(zoomPreset, next)); return next; });
-  const goToday    = () => { const t = new Date(); setCurrentMonth(t); setDayWidth(fitDayWidth(zoomPreset, t)); };
-
-  // ── Zoom ───────────────────────────────────────────────────────────────────
+  // ── Zoom / fit ─────────────────────────────────────────────────────────────
   const fitDayWidth = useCallback((p: ZoomPreset, baseMonth: Date): number => {
     const start = startOfMonth(baseMonth);
     const end = p === 'year'
@@ -164,16 +158,30 @@ export default function PlanDeCharge() {
   }, []);
 
   const applyPreset = (p: ZoomPreset) => {
-    const base = p === 'year' ? startOfDay(new Date()) : currentMonth;
     setZoomPreset(p);
-    setDayWidth(fitDayWidth(p, base));
-    if (p === 'year') setCurrentMonth(base);
+    setDayWidth(fitDayWidth(p, currentMonth));
   };
-  const handleDayWidthChange = useCallback((w: number) => {
-    setDayWidth(w);
-  }, []);
+  const handleDayWidthChange = useCallback((w: number) => setDayWidth(w), []);
   const zoomIn  = () => setDayWidth(w => Math.min(100, w * 1.3));
   const zoomOut = () => setDayWidth(w => Math.max(3,   w / 1.3));
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
+  const step       = zoomPreset === 'year' ? 12 : zoomPreset as number;
+  const prevPeriod = () => {
+    const next = subMonths(currentMonth, step);
+    setCurrentMonth(next);
+    setDayWidth(fitDayWidth(zoomPreset, next));
+  };
+  const nextPeriod = () => {
+    const next = addMonths(currentMonth, step);
+    setCurrentMonth(next);
+    setDayWidth(fitDayWidth(zoomPreset, next));
+  };
+  const goToday = () => {
+    const t = new Date();
+    setCurrentMonth(t);
+    setDayWidth(fitDayWidth(zoomPreset, t));
+  };
 
   // ── Period label ──────────────────────────────────────────────────────────
   const periodLabel = zoomPreset === 'year'
