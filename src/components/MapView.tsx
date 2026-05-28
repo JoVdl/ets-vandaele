@@ -42,6 +42,7 @@ export default function MapView({ chantiers, onClickChantier }: Props) {
 
       const map = L.map(containerRef.current!).setView(center, withCoords.length ? 8 : 6);
       mapRef.current = map;
+      setTimeout(() => map.invalidateSize(), 150);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
