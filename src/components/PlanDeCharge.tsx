@@ -86,10 +86,10 @@ export default function PlanDeCharge() {
   const { chantiers, loading, error, addChantier, updateChantier, deleteChantier, confirmChantier } = useChantiers();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [zoomPreset, setZoomPreset]     = useState<ZoomPreset>(2);
+  const [zoomPreset, setZoomPreset]     = useState<ZoomPreset>('year');
   const [dayWidth, setDayWidth]         = useState(() => {
     const start = startOfMonth(new Date());
-    const end   = endOfMonth(addMonths(start, 1));
+    const end   = new Date(new Date().getFullYear(), 11, 31);
     const numDays = differenceInCalendarDays(end, start) + 1;
     return Math.max(3, (window.innerWidth - 260) / numDays);
   });
@@ -98,7 +98,7 @@ export default function PlanDeCharge() {
   const [modal, setModal] = useState<{ open: boolean; chantier: Chantier | null; defaultDate?: string }>({
     open: false, chantier: null,
   });
-  const [filterStatus, setFilterStatus] = useState<'all' | 'confirme' | 'potentiel' | 'archive'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'confirme' | 'potentiel' | 'archive'>('confirme');
   const [geocoding, setGeocoding] = useState<{ done: number; total: number } | null>(null);
   const { theme, toggle: toggleTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
