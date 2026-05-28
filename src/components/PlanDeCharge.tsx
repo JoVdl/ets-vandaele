@@ -9,6 +9,7 @@ import {
 import { useChantiers } from '../hooks/useChantiers';
 import GanttChart from './GanttChart';
 import ChantierModal from './ChantierModal';
+import ImportButton from './ImportButton';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 
@@ -125,6 +126,7 @@ export default function PlanDeCharge() {
               ))}
             </div>
 
+            <ImportButton />
             <button
               onClick={() => openNew()}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
