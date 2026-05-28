@@ -1,7 +1,7 @@
 import { addDays, startOfDay } from 'date-fns';
 import { format } from 'date-fns';
 import type { Chantier } from '../types';
-import { nextWorkingDay, countWorkingDays, addWorkingDays } from './workingDays';
+import { nextWorkingDay, prevWorkingDay, countWorkingDays, addWorkingDays } from './workingDays';
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -152,11 +152,11 @@ export function reorganize(chantiers: Chantier[]): ReorganizeSummary {
     finalOrder.push(...noCoords);
   }
 
-  // Seed scheduled slots with anchor chantiers
+  // Seed scheduled slots with anchor chantiers — snap to working days
   const scheduled: Slot[] = anchors.map(c => ({
     chantier: c,
-    start: startOfDay(new Date(c.dateDebut)),
-    end:   startOfDay(new Date(c.dateFin)),
+    start: nextWorkingDay(startOfDay(new Date(c.dateDebut))),
+    end:   prevWorkingDay(startOfDay(new Date(c.dateFin))),
   }));
 
   const results: ReorganizeResult[] = [];
@@ -164,9 +164,9 @@ export function reorganize(chantiers: Chantier[]): ReorganizeSummary {
 
   for (const c of finalOrder) {
     const wdDur      = wdDurations.get(c.id) ?? 1;
-    const searchFrom = c.periodePreconiseeDebut
-      ? startOfDay(new Date(c.periodePreconiseeDebut))
-      : startOfDay(new Date(c.dateDebut));
+    const searchFrom = nextWorkingDay(startOfDay(
+      new Date(c.periodePreconiseeDebut ?? c.dateDebut)
+    ));
 
     const slot = findSlot(c, wdDur, searchFrom, scheduled);
 
@@ -176,7 +176,7 @@ export function reorganize(chantiers: Chantier[]): ReorganizeSummary {
       continue;
     }
 
-    if (c.periodePreconiseeFin && slot.end > startOfDay(new Date(c.periodePreconiseeFin))) {
+    if (c.periodePreconiseeFin && slot.end > prevWorkingDay(startOfDay(new Date(c.periodePreconiseeFin)))) {
       warnings.push(`"${c.nom}" : ne peut pas être placé dans sa période préconisée (conflit de ressources ou effectifs).`);
     }
 
