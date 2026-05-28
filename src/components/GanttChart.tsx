@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useRef, useEffect } from 'react';
+import { useMemo, useCallback, useRef, useEffect, useState } from 'react';
 import {
   startOfDay, addDays, differenceInCalendarDays,
   format, isToday, getDay,
@@ -7,6 +7,7 @@ import { fr } from 'date-fns/locale';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import ChantierBlock from './ChantierBlock';
+import ChantierTooltip from './ChantierTooltip';
 import { isWorkingDay, findGaps } from '../lib/workingDays';
 
 interface Props {
@@ -42,6 +43,11 @@ export default function GanttChart({
   const scrollRef     = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<number | null>(null);
   const prevDayWidth  = useRef(dayWidth);
+
+  // ── Hover tooltip ─────────────────────────────────────────────────────────
+  const [tooltip, setTooltip] = useState<{ chantier: Chantier; x: number; y: number } | null>(null);
+  const handleHover   = useCallback((c: Chantier, x: number, y: number) => setTooltip({ chantier: c, x, y }), []);
+  const handleUnhover = useCallback(() => setTooltip(null), []);
 
   // ── Days array ────────────────────────────────────────────────────────────
   const days = useMemo(() => {
@@ -177,7 +183,7 @@ export default function GanttChart({
     <div className="flex flex-col flex-1 overflow-hidden">
 
       {/* ── Availability bar ──────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 border-b border-slate-100 bg-white px-4 py-1.5 overflow-x-hidden">
+      <div className="flex-shrink-0 border-b border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-800 px-4 py-1.5 overflow-x-hidden">
         <div className="flex items-center gap-3 text-xs">
           <span className="text-slate-400 font-medium flex-shrink-0">Dispo :</span>
           <div className="flex items-center gap-2 flex-wrap">
@@ -205,17 +211,17 @@ export default function GanttChart({
         <div style={{ minWidth: SIDE_W + totalW, width: SIDE_W + totalW }}>
 
           {/* ── STICKY HEADER ROW ──────────────────────────────────────────── */}
-          <div className="sticky top-0 z-30 flex border-b border-slate-200" style={{ height: HEAD_H }}>
+          <div className="sticky top-0 z-30 flex border-b border-slate-200 dark:border-slate-700" style={{ height: HEAD_H }}>
 
             <div className="sticky left-0 z-40 flex items-end px-4 pb-2
-              bg-slate-50 border-r border-slate-200 flex-shrink-0"
+              bg-slate-50 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex-shrink-0"
               style={{ width: SIDE_W, minWidth: SIDE_W }}>
               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Chantier</span>
             </div>
 
             <div style={{ width: totalW, minWidth: totalW }}>
               {/* Month row */}
-              <div className="flex bg-slate-100" style={{ height: 22 }}>
+              <div className="flex" style={{ height: 22, backgroundColor: 'var(--bg-month-row)' }}>
                 {monthGroups.map(mg => (
                   <div key={`${mg.year}-${mg.month}`}
                     className="flex items-center justify-center border-r border-slate-200 overflow-hidden"
@@ -231,7 +237,7 @@ export default function GanttChart({
                 ))}
               </div>
               {/* Day row */}
-              <div className="flex bg-white" style={{ height: 34 }}>
+              <div className="flex" style={{ height: 34, backgroundColor: 'var(--bg-primary)' }}>
                 {days.map((d, i) => {
                   const isTod = isToday(d);
                   const isMon = getDay(d) === 1;
@@ -274,15 +280,15 @@ export default function GanttChart({
             const precon = preconiseeProps(c);
             const outOfPrecon = isOutOfPreconisee(c);
             return (
-              <div key={c.id} className="flex border-b border-slate-100"
-                style={{ height: ROW_H, backgroundColor: i % 2 === 0 ? 'white' : '#fafafa' }}>
+              <div key={c.id} className="flex border-b border-slate-100 dark:border-slate-700/50"
+                style={{ height: ROW_H, backgroundColor: i % 2 === 0 ? 'var(--bg-row-even)' : 'var(--bg-row-odd)' }}>
 
-                {/* Sidebar cell */}
+                {/* Sidebar cell — z-20 so it always paints over any block touching the left edge */}
                 <div
-                  className="sticky left-0 z-10 flex items-center gap-2 px-3 border-r border-slate-100
-                    cursor-pointer hover:bg-slate-50 transition-colors flex-shrink-0"
+                  className="sticky left-0 z-20 flex items-center gap-2 px-3 border-r border-slate-100 dark:border-slate-700/50
+                    cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors flex-shrink-0"
                   style={{ width: SIDE_W, minWidth: SIDE_W,
-                    backgroundColor: i % 2 === 0 ? 'white' : '#fafafa' }}
+                    backgroundColor: i % 2 === 0 ? 'var(--bg-row-even)' : 'var(--bg-row-odd)' }}
                   onClick={() => onClickChantier(c)}>
                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                     style={{ backgroundColor: meta.color, opacity: isPotentiel ? 0.5 : 1,
@@ -300,8 +306,8 @@ export default function GanttChart({
                   </div>
                 </div>
 
-                {/* Grid cell */}
-                <div className="relative flex-shrink-0 overflow-hidden" style={{ width: totalW, height: ROW_H }}>
+                {/* Grid cell — isolation:isolate contains block z-indices inside this stacking context */}
+                <div className="relative flex-shrink-0 overflow-hidden" style={{ width: totalW, height: ROW_H, isolation: 'isolate' }}>
                   {/* Grid lines */}
                   {!denseGrid
                     ? days.map((d, di) => (
@@ -310,8 +316,8 @@ export default function GanttChart({
                             left: di * dayWidth,
                             width: dayWidth,
                             backgroundColor: !isWorkingDay(d)
-                              ? 'rgba(148,163,184,0.09)'
-                              : isToday(d) ? 'rgba(59,130,246,0.04)' : undefined,
+                              ? 'var(--bg-nonworking)'
+                              : isToday(d) ? 'var(--bg-today-col)' : undefined,
                           }} />
                       ))
                     : monthGroups.map(mg => (
@@ -344,6 +350,7 @@ export default function GanttChart({
                       chantier={c} left={left} width={width} dayWidth={dayWidth}
                       onMoveEnd={handleMoveEnd} onResizeEnd={handleResizeEnd}
                       onClick={onClickChantier} outOfPreconisee={outOfPrecon}
+                      onHover={handleHover} onUnhover={handleUnhover}
                     />
                   )}
                 </div>
@@ -354,9 +361,9 @@ export default function GanttChart({
           {/* Empty rows padding */}
           {Array.from({ length: Math.max(0, 5 - sorted.length) }).map((_, i) => (
             <div key={`e-${i}`} className="flex border-b border-slate-50"
-              style={{ height: ROW_H, backgroundColor: (sorted.length + i) % 2 === 0 ? 'white' : '#fafafa' }}>
+              style={{ height: ROW_H, backgroundColor: (sorted.length + i) % 2 === 0 ? 'var(--bg-row-even)' : 'var(--bg-row-odd)' }}>
               <div className="sticky left-0 flex-shrink-0 border-r border-slate-100"
-                style={{ width: SIDE_W, backgroundColor: (sorted.length + i) % 2 === 0 ? 'white' : '#fafafa' }} />
+                style={{ width: SIDE_W, backgroundColor: (sorted.length + i) % 2 === 0 ? 'var(--bg-row-even)' : 'var(--bg-row-odd)' }} />
               <div className="flex-shrink-0" style={{ width: totalW }} />
             </div>
           ))}
@@ -371,6 +378,11 @@ export default function GanttChart({
           )}
         </div>
       </div>
+
+      {/* Hover tooltip */}
+      {tooltip && (
+        <ChantierTooltip chantier={tooltip.chantier} x={tooltip.x} y={tooltip.y} />
+      )}
     </div>
   );
 }

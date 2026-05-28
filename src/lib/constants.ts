@@ -17,6 +17,7 @@ export interface ChantierTypeMeta {
   hasDrague: boolean;
   hasTelesco: boolean;
   hasPrepBassin: boolean;
+  hasRouleau?: boolean;
 }
 
 export const CHANTIER_TYPES: Record<ChantierType, ChantierTypeMeta> = {
@@ -160,6 +161,25 @@ export const CHANTIER_TYPES: Record<ChantierType, ChantierTypeMeta> = {
     hasDrague: false,
     hasTelesco: true,
     hasPrepBassin: false,
+  },
+  location: {
+    label: 'Location',
+    color: '#64748B',
+    bgClass: 'bg-slate-500',
+    borderClass: 'border-slate-600',
+    textClass: 'text-slate-800',
+    defaultPersonnes: 0,
+    hasPelles: true,
+    pellesOptions: ['1.5t', '3t', '8t'],
+    hasDumper: true,
+    hasTracto: false,
+    hasBull: false,
+    hasChenillette: false,
+    hasBateau: false,
+    hasDrague: false,
+    hasTelesco: false,
+    hasPrepBassin: false,
+    hasRouleau: true,
   },
 };
 

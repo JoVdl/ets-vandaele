@@ -131,3 +131,20 @@ export function TelescoIcon({ size = 14, className }: IconProps) {
     </svg>
   );
 }
+
+export function RouleauIcon({ size = 14, className }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 18" fill="currentColor" className={className}>
+      {/* drum roller (large front cylinder) */}
+      <ellipse cx="7" cy="12" rx="5" ry="5"/>
+      <ellipse cx="7" cy="12" rx="3" ry="3" fill="none" stroke="currentColor" strokeWidth="1.2"/>
+      {/* frame / arm */}
+      <rect x="10" y="9" width="10" height="3" rx="0.5"/>
+      {/* cab */}
+      <rect x="14" y="4" width="8" height="7" rx="1"/>
+      {/* rear wheel */}
+      <circle cx="20" cy="15" r="3"/>
+      <circle cx="20" cy="15" r="1.5" fill="none" stroke="currentColor" strokeWidth="1"/>
+    </svg>
+  );
+}

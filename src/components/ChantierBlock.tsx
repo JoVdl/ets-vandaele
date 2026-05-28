@@ -4,7 +4,7 @@ import { CHANTIER_TYPES } from '../lib/constants';
 import { CheckCircle2, Clock, Users, User, AlertTriangle } from 'lucide-react';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
-  CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon,
+  CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon, RouleauIcon,
 } from './EquipmentIcons';
 
 interface Props {
@@ -15,6 +15,8 @@ interface Props {
   onMoveEnd: (id: string, deltaDays: number) => void;
   onResizeEnd: (id: string, deltaDays: number) => void;
   onClick: (chantier: Chantier) => void;
+  onHover?: (chantier: Chantier, x: number, y: number) => void;
+  onUnhover?: () => void;
   outOfPreconisee?: boolean;
 }
 
@@ -42,6 +44,9 @@ function buildEquipChips(c: Chantier): EquipChip[] {
   if (c.bulls && c.bulls > 0) {
     chips.push({ key: 'bull', icon: <BullIcon size={12}/>, label: c.bulls > 1 ? `×${c.bulls}` : undefined });
   }
+  if (c.rouleaux && c.rouleaux > 0) {
+    chips.push({ key: 'rl', icon: <RouleauIcon size={12}/>, label: c.rouleaux > 1 ? `×${c.rouleaux}` : undefined });
+  }
   if (c.chenillette) chips.push({ key: 'ch', icon: <CheniletteIcon size={12}/> });
   if (c.bateauFaucardeur) chips.push({ key: 'bf', icon: <BateauFaucardeurIcon size={12}/> });
   if (c.drague) chips.push({ key: 'dr', icon: <DragueIcon size={12}/> });
@@ -50,7 +55,7 @@ function buildEquipChips(c: Chantier): EquipChip[] {
 }
 
 export default function ChantierBlock({
-  chantier, left, width, dayWidth, onMoveEnd, onResizeEnd, onClick, outOfPreconisee,
+  chantier, left, width, dayWidth, onMoveEnd, onResizeEnd, onClick, onHover, onUnhover, outOfPreconisee,
 }: Props) {
   const meta        = CHANTIER_TYPES[chantier.type];
   const isPotentiel = chantier.status === 'potentiel';
@@ -97,6 +102,25 @@ export default function ChantierBlock({
     if (!dragRef.current) onClick(chantier);
   }, [chantier, onClick]);
 
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleMouseEnter = useCallback((e: React.MouseEvent) => {
+    if (dragRef.current) return;
+    const { pageX, pageY } = e;
+    hoverTimer.current = setTimeout(() => onHover?.(chantier, pageX, pageY), 250);
+  }, [chantier, onHover]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (dragRef.current) { onUnhover?.(); return; }
+    // Update position live (passed fresh to parent via state, avoid stale coords)
+    onHover?.(chantier, e.pageX, e.pageY);
+  }, [chantier, onHover, onUnhover]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    onUnhover?.();
+  }, [onUnhover]);
+
   const showText  = width > 20;
   const showIcons = width > 50;
   const showCA    = width > 130 && chantier.chiffreAffaire > 0;
@@ -128,6 +152,9 @@ export default function ChantierBlock({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onClick={handleClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
       <div className="h-full flex items-center gap-1 px-1.5 overflow-hidden" style={{ color: fg }}>
 

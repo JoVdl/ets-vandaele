@@ -4,8 +4,9 @@ import {
 } from 'date-fns';
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, BarChart2,
-  TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2,
+  TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2, Moon, Sun,
 } from 'lucide-react';
+import { useTheme } from '../lib/theme';
 import { useChantiers } from '../hooks/useChantiers';
 import GanttChart from './GanttChart';
 import ChantierModal from './ChantierModal';
@@ -17,7 +18,7 @@ import { reorganize } from '../lib/reorganize';
 import { countWorkingDays } from '../lib/workingDays';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
-  CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon,
+  CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon, RouleauIcon,
 } from './EquipmentIcons';
 
 type ZoomPreset = 1 | 2 | 3 | 6 | 'year';
@@ -42,7 +43,7 @@ function computeEquipUtilization(chantiers: Chantier[], periodStart: Date, perio
   const lines: EquipLine[] = [];
 
   const pelleDays: Record<string, number> = {};
-  let dumperDays = 0, tractoDays = 0, bullDays = 0;
+  let dumperDays = 0, tractoDays = 0, bullDays = 0, roulDays = 0;
   let cheniDays = 0, bateauDays = 0, dragueDays = 0, telescoDays = 0;
 
   for (const c of chantiers) {
@@ -58,6 +59,7 @@ function computeEquipUtilization(chantiers: Chantier[], periodStart: Date, perio
     if (c.dumpers)        dumperDays  += wd * c.dumpers;
     if (c.tractoBennes)   tractoDays  += wd * c.tractoBennes;
     if (c.bulls)          bullDays    += wd * c.bulls;
+    if (c.rouleaux)       roulDays    += wd * c.rouleaux;
     if (c.chenillette)    cheniDays   += wd;
     if (c.bateauFaucardeur) bateauDays += wd;
     if (c.drague)         dragueDays  += wd;
@@ -73,6 +75,7 @@ function computeEquipUtilization(chantiers: Chantier[], periodStart: Date, perio
   add('dumper',  <DumperIcon size={13}/>,           'Dumper',        dumperDays);
   add('tracto',  <TractoBenneIcon size={13}/>,      'Tracto',        tractoDays);
   add('bull',    <BullIcon size={13}/>,              'Bull',          bullDays);
+  add('rouleau', <RouleauIcon size={13}/>,          'Rouleau 700kg', roulDays);
   add('cheni',   <CheniletteIcon size={13}/>,       'Chenillette',   cheniDays);
   add('bateau',  <BateauFaucardeurIcon size={13}/>,  'Bateau fauc.',  bateauDays);
   add('drague',  <DragueIcon size={13}/>,           'Drague',        dragueDays);
@@ -93,6 +96,7 @@ export default function PlanDeCharge() {
     open: false, chantier: null,
   });
   const [filterStatus, setFilterStatus] = useState<'all' | 'confirme' | 'potentiel'>('all');
+  const { theme, toggle: toggleTheme } = useTheme();
 
   // ── Period ─────────────────────────────────────────────────────────────────
   const periodStart = startOfMonth(currentMonth);
@@ -200,21 +204,28 @@ export default function PlanDeCharge() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-slate-200 flex-shrink-0">
+      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
 
         {/* Row 1 — Title + CA stats + actions */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-slate-100">
+        <div className="flex items-center justify-between px-6 py-3 border-b border-slate-100 dark:border-slate-700/50">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <BarChart2 size={16} className="text-white" />
             </div>
             <div>
-              <h1 className="text-base font-bold text-slate-800">Plan de charge</h1>
+              <h1 className="text-base font-bold text-slate-800 dark:text-slate-100">Plan de charge</h1>
               <p className="text-xs text-slate-400">ETS Vandaele</p>
             </div>
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+              className="ml-2 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+              {theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}
+            </button>
           </div>
 
           {/* CA summary */}
@@ -251,7 +262,7 @@ export default function PlanDeCharge() {
               {(['all', 'confirme', 'potentiel'] as const).map(s => (
                 <button key={s} onClick={() => setFilterStatus(s)}
                   className={`px-3 py-1.5 font-medium transition-colors ${
-                    filterStatus === s ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'
+                    filterStatus === s ? 'bg-slate-800 text-white dark:bg-slate-600' : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
                   }`}>
                   {s === 'all' ? 'Tous' : s === 'confirme' ? 'Confirmés' : 'Potentiels'}
                 </button>
@@ -276,7 +287,7 @@ export default function PlanDeCharge() {
 
         {/* Row 2 — Equipment utilization */}
         {equipLines.length > 0 && (
-          <div className="flex items-center gap-3 px-6 py-1.5 border-b border-slate-100 overflow-x-auto">
+          <div className="flex items-center gap-3 px-6 py-1.5 border-b border-slate-100 dark:border-slate-700/50 overflow-x-auto">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex-shrink-0">Engins :</span>
             <div className="flex items-center gap-4 flex-wrap">
               {equipLines.map(eq => {
@@ -298,7 +309,7 @@ export default function PlanDeCharge() {
         )}
 
         {/* Row 3 — Counts */}
-        <div className="flex items-center gap-6 px-6 py-1.5 border-b border-slate-100">
+        <div className="flex items-center gap-6 px-6 py-1.5 border-b border-slate-100 dark:border-slate-700/50">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-blue-500 rounded-full" />
             <span className="text-xs text-slate-500">{confirmes.length} confirmés</span>
@@ -313,10 +324,10 @@ export default function PlanDeCharge() {
         <div className="flex items-center gap-3 px-6 py-2">
           {/* Prev / Today / Next */}
           <div className="flex items-center gap-1">
-            <button onClick={prevPeriod} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
-              <ChevronLeft size={16} className="text-slate-600" />
+            <button onClick={prevPeriod} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
+              <ChevronLeft size={16} className="text-slate-600 dark:text-slate-300" />
             </button>
-            <button onClick={goToday} className="px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1">
+            <button onClick={goToday} className="px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1">
               <Calendar size={12} />
               Aujourd'hui
             </button>
@@ -325,7 +336,7 @@ export default function PlanDeCharge() {
             </button>
           </div>
 
-          <span className="text-sm font-semibold text-slate-700 min-w-[200px]">{periodLabel}</span>
+          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 min-w-[200px]">{periodLabel}</span>
 
           {/* Zoom presets */}
           <div className="flex items-center gap-1">
@@ -333,17 +344,17 @@ export default function PlanDeCharge() {
             {([1, 2, 3, 6, 'year'] as ZoomPreset[]).map(p => (
               <button key={String(p)} onClick={() => applyPreset(p)}
                 className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
-                  zoomPreset === p ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'
+                  zoomPreset === p ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}>
                 {p === 1 ? '1 mois' : p === 2 ? '2 mois' : p === 3 ? '3 mois' : p === 6 ? '6 mois' : 'Année'}
               </button>
             ))}
-            <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden ml-1">
-              <button onClick={zoomOut} className="p-1.5 hover:bg-slate-100 text-slate-500 transition-colors" title="Dézoomer">
+            <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden ml-1">
+              <button onClick={zoomOut} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors" title="Dézoomer">
                 <ZoomOut size={13} />
               </button>
               <span className="text-[10px] text-slate-400 px-1.5 tabular-nums">{Math.round(dayWidth)}px</span>
-              <button onClick={zoomIn} className="p-1.5 hover:bg-slate-100 text-slate-500 transition-colors" title="Zoomer">
+              <button onClick={zoomIn} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors" title="Zoomer">
                 <ZoomIn size={13} />
               </button>
             </div>
@@ -351,16 +362,16 @@ export default function PlanDeCharge() {
           </div>
 
           {/* Gantt / Carte tab switcher */}
-          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden ml-auto">
+          <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden ml-auto">
             <button onClick={() => setActiveTab('gantt')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'gantt' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'
+                activeTab === 'gantt' ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
               }`}>
               <BarChart2 size={13}/> Gantt
             </button>
             <button onClick={() => setActiveTab('carte')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'carte' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'
+                activeTab === 'carte' ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
               }`}>
               <Map size={13}/> Carte
             </button>
@@ -390,15 +401,15 @@ export default function PlanDeCharge() {
         />
       ) : (
         <MapView
-          key={chantiers.map(c => `${c.id}:${c.latitude}:${c.longitude}`).join(',')}
-          chantiers={chantiers}
+          key={filtered.map(c => `${c.id}:${c.latitude}:${c.longitude}`).join(',')}
+          chantiers={filtered}
           onClickChantier={openEdit}
         />
       )}
 
       {/* ── Legend (Gantt only) ───────────────────────────────────────────── */}
       {activeTab === 'gantt' && (
-        <div className="bg-white border-t border-slate-100 px-6 py-2 flex flex-wrap gap-3 flex-shrink-0">
+        <div className="bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700/50 px-6 py-2 flex flex-wrap gap-3 flex-shrink-0">
           {Object.entries(CHANTIER_TYPES).map(([k, v]) => (
             <div key={k} className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: v.color }} />

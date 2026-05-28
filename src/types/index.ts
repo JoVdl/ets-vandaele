@@ -6,7 +6,10 @@ export type ChantierType =
   | 'broyage_forestier'
   | 'terrassement'
   | 'faucardage'
-  | 'defenses_berges';
+  | 'defenses_berges'
+  | 'location';
+
+export type TypeRouleau = '700kg';
 
 export type ChantierStatus = 'potentiel' | 'confirme';
 export type TypePelle = '1.5t' | '3t' | '8t' | '16t';
@@ -43,6 +46,7 @@ export interface Chantier {
   dumpers?: number;
   tractoBennes?: number;
   bulls?: number;
+  rouleaux?: number; // nb de rouleaux 700kg (location)
 
   // Matériel spécifique
   chenillette?: boolean;

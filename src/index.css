@@ -17,12 +17,45 @@ html, body, #root {
   --row-height: 52px;
   --header-height: 64px;
   --sidebar-width: 260px;
+
+  /* Light theme tokens */
+  --bg-primary:    #ffffff;
+  --bg-secondary:  #f8fafc;
+  --bg-tertiary:   #f1f5f9;
+  --bg-row-even:   #ffffff;
+  --bg-row-odd:    #fafafa;
+  --bg-header:     #f8fafc;
+  --bg-month-row:  #f1f5f9;
+  --bg-nonworking: rgba(148,163,184,0.09);
+  --bg-today-col:  rgba(59,130,246,0.04);
+  --border-primary:   #e2e8f0;
+  --border-secondary: #f1f5f9;
+  --text-primary:  #1e293b;
+  --text-secondary:#64748b;
+  --text-muted:    #94a3b8;
+}
+
+.dark {
+  --bg-primary:    #0f172a;
+  --bg-secondary:  #1e293b;
+  --bg-tertiary:   #334155;
+  --bg-row-even:   #1e293b;
+  --bg-row-odd:    #172033;
+  --bg-header:     #1e293b;
+  --bg-month-row:  #334155;
+  --bg-nonworking: rgba(71,85,105,0.25);
+  --bg-today-col:  rgba(59,130,246,0.1);
+  --border-primary:   #334155;
+  --border-secondary: #1e293b;
+  --text-primary:  #f1f5f9;
+  --text-secondary:#94a3b8;
+  --text-muted:    #475569;
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #f1f5f9; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 .gantt-block { cursor: grab; user-select: none; }
 .gantt-block:active { cursor: grabbing; }

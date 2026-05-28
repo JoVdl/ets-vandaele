@@ -2,6 +2,38 @@ export interface GeoResult {
   lat: number;
   lon: number;
   displayName: string;
+  shortName?: string;
+}
+
+/** Search Nominatim and return multiple candidates (for autocomplete) */
+export async function geocodeSearch(query: string, limit = 6): Promise<GeoResult[]> {
+  const q = encodeURIComponent(query);
+  const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=${limit}&countrycodes=fr&addressdetails=1`;
+  try {
+    const res = await fetch(url, {
+      headers: { 'Accept-Language': 'fr', 'User-Agent': 'ets-vandaele-app/1.0' },
+    });
+    if (!res.ok) return [];
+    const data: Array<{
+      lat: string; lon: string; display_name: string;
+      address?: { village?: string; town?: string; city?: string; municipality?: string; county?: string; postcode?: string };
+    }> = await res.json();
+    return data.map(d => {
+      const a = d.address ?? {};
+      const locality = a.village ?? a.town ?? a.city ?? a.municipality ?? '';
+      const postcode = a.postcode ?? '';
+      const county   = a.county ?? '';
+      const short = [locality, postcode, county].filter(Boolean).slice(0, 2).join(', ');
+      return {
+        lat: parseFloat(d.lat),
+        lon: parseFloat(d.lon),
+        displayName: d.display_name,
+        shortName: short || d.display_name.split(',').slice(0, 2).join(',').trim(),
+      };
+    });
+  } catch {
+    return [];
+  }
 }
 
 /** Geocode a location string via Nominatim (OpenStreetMap, free, no key) */

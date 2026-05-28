@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
 import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle } from 'lucide-react';
 import type { Chantier, ChantierType, TypePelle } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { format } from 'date-fns';
-import { geocode, extractLocation } from '../lib/geocoder';
+import { geocode, geocodeSearch, extractLocation, type GeoResult } from '../lib/geocoder';
 
 interface Props {
   isOpen: boolean;
@@ -40,6 +40,7 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   dumpers: 0,
   tractoBennes: 0,
   bulls: 0,
+  rouleaux: 0,
   chenillette: false,
   bateauFaucardeur: false,
   drague: false,
@@ -55,8 +56,11 @@ function isOutOfPreconisee(form: ReturnType<typeof emptyForm>): boolean {
 }
 
 export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDebut, onSave, onDelete, onConfirm }: Props) {
-  const [form, setForm]       = useState(emptyForm());
-  const [geocoding, setGeocoding] = useState(false);
+  const [form, setForm]         = useState(emptyForm());
+  const [geocoding, setGeocoding]       = useState(false);
+  const [suggestions, setSuggestions]   = useState<GeoResult[]>([]);
+  const [showSuggest, setShowSuggest]   = useState(false);
+  const suggestDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (chantier) {
@@ -79,23 +83,59 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
     set('pelles', cur.includes(p) ? cur.filter(x => x !== p) : [...cur, p]);
   };
 
+  // Debounced address autocomplete
+  const handleAddressInput = useCallback((value: string) => {
+    set('adresse', value);
+    set('latitude', undefined);
+    set('longitude', undefined);
+    if (suggestDebounce.current) clearTimeout(suggestDebounce.current);
+    if (value.length < 2) { setSuggestions([]); setShowSuggest(false); return; }
+    suggestDebounce.current = setTimeout(async () => {
+      const results = await geocodeSearch(value);
+      setSuggestions(results);
+      setShowSuggest(results.length > 0);
+    }, 380);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSelectSuggestion = useCallback((r: GeoResult) => {
+    setForm(prev => ({ ...prev, adresse: r.shortName ?? r.displayName.split(',').slice(0, 2).join(',').trim(), latitude: r.lat, longitude: r.lon }));
+    setSuggestions([]);
+    setShowSuggest(false);
+  }, []);
+
+  // Manual geocode button (from nom/lieu)
   const handleGeocode = async () => {
     setGeocoding(true);
     const q = extractLocation(form.nom, form.adresse || form.lieu);
     const res = await geocode(q);
     if (res) {
-      setForm(prev => ({ ...prev, latitude: res.lat, longitude: res.lon, adresse: prev.adresse || res.displayName.split(',').slice(0, 3).join(',').trim() }));
+      setForm(prev => ({
+        ...prev,
+        latitude: res.lat, longitude: res.lon,
+        adresse: prev.adresse || res.displayName.split(',').slice(0, 2).join(',').trim(),
+      }));
     }
     setGeocoding(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Clean up empty date strings
     const clean = { ...form };
     if (!clean.periodePreconiseeDebut) clean.periodePreconiseeDebut = undefined;
-    if (!clean.periodePreconiseeFin) clean.periodePreconiseeFin = undefined;
+    if (!clean.periodePreconiseeFin)   clean.periodePreconiseeFin   = undefined;
     if (!clean.adresse) clean.adresse = undefined;
+
+    // Auto-geocode from name if still no coordinates
+    if (!clean.latitude && (clean.nom || clean.lieu)) {
+      const q = extractLocation(clean.nom, clean.adresse || clean.lieu);
+      const res = await geocode(q);
+      if (res) {
+        clean.latitude = res.lat;
+        clean.longitude = res.lon;
+        if (!clean.adresse) clean.adresse = res.displayName.split(',').slice(0, 2).join(',').trim();
+      }
+    }
+
     onSave(clean);
     onClose();
   };
@@ -167,19 +207,40 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
               </label>
               <div className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Adresse (géolocalisation)</span>
-                <div className="mt-1 flex gap-1">
-                  <input value={form.adresse ?? ''} onChange={e => set('adresse', e.target.value)}
-                    placeholder="Ex: Gambais, 78950"
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <button type="button" onClick={handleGeocode} disabled={geocoding}
-                    title="Géocoder depuis le nom / adresse"
-                    className="px-2 py-2 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors">
-                    {geocoding ? <Loader2 size={15} className="animate-spin"/> : <MapPin size={15}/>}
-                  </button>
+                <div className="mt-1 relative">
+                  <div className="flex gap-1">
+                    <input
+                      value={form.adresse ?? ''}
+                      onChange={e => handleAddressInput(e.target.value)}
+                      onFocus={() => suggestions.length > 0 && setShowSuggest(true)}
+                      onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
+                      placeholder="Tapez une ville ou adresse…"
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <button type="button" onClick={handleGeocode} disabled={geocoding}
+                      title="Géocoder depuis le nom du chantier"
+                      className="px-2 py-2 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors flex-shrink-0">
+                      {geocoding ? <Loader2 size={15} className="animate-spin"/> : <MapPin size={15}/>}
+                    </button>
+                  </div>
+                  {/* Autocomplete dropdown */}
+                  {showSuggest && suggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-8 z-50 mt-0.5 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                      {suggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onMouseDown={() => handleSelectSuggestion(s)}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 border-b border-slate-50 last:border-0">
+                          <span className="font-medium text-slate-700">{s.shortName}</span>
+                          <span className="text-slate-400 ml-1 truncate block text-[10px]">{s.displayName.split(',').slice(0, 3).join(',')}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {form.latitude && form.longitude && (
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
+                  <p className="text-[10px] text-green-600 mt-0.5 flex items-center gap-0.5">
+                    <MapPin size={9}/> {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
                   </p>
                 )}
               </div>
@@ -308,6 +369,14 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                     <span className="text-xs text-slate-500">Bulls</span>
                     <input type="number" min="0" max="10" value={form.bulls ?? 0}
                       onChange={e => set('bulls', Number(e.target.value))}
+                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white" />
+                  </label>
+                )}
+                {meta.hasRouleau && (
+                  <label className="block">
+                    <span className="text-xs text-slate-500">Rouleaux 700kg</span>
+                    <input type="number" min="0" max="10" value={form.rouleaux ?? 0}
+                      onChange={e => set('rouleaux', Number(e.target.value))}
                       className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white" />
                   </label>
                 )}
