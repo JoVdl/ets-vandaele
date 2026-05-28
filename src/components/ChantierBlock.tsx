@@ -64,6 +64,7 @@ export default function ChantierBlock({
   const isArchived  = chantier.status === 'refuse' || chantier.status === 'annule';
 
   const dragRef   = useRef<{ startX: number; mode: 'move' | 'resize' } | null>(null);
+  const didDragRef = useRef(false); // survives the pointerup→click sequence
   const blockRef  = useRef<HTMLDivElement>(null);
   const initLeft  = useRef(left);
   const initWidth = useRef(width);
@@ -73,6 +74,7 @@ export default function ChantierBlock({
     if (mode === 'resize') e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragRef.current  = { startX: e.clientX, mode };
+    didDragRef.current = false;
     initLeft.current  = left;
     initWidth.current = width;
   }, [left, width]);
@@ -80,6 +82,7 @@ export default function ChantierBlock({
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragRef.current || !blockRef.current) return;
     const dx = e.clientX - dragRef.current.startX;
+    if (Math.abs(dx) > 3) didDragRef.current = true;
     if (dragRef.current.mode === 'move') {
       blockRef.current.style.left = `${initLeft.current + dx}px`;
     } else {
@@ -92,17 +95,18 @@ export default function ChantierBlock({
     const dx    = e.clientX - dragRef.current.startX;
     const delta = Math.round(dx / dayWidth);
     if (dragRef.current.mode === 'move') {
-      if (delta !== 0) onMoveEnd(chantier.id, delta);
+      if (delta !== 0) { didDragRef.current = true; onMoveEnd(chantier.id, delta); }
       else if (blockRef.current) blockRef.current.style.left = `${left}px`;
     } else {
-      if (delta !== 0) onResizeEnd(chantier.id, delta);
+      if (delta !== 0) { didDragRef.current = true; onResizeEnd(chantier.id, delta); }
       else if (blockRef.current) blockRef.current.style.width = `${width}px`;
     }
     dragRef.current = null;
   }, [chantier.id, left, width, dayWidth, onMoveEnd, onResizeEnd]);
 
   const handleClick = useCallback(() => {
-    if (!dragRef.current) onClick(chantier);
+    if (didDragRef.current) { didDragRef.current = false; return; }
+    onClick(chantier);
   }, [chantier, onClick]);
 
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
