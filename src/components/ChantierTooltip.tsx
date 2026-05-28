@@ -5,6 +5,7 @@ import { fr } from 'date-fns/locale';
 import { MapPin, Users, User, Calendar, Euro } from 'lucide-react';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
+import { countWorkingDays } from '../lib/workingDays';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
   CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon,
@@ -113,6 +114,8 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
   const hasMap = !!(c.latitude && c.longitude);
 
   const dateStr = `${format(new Date(c.dateDebut), 'd MMM', { locale: fr })} → ${format(new Date(c.dateFin), 'd MMM yyyy', { locale: fr })}`;
+  const wd = countWorkingDays(new Date(c.dateDebut), new Date(c.dateFin));
+  const caParJour = wd > 0 && c.chiffreAffaire > 0 ? Math.round(c.chiffreAffaire / wd) : 0;
 
   // Reposition after mount so it stays on screen
   useEffect(() => {
@@ -176,9 +179,14 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
 
             {/* CA */}
             {c.chiffreAffaire > 0 && (
-              <div className="flex items-center gap-1 mt-0.5 text-xs font-semibold text-slate-700">
+              <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-slate-700">
                 <Euro size={11} className="flex-shrink-0"/>
                 {c.chiffreAffaire.toLocaleString('fr-FR')} €
+                {caParJour > 0 && (
+                  <span className="text-[10px] font-normal text-slate-400">
+                    ({caParJour.toLocaleString('fr-FR')} €/j)
+                  </span>
+                )}
               </div>
             )}
 

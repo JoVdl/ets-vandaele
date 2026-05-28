@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc,
-  doc, query, orderBy,
+  doc, query, orderBy, deleteField,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { Chantier } from '../types';
@@ -32,11 +32,18 @@ export function useChantiers() {
 
   const addChantier = async (data: Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'>) => {
     const now = new Date().toISOString();
-    await addDoc(collection(db, COLLECTION), { ...data, createdAt: now, updatedAt: now });
+    const clean = Object.fromEntries(
+      Object.entries({ ...data, createdAt: now, updatedAt: now }).filter(([, v]) => v !== undefined)
+    );
+    await addDoc(collection(db, COLLECTION), clean);
   };
 
   const updateChantier = async (id: string, data: Partial<Omit<Chantier, 'id' | 'createdAt'>>) => {
-    await updateDoc(doc(db, COLLECTION, id), { ...data, updatedAt: new Date().toISOString() });
+    const payload: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+    for (const [k, v] of Object.entries(data)) {
+      payload[k] = v === undefined ? deleteField() : v;
+    }
+    await updateDoc(doc(db, COLLECTION, id), payload);
   };
 
   const deleteChantier = async (id: string) => {
