@@ -153,8 +153,12 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-[2000]">
       <div className="fixed inset-0 z-[2000] bg-black/40 backdrop-blur-sm" aria-hidden="true" />
-      <div className="fixed inset-0 z-[2001] flex items-center justify-center p-4">
-        <Dialog.Panel className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="fixed inset-0 z-[2001] flex items-end sm:items-center p-0 sm:p-4">
+        <Dialog.Panel className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] sm:max-h-[90vh] flex flex-col">
+          {/* Drag handle — mobile only */}
+          <div className="flex justify-center pt-2.5 pb-1 sm:hidden flex-shrink-0">
+            <div className="w-10 h-1 bg-slate-200 rounded-full" />
+          </div>
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
             <Dialog.Title className="text-lg font-semibold text-slate-800">
@@ -192,7 +196,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             )}
 
             {/* Nom & Client */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Nom du chantier *</span>
                 <input required value={form.nom} onChange={e => set('nom', e.target.value)}
@@ -206,7 +210,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             </div>
 
             {/* Lieu + Adresse/Localisation */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Lieu</span>
                 <input value={form.lieu ?? ''} onChange={e => set('lieu', e.target.value)}
@@ -254,7 +258,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             </div>
 
             {/* Type & Status */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Type de chantier</span>
                 <select value={form.type} onChange={e => set('type', e.target.value as ChantierType)}
@@ -277,7 +281,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             </div>
 
             {/* Dates intervention */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date début</span>
                 <input type="date" required value={form.dateDebut}
@@ -322,7 +326,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             {/* Période préconisée */}
             <div className="border border-dashed border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2">
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Période d'intervention préconisée (optionnel)</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="block">
                   <span className="text-xs text-slate-500">Du</span>
                   <input type="date" value={form.periodePreconiseeDebut ?? ''} onChange={e => set('periodePreconiseeDebut', e.target.value)}
@@ -338,7 +342,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
 
             {/* Financier */}
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="block">
                   <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">CA annuel (€)</span>
                   <input type="number" min="0" value={form.chiffreAffaire} onChange={e => set('chiffreAffaire', Number(e.target.value))}
@@ -395,7 +399,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 </div>
               )}
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {meta.hasDumper && (
                   <label className="block">
                     <span className="text-xs text-slate-500">Dumpers</span>
@@ -466,7 +470,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
               </div>
 
               {meta.hasPrepBassin && (
-                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200">
                   <label className="block">
                     <span className="text-xs text-slate-500">Pelle prépa bassin</span>
                     <select value={form.pellePrepaBassin ?? '8t'}

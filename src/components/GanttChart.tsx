@@ -29,7 +29,6 @@ interface MonthGroup {
 
 const ROW_H  = 52;
 const HEAD_H = 56;
-const SIDE_W = 260;
 
 function isOutOfPreconisee(c: Chantier): boolean {
   if (!c.periodePreconiseeDebut || !c.periodePreconiseeFin) return false;
@@ -44,6 +43,9 @@ export default function GanttChart({
   const scrollRef     = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<number | null>(null);
   const prevDayWidth  = useRef(dayWidth);
+
+  // Sidebar width: smaller on mobile to leave room for the chart
+  const SIDE_W = window.innerWidth < 640 ? 120 : 260;
 
   // ── Availability bar toggle ───────────────────────────────────────────────
   const [showGaps, setShowGaps] = useState(true);
@@ -310,7 +312,10 @@ export default function GanttChart({
                     cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors flex-shrink-0"
                   style={{ width: SIDE_W, minWidth: SIDE_W,
                     backgroundColor: i % 2 === 0 ? 'var(--bg-row-even)' : 'var(--bg-row-odd)' }}
-                  onClick={() => onClickChantier(c)}>
+                  onClick={() => onClickChantier(c)}
+                  onMouseEnter={e => handleHover(c, e.pageX, e.pageY)}
+                  onMouseMove={e => handleHover(c, e.pageX, e.pageY)}
+                  onMouseLeave={handleUnhover}>
                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                     style={{ backgroundColor: meta.color, opacity: isPotentiel ? 0.5 : 1,
                       border: isPotentiel ? `1.5px dashed ${meta.color}` : 'none' }} />
@@ -323,7 +328,7 @@ export default function GanttChart({
                         <span title="Hors période préconisée" className="flex-shrink-0 text-orange-400">⚠</span>
                       )}
                     </div>
-                    {c.client && <p className="text-xs text-slate-400 truncate">{c.client}</p>}
+                    {c.client && <p className="hidden sm:block text-xs text-slate-400 truncate">{c.client}</p>}
                   </div>
                 </div>
 

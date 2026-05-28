@@ -1,10 +1,12 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
-  startOfMonth, endOfMonth, addMonths, subMonths, startOfDay, differenceInCalendarDays,
+  startOfMonth, endOfMonth, addMonths, subMonths, startOfDay, differenceInCalendarDays, format,
 } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import {
   Plus, ChevronLeft, ChevronRight, ChevronDown, Calendar, BarChart2,
   TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2, Moon, Sun, MapPin, MoreVertical,
+  List, Users, User,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { useChantiers } from '../hooks/useChantiers';
@@ -23,7 +25,10 @@ import {
 } from './EquipmentIcons';
 
 type ZoomPreset = 1 | 2 | 3 | 6 | 'year';
-type ViewTab = 'gantt' | 'carte';
+type ViewTab = 'gantt' | 'carte' | 'liste';
+
+// Sidebar width used by the Gantt — must match GanttChart's SIDE_W
+const GANTT_SIDEBAR = typeof window !== 'undefined' && window.innerWidth < 640 ? 120 : 260;
 
 
 // ── Equipment utilization ─────────────────────────────────────────────────────
@@ -91,7 +96,7 @@ export default function PlanDeCharge() {
     const start = startOfMonth(new Date());
     const end   = new Date(new Date().getFullYear(), 11, 31);
     const numDays = differenceInCalendarDays(end, start) + 1;
-    return Math.max(3, (window.innerWidth - 260) / numDays);
+    return Math.max(3, (window.innerWidth - GANTT_SIDEBAR) / numDays);
   });
   const [activeTab, setActiveTab]       = useState<ViewTab>('gantt');
   const [reorganizing, setReorganizing] = useState(false);
@@ -165,7 +170,7 @@ export default function PlanDeCharge() {
       ? new Date(baseMonth.getFullYear(), 11, 31)
       : endOfMonth(addMonths(start, (p as number) - 1));
     const numDays = differenceInCalendarDays(end, start) + 1;
-    const availableW = (containerRef.current?.clientWidth ?? window.innerWidth) - 260;
+    const availableW = (containerRef.current?.clientWidth ?? window.innerWidth) - GANTT_SIDEBAR;
     return Math.max(3, availableW / numDays);
   }, []);
 
@@ -546,7 +551,7 @@ export default function PlanDeCharge() {
             </button>
           </div>
 
-          {/* Gantt / Carte tab switcher */}
+          {/* Gantt / Carte / Liste tab switcher */}
           <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden ml-auto sm:ml-0">
             <button onClick={() => setActiveTab('gantt')}
               className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -560,11 +565,18 @@ export default function PlanDeCharge() {
               }`}>
               <Map size={13}/> <span className="hidden sm:inline">Carte</span>
             </button>
+            {/* Liste tab — mobile only */}
+            <button onClick={() => setActiveTab('liste')}
+              className={`flex sm:hidden items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                activeTab === 'liste' ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+              }`}>
+              <List size={13}/>
+            </button>
           </div>
         </div>
 
-        {/* Mobile only: zoom presets row */}
-        <div className="sm:hidden flex items-center gap-0.5 px-3 pb-2 overflow-x-auto">
+        {/* Mobile only: zoom presets row — hidden on liste tab */}
+        <div className={`sm:hidden items-center gap-0.5 px-3 pb-2 overflow-x-auto ${activeTab === 'liste' ? 'hidden' : 'flex'}`}>
           {([1, 2, 3, 6, 'year'] as ZoomPreset[]).map(p => (
             <button key={String(p)} onClick={() => applyPreset(p)}
               className={`px-2 py-1 text-xs font-medium rounded transition-colors flex-shrink-0 ${
@@ -599,12 +611,84 @@ export default function PlanDeCharge() {
           onClickChantier={openEdit}
           onClickDay={openNew}
         />
-      ) : (
+      ) : activeTab === 'carte' ? (
         <MapView
           key={filtered.map(c => `${c.id}:${c.latitude}:${c.longitude}`).join(',')}
           chantiers={filtered}
           onClickChantier={openEdit}
         />
+      ) : (
+        /* ── Liste mobile ──────────────────────────────────────────────── */
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 bg-slate-50 dark:bg-slate-900">
+          {filtered.length === 0 && (
+            <p className="text-center text-slate-400 text-sm py-12">Aucun chantier sur cette période</p>
+          )}
+          {[...filtered]
+            .sort((a, b) => a.dateDebut.localeCompare(b.dateDebut))
+            .map(c => {
+              const meta = CHANTIER_TYPES[c.type];
+              const isPotentiel = c.status === 'potentiel';
+              const isArchived  = c.status === 'refuse' || c.status === 'annule';
+              const nb = c.nombrePersonnes ?? 1;
+              const statusLabel = c.status === 'refuse' ? 'Refusé' : c.status === 'annule' ? 'Annulé'
+                : isPotentiel ? 'Potentiel' : 'Confirmé';
+              const statusCls = isArchived ? 'bg-slate-100 text-slate-400'
+                : isPotentiel ? 'bg-slate-100 text-slate-500' : 'bg-green-50 text-green-700';
+              return (
+                <div key={c.id}
+                  onClick={() => openEdit(c)}
+                  className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden cursor-pointer active:scale-[0.98] transition-transform"
+                  style={{ borderLeft: `4px solid ${isArchived ? '#cbd5e1' : meta.color}` }}>
+                  <div className="px-3 py-3">
+                    {/* Top row: name + status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`font-semibold text-slate-800 dark:text-slate-100 text-sm leading-tight ${isArchived ? 'line-through text-slate-400' : ''}`}>
+                        {c.nom}
+                      </p>
+                      <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusCls}`}>
+                        {statusLabel}
+                      </span>
+                    </div>
+                    {/* Client */}
+                    {c.client && (
+                      <p className="text-xs text-slate-400 mt-0.5 truncate">{c.client}</p>
+                    )}
+                    {/* Dates */}
+                    <div className="flex items-center gap-1 mt-1.5 text-xs text-slate-500">
+                      <Calendar size={11} className="flex-shrink-0"/>
+                      <span>
+                        {format(new Date(c.dateDebut), 'd MMM', { locale: fr })}
+                        {' → '}
+                        {format(new Date(c.dateFin), 'd MMM yyyy', { locale: fr })}
+                      </span>
+                    </div>
+                    {/* Footer row: type label + personnel + lieu */}
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white flex-shrink-0"
+                        style={{ backgroundColor: meta.color }}>{meta.label}</span>
+                      <span className="flex items-center gap-0.5 text-xs text-slate-400">
+                        {nb >= 2 ? <Users size={10}/> : <User size={10}/>}
+                        <span>{nb}</span>
+                      </span>
+                      {c.lieu && (
+                        <span className="flex items-center gap-0.5 text-xs text-slate-400 truncate">
+                          <MapPin size={10}/>{c.lieu}
+                        </span>
+                      )}
+                      {c.chiffreAffaire > 0 && (
+                        <span className="ml-auto text-xs font-semibold text-slate-600 dark:text-slate-300 flex-shrink-0">
+                          {c.chiffreAffaire.toLocaleString('fr-FR')} €
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          }
+          {/* Bottom padding so last card isn't under FAB */}
+          <div className="h-20"/>
+        </div>
       )}
 
       {/* ── Legend (Gantt only) ───────────────────────────────────────────── */}
@@ -630,6 +714,15 @@ export default function PlanDeCharge() {
         className="fixed bottom-4 right-4 z-50 p-2.5 rounded-full bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-800 shadow-lg hover:scale-110 transition-transform">
         {theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}
       </button>
+
+      {/* FAB "nouveau chantier" — visible only on mobile liste tab */}
+      {activeTab === 'liste' && (
+        <button
+          onClick={() => openNew(format(new Date(), 'yyyy-MM-dd'))}
+          className="fixed bottom-16 right-4 z-50 sm:hidden w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-transform">
+          <Plus size={24}/>
+        </button>
+      )}
 
       <ChantierModal
         isOpen={modal.open}
