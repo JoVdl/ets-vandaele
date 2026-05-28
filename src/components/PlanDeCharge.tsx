@@ -204,10 +204,14 @@ export default function PlanDeCharge() {
 
   // ── Smart reorganization ───────────────────────────────────────────────────
   const handleReorganize = async () => {
+    const nonLocked = chantiers.filter(c => !c.datesVerrouillees && c.status !== 'refuse' && c.status !== 'annule').length;
     if (!confirm(
-      `Réorganiser les ${potentiels.length} chantiers potentiels ?\n\n` +
-      `• Les chantiers confirmés restent en place.\n` +
-      `• Les potentiels sont repositionnés en respectant les périodes préconisées\n  et en optimisant les déplacements géographiques.`
+      `Réorganiser ${nonLocked} chantier(s) non verrouillé(s) ?\n\n` +
+      `• Seuls les chantiers avec dates verrouillées restent en place.\n` +
+      `• Les dates sont préservées en jours ouvrés.\n` +
+      `• Les périodes préconisées sont respectées si possible.\n` +
+      `• Les engins et effectifs sont pris en compte pour éviter les conflits.\n` +
+      `• L'ordre optimise les déplacements et transferts de matériel.`
     )) return;
     setReorganizing(true);
     try {
