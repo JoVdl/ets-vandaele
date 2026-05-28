@@ -202,14 +202,9 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
             {c.chiffreAffaire > 0 && (
               <div className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-slate-700">
                 <Euro size={11} className="flex-shrink-0"/>
-                {isMultiYear ? (
-                  <>
-                    <span className="text-[10px] font-normal text-slate-400 line-through">{c.chiffreAffaire.toLocaleString('fr-FR')} €</span>
-                    <span>{caAn.toLocaleString('fr-FR')} €/an</span>
-                    <span className="text-[10px] font-normal text-indigo-500">contrat {nAns} ans</span>
-                  </>
-                ) : (
-                  <>{c.chiffreAffaire.toLocaleString('fr-FR')} €</>
+                {c.chiffreAffaire.toLocaleString('fr-FR')} €
+                {isMultiYear && (
+                  <span className="text-[10px] font-normal text-indigo-500 px-1 py-0.5 bg-indigo-50 rounded">contrat {nAns} ans</span>
                 )}
                 {caParJour > 0 && (
                   <span className="text-[10px] font-normal text-slate-400">

@@ -136,7 +136,6 @@ export default function ChantierBlock({
   const caAn         = caAnnuel(chantier.chiffreAffaire, chantier.nombreAnnees);
   const caParJour    = wd > 0 && caAn > 0 ? Math.round(caAn / wd) : 0;
   const showCaPerDay = width > 200 && caParJour > 0;
-  const isMultiYear  = (chantier.nombreAnnees ?? 1) > 1;
   const chips     = buildEquipChips(chantier);
 
   const bg    = isArchived ? '#f1f5f9' : isPotentiel ? 'white' : meta.color;
@@ -199,7 +198,6 @@ export default function ChantierBlock({
         {showCA && (
           <span className="text-[10px] opacity-75 ml-1 flex-shrink-0 font-medium">
             {caAn.toLocaleString('fr-FR')} €
-            {isMultiYear && <span className="opacity-60 ml-0.5">/an</span>}
             {showCaPerDay && (
               <span className="opacity-70 ml-0.5">· {caParJour.toLocaleString('fr-FR')} €/j</span>
             )}

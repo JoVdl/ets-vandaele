@@ -340,24 +340,15 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                    CA {(form.nombreAnnees ?? 1) > 1 ? 'total contrat (€)' : '(€)'}
-                  </span>
+                  <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">CA annuel (€)</span>
                   <input type="number" min="0" value={form.chiffreAffaire} onChange={e => set('chiffreAffaire', Number(e.target.value))}
                     className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </label>
                 <label className="block">
                   <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Durée contrat (années)</span>
-                  <div className="mt-1 flex items-center gap-2">
-                    <input type="number" min="1" max="10" value={form.nombreAnnees ?? 1}
-                      onChange={e => set('nombreAnnees', Math.max(1, Number(e.target.value)))}
-                      className="w-20 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    {(form.nombreAnnees ?? 1) > 1 && form.chiffreAffaire > 0 && (
-                      <span className="text-sm text-slate-500">
-                        = <strong>{Math.round(form.chiffreAffaire / (form.nombreAnnees ?? 1)).toLocaleString('fr-FR')} €</strong>/an
-                      </span>
-                    )}
-                  </div>
+                  <input type="number" min="1" max="10" value={form.nombreAnnees ?? 1}
+                    onChange={e => set('nombreAnnees', Math.max(1, Number(e.target.value)))}
+                    className="mt-1 w-20 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </label>
               </div>
               <div className="flex gap-6">

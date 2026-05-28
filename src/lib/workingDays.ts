@@ -151,8 +151,7 @@ export function findGaps(
   return gaps;
 }
 
-/** Annual CA for display: total divided by contract years (default 1) */
-export function caAnnuel(chiffreAffaire: number, nombreAnnees?: number): number {
-  const n = nombreAnnees && nombreAnnees > 1 ? nombreAnnees : 1;
-  return n > 1 ? Math.round(chiffreAffaire / n) : chiffreAffaire;
+/** CA is already the annual value — this just passes it through. nombreAnnees is informational only. */
+export function caAnnuel(chiffreAffaire: number, _nombreAnnees?: number): number {
+  return chiffreAffaire;
 }
