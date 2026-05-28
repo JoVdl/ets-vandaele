@@ -2,6 +2,7 @@ import { useRef, useCallback } from 'react';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { CheckCircle2, Clock, Users, User, AlertTriangle, Lock } from 'lucide-react';
+import cenLogoUrl from '../assets/cen-logo.png';
 import { countWorkingDays } from '../lib/workingDays';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
@@ -201,7 +202,7 @@ export default function ChantierBlock({
         {/* CEN logo */}
         {showIcons && chantier.client?.toUpperCase().includes('CEN') && (
           <img
-            src="/cen-logo.png"
+            src={cenLogoUrl}
             alt="CEN"
             title="Conservatoire d'Espaces Naturels"
             style={{ height: 12, width: 'auto', flexShrink: 0, opacity: isPotentiel ? 0.7 : 0.9,

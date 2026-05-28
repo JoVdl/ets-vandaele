@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { MapPin, Users, User, Calendar, Euro, Lock } from 'lucide-react';
+import cenLogoUrl from '../assets/cen-logo.png';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { countWorkingDays } from '../lib/workingDays';
@@ -174,7 +175,7 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
             {c.client && (
               <div className="flex items-center gap-1.5 mt-0.5">
                 {c.client.toUpperCase().includes('CEN') && (
-                  <img src="/cen-logo.png" alt="CEN" style={{ height: 14, width: 'auto' }} />
+                  <img src={cenLogoUrl} alt="CEN" style={{ height: 14, width: 'auto' }} />
                 )}
                 <p className="text-xs text-slate-500">{c.client}</p>
               </div>
