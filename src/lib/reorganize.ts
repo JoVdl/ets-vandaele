@@ -154,83 +154,94 @@ export type ReorganizeMode = 'all' | 'confirme' | 'potentiel';
 
 export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potentiel'): ReorganizeSummary {
   const warnings: string[] = [];
+  const results: ReorganizeResult[] = [];
+  let moved = 0;
 
   const active = chantiers.filter(c => c.status !== 'refuse' && c.status !== 'annule');
 
-  let anchors: Chantier[];
-  let moveable: Chantier[];
+  // Locked anchors never move regardless of mode
+  const lockedAnchors = active.filter(c => c.datesVerrouillees);
+
+  // Batches: confirmés always scheduled before potentiels to guarantee their priority
+  let batch1: Chantier[]; // scheduled first (highest priority)
+  let batch2: Chantier[]; // scheduled second (fills remaining gaps)
 
   if (mode === 'potentiel') {
-    // Confirmed + any locked chantier are anchors; only free potentiels move
-    anchors  = active.filter(c => c.status === 'confirme' || c.datesVerrouillees);
-    moveable = active.filter(c => c.status === 'potentiel' && !c.datesVerrouillees).map(c => ({ ...c }));
+    // Confirmed (non-locked) are also fixed anchors; only free potentiels move
+    const confirmedAnchors = active.filter(c => c.status === 'confirme' && !c.datesVerrouillees);
+    batch1 = active.filter(c => c.status === 'potentiel' && !c.datesVerrouillees).map(c => ({ ...c }));
+    batch2 = [];
+    // Add confirmed to locked anchors for slot conflict detection
+    lockedAnchors.push(...confirmedAnchors);
   } else if (mode === 'confirme') {
-    // Only non-locked confirmed move; potentiels are completely ignored
-    anchors  = active.filter(c => c.datesVerrouillees && c.status === 'confirme');
-    moveable = active.filter(c => c.status === 'confirme' && !c.datesVerrouillees).map(c => ({ ...c }));
+    // Potentiels completely ignored; only free confirmed move
+    batch1 = active.filter(c => c.status === 'confirme' && !c.datesVerrouillees).map(c => ({ ...c }));
+    batch2 = [];
   } else {
-    // 'all': only datesVerrouillees are anchors; everyone else moves
-    anchors  = active.filter(c => c.datesVerrouillees);
-    moveable = active.filter(c => !c.datesVerrouillees).map(c => ({ ...c }));
+    // 'all': confirmed are scheduled first (priority), potentiels fill the gaps
+    batch1 = active.filter(c => c.status === 'confirme' && !c.datesVerrouillees).map(c => ({ ...c }));
+    batch2 = active.filter(c => c.status === 'potentiel' && !c.datesVerrouillees).map(c => ({ ...c }));
   }
 
-  if (moveable.length === 0) {
-    const label = mode === 'confirme' ? 'confirmé' : mode === 'potentiel' ? 'potentiel (non verrouillé)' : '';
-    return {
-      moved: 0,
-      warnings: [`Aucun chantier${label ? ' ' + label : ''} à réorganiser.`],
-      results: [],
-    };
+  if (batch1.length === 0 && batch2.length === 0) {
+    const label = mode === 'confirme' ? ' confirmé' : mode === 'potentiel' ? ' potentiel (non verrouillé)' : '';
+    return { moved: 0, warnings: [`Aucun chantier${label} à réorganiser.`], results: [] };
   }
 
-  // Preserve working-day durations
+  // Preserve working-day durations for all moveable chantiers
+  const allMoveable = [...batch1, ...batch2];
   const wdDurations = new Map(
-    moveable.map(c => [c.id, Math.max(1, countWorkingDays(new Date(c.dateDebut), new Date(c.dateFin)))])
+    allMoveable.map(c => [c.id, Math.max(1, countWorkingDays(new Date(c.dateDebut), new Date(c.dateFin)))])
   );
 
-  // Seed geographic position from last geolocated anchor
-  const geoAnchors = anchors.filter(a => a.latitude && a.longitude);
-  const seedLat = geoAnchors.length ? geoAnchors[geoAnchors.length - 1].latitude! : 48.8;
-  const seedLon = geoAnchors.length ? geoAnchors[geoAnchors.length - 1].longitude! : 2.3;
+  // Seed geographic starting point from last geolocated locked anchor
+  const geoLocked = lockedAnchors.filter(a => a.latitude && a.longitude);
+  const seedLat = geoLocked.length ? geoLocked[geoLocked.length - 1].latitude! : 48.8;
+  const seedLon = geoLocked.length ? geoLocked[geoLocked.length - 1].longitude! : 2.3;
 
-  const { ordered: finalOrder } = orderByProximity(moveable, seedLat, seedLon, null);
-
-  // Seed scheduled slots with all anchors — snap to working days
-  const scheduled: Slot[] = anchors.map(c => ({
+  // Scheduled slots (starts with all fixed anchors)
+  const scheduled: Slot[] = lockedAnchors.map(c => ({
     chantier: c,
     start: nextWorkingDay(startOfDay(new Date(c.dateDebut))),
     end:   prevWorkingDay(startOfDay(new Date(c.dateFin))),
   }));
 
-  const results: ReorganizeResult[] = [];
-  let moved = 0;
+  // Schedule one batch, updating scheduled in-place; returns last known geo position
+  function scheduleBatch(batch: Chantier[], startLat: number, startLon: number): { lat: number; lon: number } {
+    if (!batch.length) return { lat: startLat, lon: startLon };
+    const { ordered } = orderByProximity(batch, startLat, startLon, null);
+    let lat = startLat, lon = startLon;
 
-  for (const c of finalOrder) {
-    const wdDur      = wdDurations.get(c.id) ?? 1;
-    const searchFrom = nextWorkingDay(startOfDay(
-      new Date(c.periodePreconiseeDebut ?? c.dateDebut)
-    ));
+    for (const c of ordered) {
+      const wdDur = wdDurations.get(c.id) ?? 1;
+      const searchFrom = nextWorkingDay(startOfDay(new Date(c.periodePreconiseeDebut ?? c.dateDebut)));
+      const slot = findSlot(c, wdDur, searchFrom, scheduled);
 
-    const slot = findSlot(c, wdDur, searchFrom, scheduled);
+      if (!slot) {
+        warnings.push(`"${c.nom}" : impossible de trouver un créneau dans les 500 jours.`);
+        results.push({ id: c.id, dateDebut: c.dateDebut, dateFin: c.dateFin });
+        continue;
+      }
 
-    if (!slot) {
-      warnings.push(`"${c.nom}" : impossible de trouver un créneau dans les 500 jours.`);
-      results.push({ id: c.id, dateDebut: c.dateDebut, dateFin: c.dateFin });
-      continue;
+      if (c.periodePreconiseeFin && slot.end > prevWorkingDay(startOfDay(new Date(c.periodePreconiseeFin)))) {
+        const prefix = c.status === 'confirme' ? '⚠ Confirmé — ' : '';
+        warnings.push(`${prefix}"${c.nom}" : ne peut pas être placé dans sa période préconisée (conflit de ressources ou effectifs).`);
+      }
+
+      const newDebut = format(slot.start, 'yyyy-MM-dd');
+      const newFin   = format(slot.end,   'yyyy-MM-dd');
+      if (newDebut !== c.dateDebut || newFin !== c.dateFin) moved++;
+
+      scheduled.push({ chantier: { ...c, dateDebut: newDebut, dateFin: newFin }, start: slot.start, end: slot.end });
+      results.push({ id: c.id, dateDebut: newDebut, dateFin: newFin });
+      if (c.latitude && c.longitude) { lat = c.latitude; lon = c.longitude; }
     }
-
-    if (c.periodePreconiseeFin && slot.end > prevWorkingDay(startOfDay(new Date(c.periodePreconiseeFin)))) {
-      const prefix = c.status === 'confirme' ? '⚠ Confirmé — ' : '';
-      warnings.push(`${prefix}"${c.nom}" : ne peut pas être placé dans sa période préconisée (conflit de ressources ou effectifs).`);
-    }
-
-    const newDebut = format(slot.start, 'yyyy-MM-dd');
-    const newFin   = format(slot.end,   'yyyy-MM-dd');
-    if (newDebut !== c.dateDebut || newFin !== c.dateFin) moved++;
-
-    scheduled.push({ chantier: { ...c, dateDebut: newDebut, dateFin: newFin }, start: slot.start, end: slot.end });
-    results.push({ id: c.id, dateDebut: newDebut, dateFin: newFin });
+    return { lat, lon };
   }
+
+  // Batch 1 (priority) goes first; batch 2 fills remaining slots
+  const { lat, lon } = scheduleBatch(batch1, seedLat, seedLon);
+  scheduleBatch(batch2, lat, lon);
 
   return { moved, warnings, results };
 }
