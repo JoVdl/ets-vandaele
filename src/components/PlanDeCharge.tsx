@@ -18,7 +18,7 @@ import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import { reorganize } from '../lib/reorganize';
 import { geocode, extractLocationCandidates } from '../lib/geocoder';
-import { countWorkingDays, caAnnuel } from '../lib/workingDays';
+import { countWorkingDays, caAnnuel, findGaps } from '../lib/workingDays';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
   CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon, RouleauIcon,
@@ -140,6 +140,24 @@ export default function PlanDeCharge() {
     c.periodePreconiseeDebut && c.periodePreconiseeFin &&
     (c.dateDebut < c.periodePreconiseeDebut || c.dateFin > c.periodePreconiseeFin)
   ).length;
+
+  // ── Working-day occupancy for the visible period ───────────────────────────
+  const periodWd = useMemo(
+    () => countWorkingDays(periodStart, periodEnd),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [periodStart.getTime(), periodEnd.getTime()]
+  );
+  const freeWd = useMemo(() => {
+    const activeInPeriod = chantiers
+      .filter(c => c.status !== 'refuse' && c.status !== 'annule')
+      .filter(c => new Date(c.dateDebut) <= periodEnd && new Date(c.dateFin) >= periodStart);
+    const intervals = activeInPeriod.map(c => ({
+      start: startOfDay(new Date(c.dateDebut)),
+      end:   startOfDay(new Date(c.dateFin)),
+    }));
+    return findGaps(startOfDay(periodStart), startOfDay(periodEnd), intervals)
+      .reduce((s, g) => s + g.workingDays, 0);
+  }, [chantiers, periodStart, periodEnd]);
 
   // ── Equipment utilization (visible period) ────────────────────────────────
   const equipLines = useMemo(
@@ -318,6 +336,15 @@ export default function PlanDeCharge() {
               </p>
               <p className="text-sm font-bold text-blue-600">{(caConfirme + caPotentiel).toLocaleString('fr-FR')} €</p>
             </div>
+            <div className="w-px h-8 bg-slate-100 dark:bg-slate-700" />
+            <div className="text-right">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide">Jours ouvrés</p>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                {periodWd - freeWd}
+                <span className="text-xs font-normal text-slate-400"> / {periodWd}</span>
+              </p>
+              <p className="text-[10px] text-green-600">{freeWd} dispo</p>
+            </div>
             {warnCount > 0 && (
               <>
                 <div className="w-px h-8 bg-slate-100 dark:bg-slate-700" />
@@ -439,6 +466,13 @@ export default function PlanDeCharge() {
           <div className="flex-1 px-2 py-1.5 text-center">
             <p className="text-[9px] text-slate-400 uppercase tracking-wide flex items-center justify-center gap-0.5"><TrendingUp size={8} className="text-green-500"/> Total</p>
             <p className="text-xs font-bold text-blue-600">{(caConfirme + caPotentiel).toLocaleString('fr-FR')} €</p>
+          </div>
+          <div className="px-2 py-1.5 text-center">
+            <p className="text-[9px] text-slate-400 uppercase tracking-wide">Jours</p>
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              {periodWd - freeWd}<span className="font-normal text-slate-400">/{periodWd}</span>
+            </p>
+            <p className="text-[9px] text-green-600">{freeWd} dispo</p>
           </div>
           {warnCount > 0 && (
             <div className="px-2 py-1.5 text-center">
