@@ -1,5 +1,4 @@
 import { useMemo, useCallback, useRef, useEffect, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
 import {
   startOfDay, addDays, differenceInCalendarDays,
   format, isToday, getDay,
@@ -23,7 +22,6 @@ interface Props {
   onClickChantier: (c: Chantier) => void;
   onClickDay: (date: string) => void;
   showGaps: boolean;
-  onToggleGaps: () => void;
 }
 
 interface MonthGroup {
@@ -42,7 +40,7 @@ export default function GanttChart({
   chantiers, periodStart, periodEnd,
   dayWidth, onDayWidthChange,
   onMoveChantier, onResizeChantier, onClickChantier, onClickDay,
-  showGaps, onToggleGaps,
+  showGaps,
 }: Props) {
   const scrollRef     = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<number | null>(null);
@@ -250,41 +248,28 @@ export default function GanttChart({
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
 
-      {/* ── Availability bar ── */}
-      <div className="flex-shrink-0 border-b border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-800">
-        <button
-          onClick={onToggleGaps}
-          className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left">
-          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Dispo</span>
-          {!showGaps && gaps.length > 0 && (
-            <span className="text-[10px] text-green-600 font-medium">
-              {gaps.reduce((s, g) => s + g.workingDays, 0)} j libres
-            </span>
-          )}
-          <ChevronDown size={11} className={`ml-auto text-slate-300 transition-transform duration-150 ${showGaps ? '' : '-rotate-90'}`} />
-        </button>
-        {showGaps && (
-          <div className="flex items-center gap-3 px-4 pb-1.5 overflow-x-auto">
-            <div className="flex items-center gap-2 flex-wrap">
-              {gaps.length === 0 ? (
-                <span className="text-xs text-slate-400">Période entièrement chargée</span>
-              ) : gaps.map((g, i) => (
-                <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full border border-green-200 text-xs">
-                  <span className="font-semibold">{g.workingDays}j</span>
-                  <span className="text-green-500 text-[10px]">
-                    {format(g.start, 'd MMM', { locale: fr })}–{format(g.end, 'd MMM', { locale: fr })}
-                  </span>
+      {/* ── Availability bar — shown only when chip is active ── */}
+      {showGaps && (
+        <div className="flex-shrink-0 border-b border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-800 px-4 py-1.5 overflow-x-auto">
+          <div className="flex items-center gap-2 flex-wrap">
+            {gaps.length === 0 ? (
+              <span className="text-xs text-slate-400">Période entièrement chargée</span>
+            ) : gaps.map((g, i) => (
+              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full border border-green-200 text-xs">
+                <span className="font-semibold">{g.workingDays}j</span>
+                <span className="text-green-500 text-[10px]">
+                  {format(g.start, 'd MMM', { locale: fr })}–{format(g.end, 'd MMM', { locale: fr })}
                 </span>
-              ))}
-            </div>
+              </span>
+            ))}
             {gaps.length > 0 && (
               <span className="ml-auto text-slate-300 text-[10px] flex-shrink-0">
                 {gaps.reduce((s, g) => s + g.workingDays, 0)} j ouvrés libres
               </span>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Scrollable Gantt ──────────────────────────────────────────────── */}
       <div ref={scrollRef} className="flex-1 overflow-auto" style={{ cursor: 'default' }}>

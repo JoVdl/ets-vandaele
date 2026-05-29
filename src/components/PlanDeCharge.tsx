@@ -4,7 +4,7 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
-  Plus, ChevronLeft, ChevronRight, ChevronDown, Calendar, BarChart2,
+  Plus, ChevronLeft, ChevronRight, Calendar, BarChart2,
   TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2, Moon, Sun, MapPin, MoreVertical,
   List, Users, User,
 } from 'lucide-react';
@@ -566,42 +566,25 @@ export default function PlanDeCharge() {
           )}
         </div>
 
-        {/* Equipment utilization — collapsible */}
-        {equipLines.length > 0 && (
-          <div className="border-b border-slate-100 dark:border-slate-700/50">
-            <button
-              onClick={() => setShowEquip(e => !e)}
-              className="w-full flex items-center gap-2 px-3 sm:px-6 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left">
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                Engins
-              </span>
-              {!showEquip && (
-                <span className="text-[10px] text-slate-400 ml-1">
-                  — {equipLines.map(e => e.label).join(', ')}
-                </span>
-              )}
-              <ChevronDown size={12} className={`ml-auto text-slate-300 transition-transform duration-150 ${showEquip ? '' : '-rotate-90'}`} />
-            </button>
-            {showEquip && (
-              <div className="flex items-start gap-3 px-3 sm:px-6 pb-2 overflow-x-auto">
-                <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-                  {equipLines.map(eq => {
-                    const pct = Math.min(100, Math.round((eq.days / eq.maxDays) * 100));
-                    const barColor = pct > 80 ? '#EF4444' : pct > 50 ? '#F97316' : '#3B82F6';
-                    return (
-                      <div key={eq.key} className="flex items-center gap-1.5" title={`${eq.label} : ${eq.days} j ouvrés sur ${eq.maxDays}`}>
-                        <span className="text-slate-500 flex-shrink-0">{eq.icon}</span>
-                        <span className="text-[10px] text-slate-500 flex-shrink-0">{eq.label}</span>
-                        <div className="w-12 sm:w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
-                        </div>
-                        <span className="text-[10px] font-bold tabular-nums" style={{ color: barColor }}>{eq.days}j</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+        {/* Equipment utilization — shown only when chip is active */}
+        {showEquip && equipLines.length > 0 && (
+          <div className="border-b border-slate-100 dark:border-slate-700/50 flex items-start gap-3 px-3 sm:px-6 py-2 overflow-x-auto">
+            <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+              {equipLines.map(eq => {
+                const pct = Math.min(100, Math.round((eq.days / eq.maxDays) * 100));
+                const barColor = pct > 80 ? '#EF4444' : pct > 50 ? '#F97316' : '#3B82F6';
+                return (
+                  <div key={eq.key} className="flex items-center gap-1.5" title={`${eq.label} : ${eq.days} j ouvrés sur ${eq.maxDays}`}>
+                    <span className="text-slate-500 flex-shrink-0">{eq.icon}</span>
+                    <span className="text-[10px] text-slate-500 flex-shrink-0">{eq.label}</span>
+                    <div className="w-12 sm:w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+                    </div>
+                    <span className="text-[10px] font-bold tabular-nums" style={{ color: barColor }}>{eq.days}j</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -696,7 +679,6 @@ export default function PlanDeCharge() {
           onClickChantier={openEdit}
           onClickDay={openNew}
           showGaps={showGaps}
-          onToggleGaps={() => setShowGaps(g => !g)}
         />
       ) : activeTab === 'carte' ? (
         <MapView
