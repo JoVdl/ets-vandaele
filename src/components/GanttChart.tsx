@@ -50,9 +50,12 @@ export default function GanttChart({
   // ── Availability bar toggle ───────────────────────────────────────────────
   const [showGaps, setShowGaps] = useState(true);
 
-  // ── Hover tooltip ─────────────────────────────────────────────────────────
+  // ── Hover tooltip (desktop only) ─────────────────────────────────────────
   const [tooltip, setTooltip] = useState<{ chantier: Chantier; x: number; y: number } | null>(null);
-  const handleHover   = useCallback((c: Chantier, x: number, y: number) => setTooltip({ chantier: c, x, y }), []);
+  const handleHover   = useCallback((c: Chantier, x: number, y: number) => {
+    if (window.innerWidth < 640) return;
+    setTooltip({ chantier: c, x, y });
+  }, []);
   const handleUnhover = useCallback(() => setTooltip(null), []);
 
   // ── Days array ────────────────────────────────────────────────────────────
@@ -152,21 +155,62 @@ export default function GanttChart({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const handler = (e: WheelEvent) => {
+
+    // ── Ctrl+scroll zoom (desktop) ──────────────────────────────────────────
+    const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
-      const rect = el.getBoundingClientRect();
+      const rect      = el.getBoundingClientRect();
       const mouseX    = e.clientX - rect.left - SIDE_W;
-      const contentX  = el.scrollLeft + mouseX;
       const dw        = dayWidthRef.current;
-      const dayAtMouse = contentX / dw;
+      const dayAtMouse = (el.scrollLeft + mouseX) / dw;
       const factor    = e.deltaY > 0 ? 1 / 1.18 : 1.18;
       const nw        = Math.max(3, Math.min(100, dw * factor));
       pendingScroll.current = dayAtMouse * nw - mouseX;
       onDayWidthChangeRef.current(nw);
     };
-    el.addEventListener('wheel', handler, { passive: false });
-    return () => el.removeEventListener('wheel', handler);
+    el.addEventListener('wheel', onWheel, { passive: false });
+
+    // ── Pinch-to-zoom (mobile) ───────────────────────────────────────────────
+    let pinchDist0 = 0;
+    let pinchDw0   = 0;
+    let pinchMidX  = 0;
+    let pinchDayAt = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchDist0 = Math.sqrt(dx * dx + dy * dy);
+      pinchDw0   = dayWidthRef.current;
+      const rect = el.getBoundingClientRect();
+      pinchMidX  = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left - SIDE_W;
+      pinchDayAt = (el.scrollLeft + pinchMidX) / pinchDw0;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || pinchDist0 === 0) return;
+      e.preventDefault();
+      const dx   = e.touches[0].clientX - e.touches[1].clientX;
+      const dy   = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const nw   = Math.max(3, Math.min(100, pinchDw0 * (dist / pinchDist0)));
+      pendingScroll.current = pinchDayAt * nw - pinchMidX;
+      onDayWidthChangeRef.current(nw);
+    };
+
+    const onTouchEnd = () => { pinchDist0 = 0; };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove',  onTouchMove,  { passive: false });
+    el.addEventListener('touchend',   onTouchEnd,   { passive: true });
+
+    return () => {
+      el.removeEventListener('wheel',      onWheel);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove',  onTouchMove);
+      el.removeEventListener('touchend',   onTouchEnd);
+    };
   }, []);
 
   useEffect(() => {
