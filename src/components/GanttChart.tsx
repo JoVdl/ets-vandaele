@@ -9,6 +9,7 @@ import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import ChantierBlock from './ChantierBlock';
 import ChantierTooltip from './ChantierTooltip';
+import MobilePeekCard from './MobilePeekCard';
 import { isWorkingDay, findGaps, nextWorkingDay, prevWorkingDay } from '../lib/workingDays';
 
 interface Props {
@@ -49,6 +50,18 @@ export default function GanttChart({
 
   // ── Availability bar toggle ───────────────────────────────────────────────
   const [showGaps, setShowGaps] = useState(true);
+
+  // ── Mobile peek card ─────────────────────────────────────────────────────
+  const [mobilePeek, setMobilePeek] = useState<Chantier | null>(null);
+
+  // On mobile: tap shows the peek card; on desktop: opens modal directly
+  const handleChantierTap = useCallback((c: Chantier) => {
+    if (window.innerWidth < 640) {
+      setMobilePeek(c);
+    } else {
+      onClickChantier(c);
+    }
+  }, [onClickChantier]);
 
   // ── Hover tooltip (desktop only) ─────────────────────────────────────────
   const [tooltip, setTooltip] = useState<{ chantier: Chantier; x: number; y: number } | null>(null);
@@ -356,7 +369,7 @@ export default function GanttChart({
                     cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors flex-shrink-0"
                   style={{ width: SIDE_W, minWidth: SIDE_W,
                     backgroundColor: i % 2 === 0 ? 'var(--bg-row-even)' : 'var(--bg-row-odd)' }}
-                  onClick={() => onClickChantier(c)}
+                  onClick={() => handleChantierTap(c)}
                   onMouseEnter={e => handleHover(c, e.pageX, e.pageY)}
                   onMouseMove={e => handleHover(c, e.pageX, e.pageY)}
                   onMouseLeave={handleUnhover}>
@@ -419,7 +432,7 @@ export default function GanttChart({
                     <ChantierBlock
                       chantier={c} left={left} width={width} dayWidth={dayWidth}
                       onMoveEnd={handleMoveEnd} onResizeEnd={handleResizeEnd}
-                      onClick={onClickChantier} outOfPreconisee={outOfPrecon}
+                      onClick={handleChantierTap} outOfPreconisee={outOfPrecon}
                       onHover={handleHover} onUnhover={handleUnhover}
                     />
                   )}
@@ -449,9 +462,18 @@ export default function GanttChart({
         </div>
       </div>
 
-      {/* Hover tooltip */}
+      {/* Hover tooltip (desktop) */}
       {tooltip && (
         <ChantierTooltip chantier={tooltip.chantier} x={tooltip.x} y={tooltip.y} />
+      )}
+
+      {/* Mobile peek card */}
+      {mobilePeek && (
+        <MobilePeekCard
+          chantier={mobilePeek}
+          onClose={() => setMobilePeek(null)}
+          onEdit={() => { setMobilePeek(null); onClickChantier(mobilePeek); }}
+        />
       )}
     </div>
   );
