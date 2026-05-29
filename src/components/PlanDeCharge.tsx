@@ -148,16 +148,13 @@ export default function PlanDeCharge() {
     [periodStart.getTime(), periodEnd.getTime()]
   );
   const freeWd = useMemo(() => {
-    const activeInPeriod = chantiers
-      .filter(c => c.status !== 'refuse' && c.status !== 'annule')
-      .filter(c => new Date(c.dateDebut) <= periodEnd && new Date(c.dateFin) >= periodStart);
-    const intervals = activeInPeriod.map(c => ({
+    const intervals = filtered.map(c => ({
       start: startOfDay(new Date(c.dateDebut)),
       end:   startOfDay(new Date(c.dateFin)),
     }));
     return findGaps(startOfDay(periodStart), startOfDay(periodEnd), intervals)
       .reduce((s, g) => s + g.workingDays, 0);
-  }, [chantiers, periodStart, periodEnd]);
+  }, [filtered, periodStart, periodEnd]);
 
   // ── Equipment utilization (visible period) ────────────────────────────────
   const equipLines = useMemo(
