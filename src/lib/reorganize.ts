@@ -80,58 +80,43 @@ function findSlot(
     }
 
     if (!maxConflictEnd) return { start: day, end };
-    // Jump to the working day after the latest conflicting slot
     day = nextWorkingDay(addDays(maxConflictEnd, 1));
   }
 
   return null;
 }
 
-export interface ReorganizeResult { id: string; dateDebut: string; dateFin: string; }
-export interface ReorganizeSummary { moved: number; warnings: string[]; results: ReorganizeResult[]; }
-
-export function reorganize(chantiers: Chantier[]): ReorganizeSummary {
-  const warnings: string[] = [];
-
-  const active = chantiers.filter(c => c.status !== 'refuse' && c.status !== 'annule');
-
-  // Only date-locked chantiers are anchors (confirmed OR potentiel with datesVerrouillees)
-  const anchors  = active.filter(c => c.datesVerrouillees);
-  const moveable = active.filter(c => !c.datesVerrouillees).map(c => ({ ...c }));
-
-  if (moveable.length === 0) {
-    return { moved: 0, warnings: ['Aucun chantier à réorganiser (tous verrouillés ou aucun actif).'], results: [] };
-  }
-
-  // Preserve working-day durations (minimum 1 day)
-  const wdDurations = new Map(
-    moveable.map(c => [c.id, Math.max(1, countWorkingDays(new Date(c.dateDebut), new Date(c.dateFin)))])
-  );
-
-  // Primary sort: earlier recommended period first (use current dateDebut for chantiers without one)
-  moveable.sort((a, b) =>
+/**
+ * Sort a group of chantiers by periodePreconiseeDebut/dateDebut then apply
+ * nearest-neighbor + equipment synergy within each month group.
+ * Returns ordered array and the last geographic position reached.
+ */
+function orderByProximity(
+  group: Chantier[],
+  startLat: number,
+  startLon: number,
+  prevChantier: Chantier | null,
+): { ordered: Chantier[]; lastLat: number; lastLon: number; lastChantier: Chantier | null } {
+  const sorted = [...group].sort((a, b) =>
     (a.periodePreconiseeDebut ?? a.dateDebut).localeCompare(b.periodePreconiseeDebut ?? b.dateDebut)
   );
 
-  // Group by YYYY-MM of recommended start, then apply nearest-neighbor + equipment synergy within each group
-  const groups = new Map<string, typeof moveable>();
-  for (const c of moveable) {
+  // Group by YYYY-MM
+  const byMonth = new Map<string, Chantier[]>();
+  for (const c of sorted) {
     const key = (c.periodePreconiseeDebut ?? c.dateDebut).substring(0, 7);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(c);
+    if (!byMonth.has(key)) byMonth.set(key, []);
+    byMonth.get(key)!.push(c);
   }
 
-  // Seed from last geolocalised anchor, or Paris default
-  const geoAnchors = anchors.filter(a => a.latitude && a.longitude);
-  let lastLat = geoAnchors.length ? geoAnchors[geoAnchors.length - 1].latitude! : 48.8;
-  let lastLon = geoAnchors.length ? geoAnchors[geoAnchors.length - 1].longitude! : 2.3;
+  const ordered: Chantier[] = [];
+  let lastLat = startLat, lastLon = startLon;
+  let lastChantier = prevChantier;
 
-  const finalOrder: typeof moveable = [];
-
-  for (const key of [...groups.keys()].sort()) {
-    const group = groups.get(key)!;
-    const withCoords = group.filter(c => c.latitude && c.longitude);
-    const noCoords   = group.filter(c => !c.latitude || !c.longitude);
+  for (const key of [...byMonth.keys()].sort()) {
+    const monthGroup = byMonth.get(key)!;
+    const withCoords = monthGroup.filter(c => c.latitude && c.longitude);
+    const noCoords   = monthGroup.filter(c => !c.latitude || !c.longitude);
 
     const remaining = [...withCoords];
     while (remaining.length) {
@@ -139,20 +124,97 @@ export function reorganize(chantiers: Chantier[]): ReorganizeSummary {
       for (let i = 0; i < remaining.length; i++) {
         const c = remaining[i];
         const dist = haversine(lastLat, lastLon, c.latitude!, c.longitude!);
-        // Equipment synergy lowers the effective distance (bonus = km reduction)
-        const syn = finalOrder.length > 0 ? equipmentSynergy(finalOrder[finalOrder.length - 1], c) * 15 : 0;
+        const syn = lastChantier ? equipmentSynergy(lastChantier, c) * 15 : 0;
         const score = dist - syn;
         if (score < bestScore) { bestScore = score; bestIdx = i; }
       }
       const chosen = remaining.splice(bestIdx, 1)[0];
-      finalOrder.push(chosen);
+      ordered.push(chosen);
       lastLat = chosen.latitude!;
       lastLon = chosen.longitude!;
+      lastChantier = chosen;
     }
-    finalOrder.push(...noCoords);
+    for (const c of noCoords) { ordered.push(c); lastChantier = c; }
   }
 
-  // Seed scheduled slots with anchor chantiers — snap to working days
+  return { ordered, lastLat, lastLon, lastChantier };
+}
+
+export interface ReorganizeResult { id: string; dateDebut: string; dateFin: string; }
+export interface ReorganizeSummary { moved: number; warnings: string[]; results: ReorganizeResult[]; }
+
+export type FilterStatus = 'all' | 'confirme' | 'potentiel' | 'archive';
+
+/**
+ * Smart reorganization respecting the current view filter:
+ *
+ * - 'confirme':  only confirmed move; potentiel act as implicit anchors
+ * - 'potentiel': only potentiel move; confirmed act as implicit anchors
+ * - 'all':       all move, but confirmed are scheduled FIRST (priority slots)
+ *                then potentiel fill around them
+ * - 'archive':   nothing to reorganize
+ *
+ * In every case, datesVerrouillees chantiers are hard anchors.
+ */
+export function reorganize(chantiers: Chantier[], filterStatus: FilterStatus = 'all'): ReorganizeSummary {
+  const warnings: string[] = [];
+
+  if (filterStatus === 'archive') {
+    return { moved: 0, warnings: ['Les chantiers archivés ne peuvent pas être réorganisés.'], results: [] };
+  }
+
+  const active = chantiers.filter(c => c.status !== 'refuse' && c.status !== 'annule');
+
+  // Hard anchors: always fixed regardless of filter
+  const isHardAnchor = (c: Chantier) => c.datesVerrouillees;
+
+  // Soft anchors: chantiers NOT in the current filter scope that still block resources
+  const isSoftAnchor = (c: Chantier) => {
+    if (isHardAnchor(c)) return false;
+    if (filterStatus === 'confirme' && c.status === 'potentiel') return true;
+    if (filterStatus === 'potentiel' && c.status === 'confirme') return true;
+    return false;
+  };
+
+  const anchors  = active.filter(c => isHardAnchor(c) || isSoftAnchor(c));
+  const moveable = active.filter(c => !isHardAnchor(c) && !isSoftAnchor(c)).map(c => ({ ...c }));
+
+  if (moveable.length === 0) {
+    return {
+      moved: 0,
+      warnings: ['Aucun chantier à réorganiser dans la vue actuelle.'],
+      results: [],
+    };
+  }
+
+  // Preserve working-day durations
+  const wdDurations = new Map(
+    moveable.map(c => [c.id, Math.max(1, countWorkingDays(new Date(c.dateDebut), new Date(c.dateFin)))])
+  );
+
+  // Seed geographic position from last geolocated anchor
+  const geoAnchors = anchors.filter(a => a.latitude && a.longitude);
+  const seedLat = geoAnchors.length ? geoAnchors[geoAnchors.length - 1].latitude! : 48.8;
+  const seedLon = geoAnchors.length ? geoAnchors[geoAnchors.length - 1].longitude! : 2.3;
+
+  // Build scheduling order:
+  //   - In 'all' mode: confirmed first (priority), then potentiel
+  //   - In 'confirme'/'potentiel' mode: single group
+  let finalOrder: Chantier[];
+
+  if (filterStatus === 'all') {
+    const confirmes  = moveable.filter(c => c.status === 'confirme');
+    const potentiels = moveable.filter(c => c.status === 'potentiel');
+
+    const r1 = orderByProximity(confirmes,  seedLat, seedLon, null);
+    const r2 = orderByProximity(potentiels, r1.lastLat, r1.lastLon, r1.lastChantier);
+    finalOrder = [...r1.ordered, ...r2.ordered];
+  } else {
+    const { ordered } = orderByProximity(moveable, seedLat, seedLon, null);
+    finalOrder = ordered;
+  }
+
+  // Seed scheduled slots with all anchors — snap to working days
   const scheduled: Slot[] = anchors.map(c => ({
     chantier: c,
     start: nextWorkingDay(startOfDay(new Date(c.dateDebut))),
@@ -177,7 +239,8 @@ export function reorganize(chantiers: Chantier[]): ReorganizeSummary {
     }
 
     if (c.periodePreconiseeFin && slot.end > prevWorkingDay(startOfDay(new Date(c.periodePreconiseeFin)))) {
-      warnings.push(`"${c.nom}" : ne peut pas être placé dans sa période préconisée (conflit de ressources ou effectifs).`);
+      const prefix = c.status === 'confirme' ? '⚠ Confirmé — ' : '';
+      warnings.push(`${prefix}"${c.nom}" : ne peut pas être placé dans sa période préconisée (conflit de ressources ou effectifs).`);
     }
 
     const newDebut = format(slot.start, 'yyyy-MM-dd');
