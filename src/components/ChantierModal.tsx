@@ -5,7 +5,7 @@ import type { Chantier, ChantierType, ChantierStatus, TypePelle } from '../types
 import { CHANTIER_TYPES } from '../lib/constants';
 import { format } from 'date-fns';
 import { geocode, geocodeSearch, extractLocation, type GeoResult } from '../lib/geocoder';
-import { nextWorkingDay, prevWorkingDay } from '../lib/workingDays';
+import { nextWorkingDay, prevWorkingDay, addWorkingDays, countWorkingDays } from '../lib/workingDays';
 
 interface Props {
   isOpen: boolean;
@@ -281,15 +281,31 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             </div>
 
             {/* Dates intervention */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date début</span>
                 <input type="date" required value={form.dateDebut}
                   onChange={e => {
                     if (!e.target.value) return;
-                    set('dateDebut', format(nextWorkingDay(new Date(e.target.value + 'T00:00:00')), 'yyyy-MM-dd'));
+                    const newStart = format(nextWorkingDay(new Date(e.target.value + 'T00:00:00')), 'yyyy-MM-dd');
+                    // Preserve working-day duration when start changes
+                    const dur = countWorkingDays(new Date(form.dateDebut), new Date(form.dateFin));
+                    const newEnd = format(addWorkingDays(new Date(newStart + 'T00:00:00'), Math.max(0, dur - 1)), 'yyyy-MM-dd');
+                    setForm(prev => ({ ...prev, dateDebut: newStart, dateFin: newEnd }));
                   }}
                   className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Durée (j. ouvrés)</span>
+                <input
+                  type="number" min="1" max="500"
+                  value={countWorkingDays(new Date(form.dateDebut), new Date(form.dateFin))}
+                  onChange={e => {
+                    const dur = Math.max(1, Number(e.target.value));
+                    const newEnd = format(addWorkingDays(new Date(form.dateDebut + 'T00:00:00'), dur - 1), 'yyyy-MM-dd');
+                    set('dateFin', newEnd);
+                  }}
+                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium" />
               </label>
               <label className="block">
                 <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date fin</span>

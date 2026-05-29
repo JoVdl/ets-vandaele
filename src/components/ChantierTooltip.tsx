@@ -185,9 +185,14 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
             )}
 
             {/* Dates */}
-            <div className="flex items-center gap-1 mt-1.5 text-xs text-slate-500">
+            <div className="flex items-center gap-1 mt-1.5 text-xs text-slate-500 flex-wrap">
               <Calendar size={11} className="flex-shrink-0"/>
               <span>{dateStr}</span>
+              {wd > 0 && (
+                <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-medium text-slate-500 flex-shrink-0">
+                  {wd} j ouvrés
+                </span>
+              )}
             </div>
 
             {/* Lieu */}
