@@ -110,6 +110,8 @@ export default function PlanDeCharge() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [showEquip, setShowEquip] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showGaps,  setShowGaps]  = useState(false);
+  const [showNav,   setShowNav]   = useState(false);
   const [showMenu, setShowMenu]   = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -416,17 +418,40 @@ export default function PlanDeCharge() {
             </button>
           </div>
 
-          {/* Mobile: stats toggle + new + overflow menu */}
-          <div className="flex sm:hidden items-center gap-1.5">
-            <button
-              onClick={() => setShowStats(s => !s)}
-              title="Statistiques"
-              className={`p-1.5 rounded-lg text-xs font-bold transition-colors ${showStats ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-100'}`}>
-              CA
-            </button>
+          {/* Mobile: tab switcher + section toggles + actions */}
+          <div className="flex sm:hidden items-center gap-1">
+            {/* Tab switcher — always accessible */}
+            <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden mr-0.5">
+              {([
+                { key: 'gantt', icon: <BarChart2 size={12}/> },
+                { key: 'carte', icon: <Map size={12}/> },
+                { key: 'liste', icon: <List size={12}/> },
+              ] as const).map(({ key, icon }) => (
+                <button key={key} onClick={() => setActiveTab(key)}
+                  className={`px-2 py-1.5 transition-colors ${
+                    activeTab === key ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-50'
+                  }`}>
+                  {icon}
+                </button>
+              ))}
+            </div>
+            {/* Section toggle chips */}
+            {([
+              { key: 'CA',  active: showStats, toggle: () => setShowStats(s => !s) },
+              { key: 'Eng', active: showEquip, toggle: () => setShowEquip(e => !e) },
+              { key: 'Dsp', active: showGaps,  toggle: () => setShowGaps(g => !g) },
+              { key: 'Nav', active: showNav,   toggle: () => setShowNav(n => !n) },
+            ] as const).map(({ key, active, toggle }) => (
+              <button key={key} onClick={toggle}
+                className={`px-1.5 py-1 rounded-md text-[10px] font-bold transition-colors ${
+                  active ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}>
+                {key}
+              </button>
+            ))}
             <button onClick={() => openNew()}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
-              <Plus size={15}/> <span className="text-xs">Nouveau</span>
+              className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0">
+              <Plus size={15}/>
             </button>
             <div ref={menuRef} className="relative">
               <button
@@ -580,8 +605,8 @@ export default function PlanDeCharge() {
           </div>
         )}
 
-        {/* Navigation + zoom + tabs */}
-        <div className="flex items-center gap-1.5 sm:gap-3 px-3 sm:px-6 py-2">
+        {/* Navigation + zoom + tabs — always desktop, toggled on mobile */}
+        <div className={`items-center gap-1.5 sm:gap-3 px-3 sm:px-6 py-2 ${showNav ? 'flex' : 'hidden sm:flex'}`}>
           {/* Prev / Today / Next */}
           <div className="flex items-center gap-0.5 sm:gap-1">
             <button onClick={prevPeriod} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
@@ -632,26 +657,19 @@ export default function PlanDeCharge() {
             </button>
           </div>
 
-          {/* Gantt / Carte / Liste tab switcher */}
-          <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden ml-auto sm:ml-0">
+          {/* Gantt / Carte tabs — desktop only (mobile uses Row 1 tabs) */}
+          <div className="hidden sm:flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden ml-auto sm:ml-0">
             <button onClick={() => setActiveTab('gantt')}
-              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
                 activeTab === 'gantt' ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
               }`}>
-              <BarChart2 size={13}/> <span className="hidden sm:inline">Gantt</span>
+              <BarChart2 size={13}/> Gantt
             </button>
             <button onClick={() => setActiveTab('carte')}
-              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
                 activeTab === 'carte' ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
               }`}>
-              <Map size={13}/> <span className="hidden sm:inline">Carte</span>
-            </button>
-            {/* Liste tab — mobile only */}
-            <button onClick={() => setActiveTab('liste')}
-              className={`flex sm:hidden items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'liste' ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-              }`}>
-              <List size={13}/>
+              <Map size={13}/> Carte
             </button>
           </div>
         </div>
@@ -677,6 +695,8 @@ export default function PlanDeCharge() {
           onResizeChantier={handleResize}
           onClickChantier={openEdit}
           onClickDay={openNew}
+          showGaps={showGaps}
+          onToggleGaps={() => setShowGaps(g => !g)}
         />
       ) : activeTab === 'carte' ? (
         <MapView

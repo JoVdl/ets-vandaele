@@ -22,6 +22,8 @@ interface Props {
   onResizeChantier: (id: string, newEnd: string) => void;
   onClickChantier: (c: Chantier) => void;
   onClickDay: (date: string) => void;
+  showGaps: boolean;
+  onToggleGaps: () => void;
 }
 
 interface MonthGroup {
@@ -40,6 +42,7 @@ export default function GanttChart({
   chantiers, periodStart, periodEnd,
   dayWidth, onDayWidthChange,
   onMoveChantier, onResizeChantier, onClickChantier, onClickDay,
+  showGaps, onToggleGaps,
 }: Props) {
   const scrollRef     = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<number | null>(null);
@@ -47,9 +50,6 @@ export default function GanttChart({
 
   // Sidebar width: smaller on mobile to leave room for the chart
   const SIDE_W = window.innerWidth < 640 ? 120 : 260;
-
-  // ── Availability bar toggle ───────────────────────────────────────────────
-  const [showGaps, setShowGaps] = useState(false);
 
   // ── Mobile peek card ─────────────────────────────────────────────────────
   const [mobilePeek, setMobilePeek] = useState<Chantier | null>(null);
@@ -253,7 +253,7 @@ export default function GanttChart({
       {/* ── Availability bar ── */}
       <div className="flex-shrink-0 border-b border-slate-100 dark:border-slate-700/50 bg-white dark:bg-slate-800">
         <button
-          onClick={() => setShowGaps(g => !g)}
+          onClick={onToggleGaps}
           className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left">
           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Dispo</span>
           {!showGaps && gaps.length > 0 && (
