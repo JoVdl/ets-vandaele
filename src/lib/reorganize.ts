@@ -146,43 +146,39 @@ export interface ReorganizeSummary { moved: number; warnings: string[]; results:
 export type FilterStatus = 'all' | 'confirme' | 'potentiel' | 'archive';
 
 /**
- * Smart reorganization respecting the current view filter:
- *
- * - 'confirme':  only confirmed move; potentiel act as implicit anchors
- * - 'potentiel': only potentiel move; confirmed act as implicit anchors
- * - 'all':       all move, but confirmed are scheduled FIRST (priority slots)
- *                then potentiel fill around them
- * - 'archive':   nothing to reorganize
- *
- * In every case, datesVerrouillees chantiers are hard anchors.
+ * 'all'       — tous les chantiers non-verrouillés bougent (confirmés + potentiels)
+ * 'confirme'  — seuls les confirmés non-verrouillés bougent ; les potentiels sont ignorés
+ * 'potentiel' — les confirmés + verrouillés sont des ancres ; seuls les potentiels non-verrouillés bougent
  */
-export function reorganize(chantiers: Chantier[], filterStatus: FilterStatus = 'all'): ReorganizeSummary {
-  const warnings: string[] = [];
+export type ReorganizeMode = 'all' | 'confirme' | 'potentiel';
 
-  if (filterStatus === 'archive') {
-    return { moved: 0, warnings: ['Les chantiers archivés ne peuvent pas être réorganisés.'], results: [] };
-  }
+export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potentiel'): ReorganizeSummary {
+  const warnings: string[] = [];
 
   const active = chantiers.filter(c => c.status !== 'refuse' && c.status !== 'annule');
 
-  // Hard anchors: always fixed regardless of filter
-  const isHardAnchor = (c: Chantier) => c.datesVerrouillees;
+  let anchors: Chantier[];
+  let moveable: Chantier[];
 
-  // Soft anchors: chantiers NOT in the current filter scope that still block resources
-  const isSoftAnchor = (c: Chantier) => {
-    if (isHardAnchor(c)) return false;
-    if (filterStatus === 'confirme' && c.status === 'potentiel') return true;
-    if (filterStatus === 'potentiel' && c.status === 'confirme') return true;
-    return false;
-  };
-
-  const anchors  = active.filter(c => isHardAnchor(c) || isSoftAnchor(c));
-  const moveable = active.filter(c => !isHardAnchor(c) && !isSoftAnchor(c)).map(c => ({ ...c }));
+  if (mode === 'potentiel') {
+    // Confirmed + any locked chantier are anchors; only free potentiels move
+    anchors  = active.filter(c => c.status === 'confirme' || c.datesVerrouillees);
+    moveable = active.filter(c => c.status === 'potentiel' && !c.datesVerrouillees).map(c => ({ ...c }));
+  } else if (mode === 'confirme') {
+    // Only non-locked confirmed move; potentiels are completely ignored
+    anchors  = active.filter(c => c.datesVerrouillees && c.status === 'confirme');
+    moveable = active.filter(c => c.status === 'confirme' && !c.datesVerrouillees).map(c => ({ ...c }));
+  } else {
+    // 'all': only datesVerrouillees are anchors; everyone else moves
+    anchors  = active.filter(c => c.datesVerrouillees);
+    moveable = active.filter(c => !c.datesVerrouillees).map(c => ({ ...c }));
+  }
 
   if (moveable.length === 0) {
+    const label = mode === 'confirme' ? 'confirmé' : mode === 'potentiel' ? 'potentiel (non verrouillé)' : '';
     return {
       moved: 0,
-      warnings: ['Aucun chantier à réorganiser dans la vue actuelle.'],
+      warnings: [`Aucun chantier${label ? ' ' + label : ''} à réorganiser.`],
       results: [],
     };
   }
@@ -197,22 +193,7 @@ export function reorganize(chantiers: Chantier[], filterStatus: FilterStatus = '
   const seedLat = geoAnchors.length ? geoAnchors[geoAnchors.length - 1].latitude! : 48.8;
   const seedLon = geoAnchors.length ? geoAnchors[geoAnchors.length - 1].longitude! : 2.3;
 
-  // Build scheduling order:
-  //   - In 'all' mode: confirmed first (priority), then potentiel
-  //   - In 'confirme'/'potentiel' mode: single group
-  let finalOrder: Chantier[];
-
-  if (filterStatus === 'all') {
-    const confirmes  = moveable.filter(c => c.status === 'confirme');
-    const potentiels = moveable.filter(c => c.status === 'potentiel');
-
-    const r1 = orderByProximity(confirmes,  seedLat, seedLon, null);
-    const r2 = orderByProximity(potentiels, r1.lastLat, r1.lastLon, r1.lastChantier);
-    finalOrder = [...r1.ordered, ...r2.ordered];
-  } else {
-    const { ordered } = orderByProximity(moveable, seedLat, seedLon, null);
-    finalOrder = ordered;
-  }
+  const { ordered: finalOrder } = orderByProximity(moveable, seedLat, seedLon, null);
 
   // Seed scheduled slots with all anchors — snap to working days
   const scheduled: Slot[] = anchors.map(c => ({

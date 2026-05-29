@@ -6,7 +6,7 @@ import { fr } from 'date-fns/locale';
 import {
   Plus, ChevronLeft, ChevronRight, ChevronDown, Calendar, BarChart2,
   TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2, Moon, Sun, MapPin, MoreVertical,
-  List, Users, User, Lock, LockOpen,
+  List, Users, User,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { useChantiers } from '../hooks/useChantiers';
@@ -16,7 +16,7 @@ import ImportButton from './ImportButton';
 import MapView from './MapView';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
-import { reorganize, type FilterStatus } from '../lib/reorganize';
+import { reorganize, type ReorganizeMode } from '../lib/reorganize';
 import { geocode, extractLocationCandidates } from '../lib/geocoder';
 import { countWorkingDays, caAnnuel, findGaps } from '../lib/workingDays';
 import {
@@ -99,7 +99,8 @@ export default function PlanDeCharge() {
     return Math.max(3, (window.innerWidth - GANTT_SIDEBAR) / numDays);
   });
   const [activeTab, setActiveTab]       = useState<ViewTab>('gantt');
-  const [reorganizing, setReorganizing] = useState(false);
+  const [reorganizing, setReorganizing]     = useState(false);
+  const [reorganizeMode, setReorganizeMode] = useState<ReorganizeMode>('potentiel');
   const [modal, setModal] = useState<{ open: boolean; chantier: Chantier | null; defaultDate?: string }>({
     open: false, chantier: null,
   });
@@ -224,35 +225,26 @@ export default function PlanDeCharge() {
 
   // ── Smart reorganization ───────────────────────────────────────────────────
   const handleReorganize = async () => {
-    const fs = filterStatus as FilterStatus;
-    if (fs === 'archive') { alert('Impossible de réorganiser des chantiers archivés.'); return; }
-
-    const scope =
-      fs === 'confirme'  ? 'confirmés (les potentiels restent en place)' :
-      fs === 'potentiel' ? 'potentiels (les confirmés restent en place)' :
-                           'tous — confirmés en priorité, puis potentiels';
-
-    const moveableCount = chantiers.filter(c => {
-      if (c.datesVerrouillees || c.status === 'refuse' || c.status === 'annule') return false;
-      if (fs === 'confirme')  return c.status === 'confirme';
-      if (fs === 'potentiel') return c.status === 'potentiel';
-      return true;
-    }).length;
+    const modeLabel = reorganizeMode === 'all'       ? 'tous les chantiers'
+                    : reorganizeMode === 'confirme'  ? 'les chantiers confirmés'
+                    :                                  'les chantiers potentiels';
+    const modeDetail = reorganizeMode === 'potentiel'
+      ? '• Confirmés : immobiles (contrat signé)\n• Potentiels verrouillés (🔒) : immobiles\n• Potentiels libres : repositionnés'
+      : reorganizeMode === 'confirme'
+      ? '• Confirmés verrouillés (🔒) : immobiles\n• Confirmés libres : repositionnés\n• Potentiels : ignorés'
+      : '• Verrouillés (🔒) : immobiles\n• Tous les autres : repositionnés';
 
     if (!confirm(
-      `Réorganiser ${moveableCount} chantier(s) — vue : ${scope}\n\n` +
-      `• Chantiers verrouillés (🔒) : immobiles\n` +
-      (fs === 'confirme'  ? `• Potentiels : immobiles (ancres implicites)\n` : '') +
-      (fs === 'potentiel' ? `• Confirmés : immobiles (ancres implicites)\n` : '') +
-      (fs === 'all'       ? `• Confirmés planifiés en premier (priorité créneaux)\n` : '') +
-      `• Durées préservées en jours ouvrés\n` +
-      `• Périodes préconisées respectées si possible\n` +
-      `• Engins et effectifs pris en compte`
+      `Réorganiser ${modeLabel} ?\n\n${modeDetail}\n• Durées préservées en jours ouvrés\n• Périodes préconisées respectées si possible\n• Engins et effectifs pris en compte`
     )) return;
 
     setReorganizing(true);
     try {
-      const result = reorganize(chantiers, fs);
+      const result = reorganize(chantiers, reorganizeMode);
+      if (result.warnings.length && result.results.length === 0) {
+        alert(result.warnings[0]);
+        return;
+      }
       for (const r of result.results)
         await updateChantier(r.id, { dateDebut: r.dateDebut, dateFin: r.dateFin });
       const msg = result.moved > 0
@@ -263,27 +255,6 @@ export default function PlanDeCharge() {
     } finally {
       setReorganizing(false);
     }
-  };
-
-  // ── Mass lock / unlock confirmed chantiers ────────────────────────────────
-  const handleLockAllConfirmes = async () => {
-    const toToggle = chantiers.filter(c => c.status === 'confirme' && !c.datesVerrouillees);
-    if (!toToggle.length) { alert('Tous les chantiers confirmés sont déjà verrouillés.'); return; }
-    if (!confirm(
-      `Verrouiller les dates de ${toToggle.length} chantier(s) confirmé(s) ?\n\n` +
-      `Ils seront exclus de toute réorganisation ultérieure.\n` +
-      `Vous pourrez les déverrouiller un par un via leur fiche.`
-    )) return;
-    for (const c of toToggle)
-      await updateChantier(c.id, { datesVerrouillees: true });
-  };
-
-  const handleUnlockAll = async () => {
-    const toToggle = chantiers.filter(c => c.datesVerrouillees);
-    if (!toToggle.length) { alert('Aucun chantier n\'est verrouillé.'); return; }
-    if (!confirm(`Déverrouiller ${toToggle.length} chantier(s) ?\nLeurs dates pourront à nouveau être modifiées par la réorganisation.`)) return;
-    for (const c of toToggle)
-      await updateChantier(c.id, { datesVerrouillees: false });
   };
 
   const handleGeocodeBatch = async () => {
@@ -420,20 +391,24 @@ export default function PlanDeCharge() {
                 ? <><Loader2 size={14} className="animate-spin"/> {geocoding.done}/{geocoding.total}</>
                 : <><MapPin size={14}/> Géolocaliser</>}
             </button>
-            <button
-              onClick={handleReorganize}
-              disabled={reorganizing || filterStatus === 'archive'}
-              title="Réorganiser selon la vue active"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-40">
-              {reorganizing ? <Loader2 size={14} className="animate-spin"/> : <Wand2 size={14}/>}
-              Réorganiser
-            </button>
-            <button
-              onClick={handleLockAllConfirmes}
-              title="Verrouiller les dates de tous les confirmés"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-colors">
-              <Lock size={14}/> Verrouiller confirmés
-            </button>
+            <div className="flex items-center rounded-lg overflow-hidden border border-violet-600">
+              <select
+                value={reorganizeMode}
+                onChange={e => setReorganizeMode(e.target.value as ReorganizeMode)}
+                className="text-xs font-medium bg-violet-50 text-violet-700 px-2 py-1.5 border-none outline-none cursor-pointer">
+                <option value="potentiel">Potentiels</option>
+                <option value="confirme">Confirmés</option>
+                <option value="all">Tous</option>
+              </select>
+              <button
+                onClick={handleReorganize}
+                disabled={reorganizing || filterStatus === 'archive'}
+                title="Réorganiser les chantiers sélectionnés"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors disabled:opacity-40">
+                {reorganizing ? <Loader2 size={14} className="animate-spin"/> : <Wand2 size={14}/>}
+                Réorganiser
+              </button>
+            </div>
             <button onClick={() => openNew()}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
               <Plus size={15} /> Nouveau chantier
@@ -481,27 +456,30 @@ export default function PlanDeCharge() {
                     {geocoding ? <Loader2 size={14} className="animate-spin"/> : <MapPin size={14} className="text-emerald-600"/>}
                     {geocoding ? `${geocoding.done}/${geocoding.total}…` : 'Géolocaliser'}
                   </button>
-                  <button
-                    onClick={() => { handleReorganize(); setShowMenu(false); }}
-                    disabled={reorganizing || filterStatus === 'archive'}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors">
-                    {reorganizing ? <Loader2 size={14} className="animate-spin"/> : <Wand2 size={14} className="text-violet-600"/>}
-                    Réorganiser ({filterStatus === 'confirme' ? 'confirmés' : filterStatus === 'potentiel' ? 'potentiels' : 'tous'})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { handleLockAllConfirmes(); setShowMenu(false); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                    <Lock size={14} className="text-amber-500"/>
-                    Verrouiller confirmés
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { handleUnlockAll(); setShowMenu(false); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                    <LockOpen size={14} className="text-slate-400"/>
-                    Déverrouiller tout
-                  </button>
+                  <div className="px-3 py-1.5">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Réorganiser</p>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {([
+                        { key: 'potentiel', label: 'Potentiels' },
+                        { key: 'confirme',  label: 'Confirmés' },
+                        { key: 'all',       label: 'Tous' },
+                      ] as const).map(({ key, label }) => (
+                        <button key={key} onClick={() => setReorganizeMode(key)}
+                          className={`px-2 py-1 text-xs rounded-md font-medium transition-colors ${
+                            reorganizeMode === key ? 'bg-violet-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                          }`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => { handleReorganize(); setShowMenu(false); }}
+                      disabled={reorganizing || filterStatus === 'archive'}
+                      className="w-full flex items-center justify-center gap-2 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-40">
+                      {reorganizing ? <Loader2 size={14} className="animate-spin"/> : <Wand2 size={14}/>}
+                      Réorganiser
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
