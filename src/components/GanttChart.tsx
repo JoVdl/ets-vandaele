@@ -49,7 +49,7 @@ export default function GanttChart({
   const SIDE_W = window.innerWidth < 640 ? 120 : 260;
 
   // ── Availability bar toggle ───────────────────────────────────────────────
-  const [showGaps, setShowGaps] = useState(true);
+  const [showGaps, setShowGaps] = useState(false);
 
   // ── Mobile peek card ─────────────────────────────────────────────────────
   const [mobilePeek, setMobilePeek] = useState<Chantier | null>(null);
