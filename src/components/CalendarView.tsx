@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isToday, format, addMonths,
@@ -8,6 +8,8 @@ import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { isWorkingDay } from '../lib/workingDays';
+import ChantierTooltip from './ChantierTooltip';
+import MobilePeekCard from './MobilePeekCard';
 
 type ZoomPreset = 1 | 2 | 3 | 6 | 'year';
 type CellMode   = 'full' | 'compact' | 'mini';
@@ -26,32 +28,32 @@ interface Props {
   onClickChantier: (c: Chantier) => void;
 }
 
-// ── Day cell ─────────────────────────────────────────────────────────────────
+// ── Day cell ──────────────────────────────────────────────────────────────────
 
 function DayCell({
-  day, inMonth, items, mode, onClickChantier,
+  day, inMonth, items, mode, onChantierClick, onHover, onUnhover,
 }: {
   day: Date;
   inMonth: boolean;
   items: Chantier[];
   mode: CellMode;
-  onClickChantier: (c: Chantier) => void;
+  onChantierClick: (c: Chantier) => void;
+  onHover: (c: Chantier, x: number, y: number) => void;
+  onUnhover: () => void;
 }) {
-  const key      = format(day, 'yyyy-MM-dd');
-  const today    = isToday(day);
-  const workDay  = isWorkingDay(day);
-  const sorted     = [...items].sort((a, b) =>
+  const key     = format(day, 'yyyy-MM-dd');
+  const today   = isToday(day);
+  const workDay = isWorkingDay(day);
+  const sorted  = [...items].sort((a, b) =>
     (a.status === 'confirme' ? 0 : 1) - (b.status === 'confirme' ? 0 : 1)
   );
 
-  const MAX_CHIPS = mode === 'full' ? 3 : 0;
-  const visible   = sorted.slice(0, MAX_CHIPS);
-  const overflow  = sorted.length - MAX_CHIPS;
+  const MAX_ITEMS = mode === 'full' ? 3 : mode === 'compact' ? 3 : 2;
+  const visible   = sorted.slice(0, MAX_ITEMS);
+  const overflow  = sorted.length - MAX_ITEMS;
 
-  // For mini/compact: colored dots (deduplicated by type color, max 4)
-  const dotColors = mode !== 'full'
-    ? [...new Map(sorted.map(c => [CHANTIER_TYPES[c.type].color, { color: CHANTIER_TYPES[c.type].color, confirmed: c.status === 'confirme' }])).values()].slice(0, 4)
-    : [];
+  // Bar height for compact / mini
+  const BAR_H = mode === 'compact' ? 11 : 8;
 
   return (
     <div
@@ -70,7 +72,7 @@ function DayCell({
       </div>
 
       {/* Content */}
-      <div className={`flex-1 px-0.5 ${mode === 'full' ? 'pb-1 px-1 space-y-0.5' : 'flex flex-wrap gap-0.5 px-1 pb-0.5 items-start content-start'}`}>
+      <div className="flex-1 px-0.5 pb-0.5 overflow-hidden space-y-px">
         {mode === 'full' ? (
           <>
             {visible.map(c => {
@@ -80,7 +82,9 @@ function DayCell({
               return (
                 <button
                   key={c.id}
-                  onClick={() => onClickChantier(c)}
+                  onClick={() => onChantierClick(c)}
+                  onMouseEnter={e => onHover(c, e.clientX, e.clientY)}
+                  onMouseLeave={onUnhover}
                   title={c.nom}
                   className="w-full text-left text-[9px] sm:text-[10px] font-medium leading-tight px-1 py-0.5 truncate rounded hover:opacity-70 transition-opacity"
                   style={{
@@ -98,19 +102,42 @@ function DayCell({
             )}
           </>
         ) : (
-          /* Dots for compact / mini */
-          dotColors.map(({ color, confirmed: conf }, i) => (
-            <span
-              key={i}
-              className="rounded-full flex-shrink-0"
-              style={{
-                width:  mode === 'compact' ? 7 : 5,
-                height: mode === 'compact' ? 7 : 5,
-                backgroundColor: color,
-                opacity: conf ? 1 : 0.5,
-              }}
-            />
-          ))
+          /* Colored bars for compact / mini */
+          <>
+            {visible.map(c => {
+              const meta        = CHANTIER_TYPES[c.type];
+              const isPotentiel = c.status === 'potentiel';
+              // Show name on the first day of the chantier or first day of the month (compact only)
+              const showName = mode === 'compact' && (c.dateDebut === key || day.getDate() === 1);
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => onChantierClick(c)}
+                  onMouseEnter={e => onHover(c, e.clientX, e.clientY)}
+                  onMouseLeave={onUnhover}
+                  title={c.nom}
+                  className="w-full block text-left truncate rounded hover:opacity-70 transition-opacity"
+                  style={{
+                    height: BAR_H,
+                    backgroundColor: `${meta.color}${isPotentiel ? '25' : '38'}`,
+                    color: meta.color,
+                    borderLeft: `2px solid ${meta.color}`,
+                    fontStyle: isPotentiel ? 'italic' : undefined,
+                    fontSize: mode === 'compact' ? 9 : 7,
+                    lineHeight: `${BAR_H}px`,
+                    paddingLeft: 3,
+                    paddingRight: 2,
+                  }}>
+                  {showName ? c.nom : ' '}
+                </button>
+              );
+            })}
+            {overflow > 0 && (
+              <span style={{ fontSize: 7 }} className="text-slate-400 pl-0.5 leading-none">
+                +{overflow}
+              </span>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -120,13 +147,15 @@ function DayCell({
 // ── Single month grid ─────────────────────────────────────────────────────────
 
 function MonthGrid({
-  month, chantiers, mode, onDrillDown, onClickChantier,
+  month, chantiers, mode, onDrillDown, onChantierClick, onHover, onUnhover,
 }: {
   month: Date;
   chantiers: Chantier[];
   mode: CellMode;
   onDrillDown: () => void;
-  onClickChantier: (c: Chantier) => void;
+  onChantierClick: (c: Chantier) => void;
+  onHover: (c: Chantier, x: number, y: number) => void;
+  onUnhover: () => void;
 }) {
   const monthStart = startOfMonth(month);
   const monthEnd   = endOfMonth(month);
@@ -150,11 +179,13 @@ function MonthGrid({
 
   return (
     <div className="flex flex-col bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-      {/* Month name */}
+      {/* Month name — clickable to drill down in compact/mini */}
       <button
         onClick={mode !== 'full' ? onDrillDown : undefined}
         className={`flex-shrink-0 text-center px-2 py-1.5 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 capitalize font-semibold ${
-          mode === 'full' ? 'text-sm text-slate-700 dark:text-slate-200 cursor-default' : 'text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors'
+          mode === 'full'
+            ? 'text-sm text-slate-700 dark:text-slate-200 cursor-default'
+            : 'text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer'
         }`}>
         {format(month, mode === 'full' ? 'MMMM yyyy' : 'MMMM', { locale: fr })}
       </button>
@@ -181,7 +212,9 @@ function MonthGrid({
                 inMonth={isSameMonth(day, month)}
                 items={byDay.get(format(day, 'yyyy-MM-dd')) ?? []}
                 mode={mode}
-                onClickChantier={onClickChantier}
+                onChantierClick={onChantierClick}
+                onHover={onHover}
+                onUnhover={onUnhover}
               />
             ))}
           </div>
@@ -207,17 +240,35 @@ export default function CalendarView({
   onPrevPeriod, onNextPeriod, onDrillDown, onClickChantier,
 }: Props) {
 
+  // Hover tooltip — desktop only
+  const [tooltip, setTooltip] = useState<{ chantier: Chantier; x: number; y: number } | null>(null);
+  const handleHover = useCallback((c: Chantier, x: number, y: number) => {
+    if (window.innerWidth < 640) return;
+    setTooltip({ chantier: c, x, y });
+  }, []);
+  const handleUnhover = useCallback(() => setTooltip(null), []);
+
+  // Mobile peek card
+  const [mobilePeek, setMobilePeek] = useState<Chantier | null>(null);
+  const handleChantierClick = useCallback((c: Chantier) => {
+    if (window.innerWidth < 640) {
+      setMobilePeek(c);
+    } else {
+      onClickChantier(c);
+    }
+  }, [onClickChantier]);
+
   // Determine display mode and grid columns
   const mode: CellMode =
-    zoomPreset === 1            ? 'full'    :
+    zoomPreset === 1                     ? 'full'    :
     zoomPreset === 2 || zoomPreset === 3 ? 'compact' : 'mini';
 
   const colsCss =
-    zoomPreset === 1    ? 'grid-cols-1' :
-    zoomPreset === 2    ? 'grid-cols-1 sm:grid-cols-2' :
-    zoomPreset === 3    ? 'grid-cols-1 sm:grid-cols-3' :
-    zoomPreset === 6    ? 'grid-cols-2 sm:grid-cols-3' :
-                          'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
+    zoomPreset === 1 ? 'grid-cols-1' :
+    zoomPreset === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+    zoomPreset === 3 ? 'grid-cols-1 sm:grid-cols-3' :
+    zoomPreset === 6 ? 'grid-cols-2 sm:grid-cols-3' :
+                       'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
 
   // Enumerate months in the period
   const months = useMemo(() => {
@@ -254,9 +305,8 @@ export default function CalendarView({
       </div>
 
       {/* ── Month grid ── */}
-      <div className={`flex-1 overflow-y-auto p-2 sm:p-3 grid ${colsCss} gap-2 sm:gap-3 ${
-        zoomPreset === 1 ? 'flex flex-col' : ''
-      }`}
+      <div
+        className={`flex-1 overflow-y-auto p-2 sm:p-3 grid ${colsCss} gap-2 sm:gap-3`}
         style={zoomPreset === 1 ? { display: 'flex', flexDirection: 'column' } : undefined}>
         {months.map(m => (
           <MonthGrid
@@ -265,10 +315,30 @@ export default function CalendarView({
             chantiers={chantiers}
             mode={mode}
             onDrillDown={() => onDrillDown(m)}
-            onClickChantier={onClickChantier}
+            onChantierClick={handleChantierClick}
+            onHover={handleHover}
+            onUnhover={handleUnhover}
           />
         ))}
       </div>
+
+      {/* ── Hover tooltip (desktop) ── */}
+      {tooltip && (
+        <ChantierTooltip
+          chantier={tooltip.chantier}
+          x={tooltip.x}
+          y={tooltip.y}
+        />
+      )}
+
+      {/* ── Mobile peek card ── */}
+      {mobilePeek && (
+        <MobilePeekCard
+          chantier={mobilePeek}
+          onClose={() => setMobilePeek(null)}
+          onEdit={() => { setMobilePeek(null); onClickChantier(mobilePeek); }}
+        />
+      )}
     </div>
   );
 }
