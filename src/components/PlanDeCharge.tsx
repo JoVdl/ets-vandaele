@@ -4,7 +4,7 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
-  Plus, ChevronLeft, ChevronRight, Calendar, BarChart2,
+  Plus, ChevronLeft, ChevronRight, Calendar, CalendarDays, BarChart2,
   TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2, Moon, Sun, MapPin, MoreVertical,
   List, Users, User,
 } from 'lucide-react';
@@ -14,6 +14,7 @@ import GanttChart from './GanttChart';
 import ChantierModal from './ChantierModal';
 import ImportButton from './ImportButton';
 import MapView from './MapView';
+import CalendarView from './CalendarView';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import { reorganize, type ReorganizeMode } from '../lib/reorganize';
@@ -25,7 +26,7 @@ import {
 } from './EquipmentIcons';
 
 type ZoomPreset = 1 | 2 | 3 | 6 | 'year';
-type ViewTab = 'gantt' | 'carte' | 'liste';
+type ViewTab = 'gantt' | 'carte' | 'liste' | 'calendrier';
 
 // Sidebar width used by the Gantt — must match GanttChart's SIDE_W
 const GANTT_SIDEBAR = typeof window !== 'undefined' && window.innerWidth < 640 ? 120 : 260;
@@ -423,9 +424,10 @@ export default function PlanDeCharge() {
             {/* Tab switcher — always accessible */}
             <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden mr-0.5">
               {([
-                { key: 'gantt', icon: <BarChart2 size={12}/> },
-                { key: 'carte', icon: <Map size={12}/> },
-                { key: 'liste', icon: <List size={12}/> },
+                { key: 'gantt',       icon: <BarChart2 size={12}/> },
+                { key: 'carte',       icon: <Map size={12}/> },
+                { key: 'calendrier',  icon: <CalendarDays size={12}/> },
+                { key: 'liste',       icon: <List size={12}/> },
               ] as const).map(({ key, icon }) => (
                 <button key={key} onClick={() => setActiveTab(key)}
                   className={`px-2 py-1.5 transition-colors ${
@@ -640,20 +642,20 @@ export default function PlanDeCharge() {
             </button>
           </div>
 
-          {/* Gantt / Carte tabs — desktop only (mobile uses Row 1 tabs) */}
+          {/* View tabs — desktop only (mobile uses Row 1 tabs) */}
           <div className="hidden sm:flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden ml-auto sm:ml-0">
-            <button onClick={() => setActiveTab('gantt')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'gantt' ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-              }`}>
-              <BarChart2 size={13}/> Gantt
-            </button>
-            <button onClick={() => setActiveTab('carte')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'carte' ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
-              }`}>
-              <Map size={13}/> Carte
-            </button>
+            {([
+              { key: 'gantt',      icon: <BarChart2 size={13}/>,    label: 'Gantt' },
+              { key: 'carte',      icon: <Map size={13}/>,           label: 'Carte' },
+              { key: 'calendrier', icon: <CalendarDays size={13}/>,  label: 'Calendrier' },
+            ] as const).map(({ key, icon, label }) => (
+              <button key={key} onClick={() => setActiveTab(key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeTab === key ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                }`}>
+                {icon} {label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -684,6 +686,13 @@ export default function PlanDeCharge() {
         <MapView
           key={filtered.map(c => `${c.id}:${c.latitude}:${c.longitude}`).join(',')}
           chantiers={filtered}
+          onClickChantier={openEdit}
+        />
+      ) : activeTab === 'calendrier' ? (
+        <CalendarView
+          chantiers={filtered}
+          currentMonth={currentMonth}
+          onChangeMonth={setCurrentMonth}
           onClickChantier={openEdit}
         />
       ) : (
