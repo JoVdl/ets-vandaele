@@ -691,8 +691,12 @@ export default function PlanDeCharge() {
       ) : activeTab === 'calendrier' ? (
         <CalendarView
           chantiers={filtered}
-          currentMonth={currentMonth}
-          onChangeMonth={setCurrentMonth}
+          periodStart={periodStart}
+          periodEnd={periodEnd}
+          zoomPreset={zoomPreset}
+          onPrevPeriod={prevPeriod}
+          onNextPeriod={nextPeriod}
+          onDrillDown={(month) => { setCurrentMonth(startOfMonth(month)); applyPreset(1); }}
           onClickChantier={openEdit}
         />
       ) : (
