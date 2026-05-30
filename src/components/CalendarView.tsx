@@ -48,12 +48,25 @@ function DayCell({
     (a.status === 'confirme' ? 0 : 1) - (b.status === 'confirme' ? 0 : 1)
   );
 
-  const MAX_ITEMS = mode === 'full' ? 3 : mode === 'compact' ? 3 : 2;
+  const count = sorted.length;
+
+  // Bar height scales down as more items compete for space
+  const BAR_H =
+    mode === 'compact'
+      ? count <= 1 ? 18 : count <= 2 ? 13 : count <= 3 ? 10 : 8
+      : mode === 'mini'
+      ? count <= 1 ? 13 : count <= 2 ? 9  : count <= 3 ? 7  : 6
+      : 0; // full mode doesn't use BAR_H
+
+  // Font scales with bar height
+  const FONT_SZ =
+    mode === 'compact'
+      ? count <= 1 ? 10 : count <= 2 ? 9 : 8
+      : count <= 1 ? 9  : count <= 2 ? 8 : 7;
+
+  const MAX_ITEMS = mode === 'full' ? 3 : mode === 'compact' ? 5 : 4;
   const visible   = sorted.slice(0, MAX_ITEMS);
   const overflow  = sorted.length - MAX_ITEMS;
-
-  // Bar height for compact / mini
-  const BAR_H = mode === 'compact' ? 11 : 8;
 
   return (
     <div
@@ -93,7 +106,7 @@ function DayCell({
                     borderLeft: `2px solid ${meta.color}`,
                     fontStyle: isPotentiel ? 'italic' : undefined,
                   }}>
-                  {isStart ? c.nom : ' '}
+                  {isStart ? c.nom : ' '}
                 </button>
               );
             })}
@@ -102,13 +115,11 @@ function DayCell({
             )}
           </>
         ) : (
-          /* Colored bars for compact / mini */
+          /* Colored bars for compact / mini — name always shown, height adapts to count */
           <>
             {visible.map(c => {
               const meta        = CHANTIER_TYPES[c.type];
               const isPotentiel = c.status === 'potentiel';
-              // Show name on the first day of the chantier or first day of the month (compact only)
-              const showName = mode === 'compact' && (c.dateDebut === key || day.getDate() === 1);
               return (
                 <button
                   key={c.id}
@@ -123,12 +134,12 @@ function DayCell({
                     color: meta.color,
                     borderLeft: `2px solid ${meta.color}`,
                     fontStyle: isPotentiel ? 'italic' : undefined,
-                    fontSize: mode === 'compact' ? 9 : 7,
+                    fontSize: FONT_SZ,
                     lineHeight: `${BAR_H}px`,
                     paddingLeft: 3,
                     paddingRight: 2,
                   }}>
-                  {showName ? c.nom : ' '}
+                  {c.nom}
                 </button>
               );
             })}
