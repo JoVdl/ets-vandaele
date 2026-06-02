@@ -2,12 +2,13 @@ import { useMemo, useState, useCallback } from 'react';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isToday, format, addMonths,
+  addDays, differenceInCalendarDays, parseISO,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
-import { isWorkingDay } from '../lib/workingDays';
+import { isWorkingDay, nextWorkingDay } from '../lib/workingDays';
 import ChantierTooltip from './ChantierTooltip';
 import MobilePeekCard from './MobilePeekCard';
 
@@ -16,6 +17,17 @@ type CellMode   = 'full' | 'compact' | 'mini';
 
 const DOW_LONG  = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const DOW_SHORT = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+interface DragState {
+  chantier: Chantier;
+  offsetDays: number; // which day within the chantier was grabbed
+}
+
+interface PreviewRange {
+  chantier: Chantier;
+  start: string; // yyyy-MM-dd
+  end: string;
+}
 
 interface Props {
   chantiers: Chantier[];
@@ -26,12 +38,16 @@ interface Props {
   onNextPeriod: () => void;
   onDrillDown: (month: Date) => void;
   onClickChantier: (c: Chantier) => void;
+  onMoveChantier: (id: string, newStart: string, newEnd: string) => void;
 }
 
 // ── Day cell ──────────────────────────────────────────────────────────────────
 
 function DayCell({
-  day, inMonth, items, mode, onChantierClick, onHover, onUnhover,
+  day, inMonth, items, mode,
+  onChantierClick, onHover, onUnhover,
+  dragId, preview,
+  onDragStartBar, onDragOverCell, onDropCell, onDragEndBar,
 }: {
   day: Date;
   inMonth: boolean;
@@ -40,25 +56,33 @@ function DayCell({
   onChantierClick: (c: Chantier) => void;
   onHover: (c: Chantier, x: number, y: number) => void;
   onUnhover: () => void;
+  dragId: string | null;
+  preview: PreviewRange | null;
+  onDragStartBar: (c: Chantier, offsetDays: number, e: React.DragEvent) => void;
+  onDragOverCell: (e: React.DragEvent) => void;
+  onDropCell: (e: React.DragEvent) => void;
+  onDragEndBar: () => void;
 }) {
   const key     = format(day, 'yyyy-MM-dd');
   const today   = isToday(day);
   const workDay = isWorkingDay(day);
+
   const sorted  = [...items].sort((a, b) =>
     (a.status === 'confirme' ? 0 : 1) - (b.status === 'confirme' ? 0 : 1)
   );
 
-  const count = sorted.length;
+  // Ghost bar: preview chantier landing here but not currently on this day
+  const isPreviewDay = !!(preview && key >= preview.start && key <= preview.end);
+  const ghostNeeded  = isPreviewDay && !!preview && !items.find(c => c.id === preview.chantier.id);
 
-  // Bar height scales down as more items compete for space
-  const BAR_H =
+  // Effective item count for sizing (include ghost if it's extra)
+  const count   = sorted.length + (ghostNeeded ? 1 : 0);
+  const BAR_H   =
     mode === 'compact'
       ? count <= 1 ? 18 : count <= 2 ? 13 : count <= 3 ? 10 : 8
       : mode === 'mini'
       ? count <= 1 ? 13 : count <= 2 ? 9  : count <= 3 ? 7  : 6
-      : 0; // full mode doesn't use BAR_H
-
-  // Font scales with bar height
+      : 0;
   const FONT_SZ =
     mode === 'compact'
       ? count <= 1 ? 10 : count <= 2 ? 9 : 8
@@ -68,12 +92,18 @@ function DayCell({
   const visible   = sorted.slice(0, MAX_ITEMS);
   const overflow  = sorted.length - MAX_ITEMS;
 
+  const isDragging  = (c: Chantier) => c.id === dragId;
+  const canDrag     = (c: Chantier) =>
+    !c.datesVerrouillees && c.status !== 'refuse' && c.status !== 'annule';
+
   return (
     <div
       className={`flex flex-col border-r border-b border-slate-100 dark:border-slate-700/40 last:border-r-0 ${
         !inMonth ? 'opacity-20 pointer-events-none' : ''
-      } ${!workDay ? 'bg-slate-50/70 dark:bg-slate-800/30' : 'bg-white dark:bg-slate-800'}`}
-      style={{ minHeight: mode === 'full' ? 90 : mode === 'compact' ? 56 : 36 }}>
+      } ${isPreviewDay && preview ? 'bg-blue-50/40 dark:bg-blue-900/10' : !workDay ? 'bg-slate-50/70 dark:bg-slate-800/30' : 'bg-white dark:bg-slate-800'}`}
+      style={{ minHeight: mode === 'full' ? 90 : mode === 'compact' ? 56 : 36 }}
+      onDragOver={dragId ? onDragOverCell : undefined}
+      onDrop={dragId ? onDropCell : undefined}>
 
       {/* Day number */}
       <div className={`flex-shrink-0 flex items-center justify-center ${
@@ -88,13 +118,31 @@ function DayCell({
       <div className="flex-1 px-0.5 pb-0.5 overflow-hidden space-y-px">
         {mode === 'full' ? (
           <>
+            {/* Ghost bar in full mode */}
+            {ghostNeeded && preview && (() => {
+              const meta = CHANTIER_TYPES[preview.chantier.type];
+              return (
+                <div
+                  className="w-full text-left text-[9px] sm:text-[10px] font-medium leading-tight px-1 py-0.5 truncate rounded pointer-events-none"
+                  style={{
+                    backgroundColor: `${meta.color}20`,
+                    color: meta.color,
+                    borderLeft: `2px dashed ${meta.color}`,
+                  }}>
+                  {preview.chantier.nom}
+                </div>
+              );
+            })()}
             {visible.map(c => {
               const meta        = CHANTIER_TYPES[c.type];
               const isPotentiel = c.status === 'potentiel';
-              const isStart     = c.dateDebut === key;
+              const isPreviewBar = !!(preview && c.id === preview.chantier.id && isPreviewDay);
               return (
                 <button
                   key={c.id}
+                  draggable={canDrag(c)}
+                  onDragStart={e => onDragStartBar(c, differenceInCalendarDays(day, parseISO(c.dateDebut)), e)}
+                  onDragEnd={onDragEndBar}
                   onClick={() => onChantierClick(c)}
                   onMouseEnter={e => onHover(c, e.clientX, e.clientY)}
                   onMouseLeave={onUnhover}
@@ -103,10 +151,12 @@ function DayCell({
                   style={{
                     backgroundColor: `${meta.color}${isPotentiel ? '25' : '38'}`,
                     color: meta.color,
-                    borderLeft: `2px solid ${meta.color}`,
+                    borderLeft: isPreviewBar ? `2px dashed ${meta.color}` : `2px solid ${meta.color}`,
                     fontStyle: isPotentiel ? 'italic' : undefined,
+                    opacity: isDragging(c) ? 0.35 : 1,
+                    cursor: canDrag(c) ? 'grab' : 'pointer',
                   }}>
-                  {isStart ? c.nom : ' '}
+                  {c.dateDebut === key ? c.nom : ' '}
                 </button>
               );
             })}
@@ -115,14 +165,37 @@ function DayCell({
             )}
           </>
         ) : (
-          /* Colored bars for compact / mini — name always shown, height adapts to count */
+          /* Bars for compact / mini */
           <>
+            {/* Ghost bar */}
+            {ghostNeeded && preview && (() => {
+              const meta = CHANTIER_TYPES[preview.chantier.type];
+              return (
+                <div
+                  className="w-full block truncate rounded pointer-events-none"
+                  style={{
+                    height: BAR_H,
+                    backgroundColor: `${meta.color}20`,
+                    color: meta.color,
+                    borderLeft: `2px dashed ${meta.color}`,
+                    fontSize: FONT_SZ,
+                    lineHeight: `${BAR_H}px`,
+                    paddingLeft: 3,
+                  }}>
+                  {preview.chantier.nom}
+                </div>
+              );
+            })()}
             {visible.map(c => {
               const meta        = CHANTIER_TYPES[c.type];
               const isPotentiel = c.status === 'potentiel';
+              const isPreviewBar = !!(preview && c.id === preview.chantier.id && isPreviewDay);
               return (
                 <button
                   key={c.id}
+                  draggable={canDrag(c)}
+                  onDragStart={e => onDragStartBar(c, differenceInCalendarDays(day, parseISO(c.dateDebut)), e)}
+                  onDragEnd={onDragEndBar}
                   onClick={() => onChantierClick(c)}
                   onMouseEnter={e => onHover(c, e.clientX, e.clientY)}
                   onMouseLeave={onUnhover}
@@ -132,12 +205,14 @@ function DayCell({
                     height: BAR_H,
                     backgroundColor: `${meta.color}${isPotentiel ? '25' : '38'}`,
                     color: meta.color,
-                    borderLeft: `2px solid ${meta.color}`,
+                    borderLeft: isPreviewBar ? `2px dashed ${meta.color}` : `2px solid ${meta.color}`,
                     fontStyle: isPotentiel ? 'italic' : undefined,
                     fontSize: FONT_SZ,
                     lineHeight: `${BAR_H}px`,
                     paddingLeft: 3,
                     paddingRight: 2,
+                    opacity: isDragging(c) ? 0.35 : 1,
+                    cursor: canDrag(c) ? 'grab' : 'pointer',
                   }}>
                   {c.nom}
                 </button>
@@ -158,7 +233,9 @@ function DayCell({
 // ── Single month grid ─────────────────────────────────────────────────────────
 
 function MonthGrid({
-  month, chantiers, mode, onDrillDown, onChantierClick, onHover, onUnhover,
+  month, chantiers, mode, onDrillDown,
+  onChantierClick, onHover, onUnhover,
+  dragId, preview, onDragStartBar, onDragOverDay, onDropDay, onDragEndBar,
 }: {
   month: Date;
   chantiers: Chantier[];
@@ -167,6 +244,12 @@ function MonthGrid({
   onChantierClick: (c: Chantier) => void;
   onHover: (c: Chantier, x: number, y: number) => void;
   onUnhover: () => void;
+  dragId: string | null;
+  preview: PreviewRange | null;
+  onDragStartBar: (c: Chantier, offsetDays: number, e: React.DragEvent) => void;
+  onDragOverDay: (key: string, e: React.DragEvent) => void;
+  onDropDay: (key: string, e: React.DragEvent) => void;
+  onDragEndBar: () => void;
 }) {
   const monthStart = startOfMonth(month);
   const monthEnd   = endOfMonth(month);
@@ -216,18 +299,27 @@ function MonthGrid({
       <div className="flex-1 flex flex-col">
         {weeks.map((week, wi) => (
           <div key={wi} className="grid grid-cols-7 flex-1">
-            {week.map(day => (
-              <DayCell
-                key={format(day, 'yyyy-MM-dd')}
-                day={day}
-                inMonth={isSameMonth(day, month)}
-                items={byDay.get(format(day, 'yyyy-MM-dd')) ?? []}
-                mode={mode}
-                onChantierClick={onChantierClick}
-                onHover={onHover}
-                onUnhover={onUnhover}
-              />
-            ))}
+            {week.map(day => {
+              const dayKey = format(day, 'yyyy-MM-dd');
+              return (
+                <DayCell
+                  key={dayKey}
+                  day={day}
+                  inMonth={isSameMonth(day, month)}
+                  items={byDay.get(dayKey) ?? []}
+                  mode={mode}
+                  onChantierClick={onChantierClick}
+                  onHover={onHover}
+                  onUnhover={onUnhover}
+                  dragId={dragId}
+                  preview={preview}
+                  onDragStartBar={onDragStartBar}
+                  onDragOverCell={e => onDragOverDay(dayKey, e)}
+                  onDropCell={e => onDropDay(dayKey, e)}
+                  onDragEndBar={onDragEndBar}
+                />
+              );
+            })}
           </div>
         ))}
       </div>
@@ -248,10 +340,10 @@ function periodLabel(periodStart: Date, zoomPreset: ZoomPreset): string {
 
 export default function CalendarView({
   chantiers, periodStart, periodEnd, zoomPreset,
-  onPrevPeriod, onNextPeriod, onDrillDown, onClickChantier,
+  onPrevPeriod, onNextPeriod, onDrillDown, onClickChantier, onMoveChantier,
 }: Props) {
 
-  // Hover tooltip — desktop only
+  // ── Hover tooltip — desktop only ─────────────────────────────────────────
   const [tooltip, setTooltip] = useState<{ chantier: Chantier; x: number; y: number } | null>(null);
   const handleHover = useCallback((c: Chantier, x: number, y: number) => {
     if (window.innerWidth < 640) return;
@@ -259,7 +351,7 @@ export default function CalendarView({
   }, []);
   const handleUnhover = useCallback(() => setTooltip(null), []);
 
-  // Mobile peek card
+  // ── Mobile peek card ──────────────────────────────────────────────────────
   const [mobilePeek, setMobilePeek] = useState<Chantier | null>(null);
   const handleChantierClick = useCallback((c: Chantier) => {
     if (window.innerWidth < 640) {
@@ -269,7 +361,57 @@ export default function CalendarView({
     }
   }, [onClickChantier]);
 
-  // Determine display mode and grid columns
+  // ── Drag & drop ───────────────────────────────────────────────────────────
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+
+  // Live preview range while dragging
+  const preview = useMemo<PreviewRange | null>(() => {
+    if (!drag || !dragOverDay) return null;
+    const dur      = differenceInCalendarDays(parseISO(drag.chantier.dateFin), parseISO(drag.chantier.dateDebut));
+    const newStart = addDays(parseISO(dragOverDay), -drag.offsetDays);
+    const newEnd   = addDays(newStart, dur);
+    return {
+      chantier: drag.chantier,
+      start: format(newStart, 'yyyy-MM-dd'),
+      end:   format(newEnd,   'yyyy-MM-dd'),
+    };
+  }, [drag, dragOverDay]);
+
+  const handleDragStartBar = useCallback((c: Chantier, offsetDays: number, e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move';
+    setTooltip(null);
+    setDrag({ chantier: c, offsetDays });
+  }, []);
+
+  const handleDragOverDay = useCallback((key: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverDay(key);
+  }, []);
+
+  const handleDropDay = useCallback((key: string, e: React.DragEvent) => {
+    e.preventDefault();
+    if (!drag) return;
+    const dur      = differenceInCalendarDays(parseISO(drag.chantier.dateFin), parseISO(drag.chantier.dateDebut));
+    const rawStart = addDays(parseISO(key), -drag.offsetDays);
+    const newStart = nextWorkingDay(rawStart);
+    const newEnd   = addDays(newStart, dur);
+    onMoveChantier(
+      drag.chantier.id,
+      format(newStart, 'yyyy-MM-dd'),
+      format(newEnd,   'yyyy-MM-dd'),
+    );
+    setDrag(null);
+    setDragOverDay(null);
+  }, [drag, onMoveChantier]);
+
+  const handleDragEnd = useCallback(() => {
+    setDrag(null);
+    setDragOverDay(null);
+  }, []);
+
+  // ── Layout ────────────────────────────────────────────────────────────────
   const mode: CellMode =
     zoomPreset === 1                     ? 'full'    :
     zoomPreset === 2 || zoomPreset === 3 ? 'compact' : 'mini';
@@ -281,7 +423,6 @@ export default function CalendarView({
     zoomPreset === 6 ? 'grid-cols-2 sm:grid-cols-3' :
                        'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
 
-  // Enumerate months in the period
   const months = useMemo(() => {
     const list: Date[] = [];
     let m = startOfMonth(periodStart);
@@ -289,10 +430,10 @@ export default function CalendarView({
     return list;
   }, [periodStart, periodEnd]);
 
-  const label = periodLabel(periodStart, zoomPreset);
-
   return (
-    <div className="flex flex-col flex-1 overflow-hidden bg-slate-50 dark:bg-slate-900">
+    <div
+      className="flex flex-col flex-1 overflow-hidden bg-slate-50 dark:bg-slate-900"
+      style={{ cursor: drag ? 'grabbing' : undefined }}>
 
       {/* ── Header bar ── */}
       <div className="flex items-center justify-between px-3 sm:px-6 py-2 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 flex-shrink-0">
@@ -302,7 +443,9 @@ export default function CalendarView({
         </button>
 
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 capitalize">{label}</h2>
+          <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 capitalize">
+            {periodLabel(periodStart, zoomPreset)}
+          </h2>
           <button onClick={() => onDrillDown(startOfMonth(new Date()))}
             className="hidden sm:flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors">
             <Calendar size={10}/> Aujourd'hui
@@ -329,17 +472,19 @@ export default function CalendarView({
             onChantierClick={handleChantierClick}
             onHover={handleHover}
             onUnhover={handleUnhover}
+            dragId={drag?.chantier.id ?? null}
+            preview={preview}
+            onDragStartBar={handleDragStartBar}
+            onDragOverDay={handleDragOverDay}
+            onDropDay={handleDropDay}
+            onDragEndBar={handleDragEnd}
           />
         ))}
       </div>
 
       {/* ── Hover tooltip (desktop) ── */}
-      {tooltip && (
-        <ChantierTooltip
-          chantier={tooltip.chantier}
-          x={tooltip.x}
-          y={tooltip.y}
-        />
+      {tooltip && !drag && (
+        <ChantierTooltip chantier={tooltip.chantier} x={tooltip.x} y={tooltip.y} />
       )}
 
       {/* ── Mobile peek card ── */}

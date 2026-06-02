@@ -698,6 +698,7 @@ export default function PlanDeCharge() {
           onNextPeriod={nextPeriod}
           onDrillDown={(month) => { setCurrentMonth(startOfMonth(month)); applyPreset(1); }}
           onClickChantier={openEdit}
+          onMoveChantier={handleMove}
         />
       ) : (
         /* ── Liste mobile ──────────────────────────────────────────────── */
