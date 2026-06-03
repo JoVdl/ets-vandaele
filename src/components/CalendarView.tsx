@@ -12,7 +12,7 @@ import { isWorkingDay, nextWorkingDay } from '../lib/workingDays';
 import ChantierTooltip from './ChantierTooltip';
 import MobilePeekCard from './MobilePeekCard';
 
-type ZoomPreset = 1 | 2 | 3 | 6 | 'year';
+type ZoomPreset = 1 | 2 | 3 | 6 | 'year' | 'fiscal' | 'custom';
 type CellMode   = 'full' | 'compact' | 'mini';
 
 const DOW_LONG  = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -329,9 +329,11 @@ function MonthGrid({
 
 // ── Period label ──────────────────────────────────────────────────────────────
 
-function periodLabel(periodStart: Date, zoomPreset: ZoomPreset): string {
-  if (zoomPreset === 'year') return format(periodStart, 'yyyy');
-  if (zoomPreset === 1) return format(periodStart, 'MMMM yyyy', { locale: fr });
+function periodLabel(periodStart: Date, periodEnd: Date, zoomPreset: ZoomPreset): string {
+  if (zoomPreset === 'year')   return format(periodStart, 'yyyy');
+  if (zoomPreset === 'fiscal') return `Exercice ${format(periodStart, 'yyyy')}/${format(periodEnd, 'yyyy')}`;
+  if (zoomPreset === 'custom') return `${format(periodStart, 'd MMM yyyy', { locale: fr })} – ${format(periodEnd, 'd MMM yyyy', { locale: fr })}`;
+  if (zoomPreset === 1)        return format(periodStart, 'MMMM yyyy', { locale: fr });
   const end = addMonths(periodStart, (zoomPreset as number) - 1);
   return `${format(periodStart, 'MMM', { locale: fr })} – ${format(end, 'MMM yyyy', { locale: fr })}`;
 }
@@ -411,24 +413,22 @@ export default function CalendarView({
     setDragOverDay(null);
   }, []);
 
-  // ── Layout ────────────────────────────────────────────────────────────────
-  const mode: CellMode =
-    zoomPreset === 1                     ? 'full'    :
-    zoomPreset === 2 || zoomPreset === 3 ? 'compact' : 'mini';
-
-  const colsCss =
-    zoomPreset === 1 ? 'grid-cols-1' :
-    zoomPreset === 2 ? 'grid-cols-1 sm:grid-cols-2' :
-    zoomPreset === 3 ? 'grid-cols-1 sm:grid-cols-3' :
-    zoomPreset === 6 ? 'grid-cols-2 sm:grid-cols-3' :
-                       'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
-
+  // ── Enumerate months first — mode/cols derived from actual count ─────────
   const months = useMemo(() => {
     const list: Date[] = [];
     let m = startOfMonth(periodStart);
     while (m <= periodEnd) { list.push(m); m = addMonths(m, 1); }
     return list;
   }, [periodStart, periodEnd]);
+
+  const mc = months.length;
+  const mode: CellMode = mc <= 1 ? 'full' : mc <= 4 ? 'compact' : 'mini';
+  const colsCss =
+    mc === 1 ? 'grid-cols-1' :
+    mc === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+    mc === 3 ? 'grid-cols-1 sm:grid-cols-3' :
+    mc <= 6  ? 'grid-cols-2 sm:grid-cols-3' :
+               'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
 
   return (
     <div
@@ -444,7 +444,7 @@ export default function CalendarView({
 
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 capitalize">
-            {periodLabel(periodStart, zoomPreset)}
+            {periodLabel(periodStart, periodEnd, zoomPreset)}
           </h2>
           <button onClick={() => onDrillDown(startOfMonth(new Date()))}
             className="hidden sm:flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors">

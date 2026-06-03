@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
-  startOfMonth, endOfMonth, addMonths, subMonths, startOfDay, differenceInCalendarDays, format,
+  startOfMonth, endOfMonth, addMonths, subMonths, addDays, startOfDay, differenceInCalendarDays, format,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
@@ -25,8 +25,21 @@ import {
   CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon, RouleauIcon,
 } from './EquipmentIcons';
 
-type ZoomPreset = 1 | 2 | 3 | 6 | 'year';
+type ZoomPreset = 1 | 2 | 3 | 6 | 'year' | 'fiscal' | 'custom';
 type ViewTab = 'gantt' | 'carte' | 'liste' | 'calendrier';
+
+// Fiscal year: 1 Jul → 30 Jun
+function getFiscalYearStart(ref: Date): Date {
+  const y = ref.getMonth() >= 6 ? ref.getFullYear() : ref.getFullYear() - 1;
+  return new Date(y, 6, 1);
+}
+function getFiscalYearEnd(ref: Date): Date {
+  return new Date(getFiscalYearStart(ref).getFullYear() + 1, 5, 30);
+}
+function parseDateInput(val: string): Date {
+  const [y, m, d] = val.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
 
 // Sidebar width used by the Gantt — must match GanttChart's SIDE_W
 const GANTT_SIDEBAR = typeof window !== 'undefined' && window.innerWidth < 640 ? 120 : 260;
@@ -113,14 +126,22 @@ export default function PlanDeCharge() {
   const [showStats, setShowStats] = useState(false);
   const [showGaps,  setShowGaps]  = useState(false);
   const [showNav,   setShowNav]   = useState(false);
-  const [showMenu, setShowMenu]   = useState(false);
+  const [showMenu,   setShowMenu]   = useState(false);
+  const [showFiscal, setShowFiscal] = useState(false);
+  const [customStart, setCustomStart] = useState(() => startOfMonth(new Date()));
+  const [customEnd,   setCustomEnd]   = useState(() => endOfMonth(addMonths(new Date(), 2)));
   const menuRef = useRef<HTMLDivElement>(null);
 
   // ── Period ─────────────────────────────────────────────────────────────────
-  const periodStart = startOfMonth(currentMonth);
-  const periodEnd = zoomPreset === 'year'
-    ? new Date(currentMonth.getFullYear(), 11, 31)
-    : endOfMonth(addMonths(currentMonth, (zoomPreset as number) - 1));
+  const periodStart =
+    zoomPreset === 'fiscal' ? getFiscalYearStart(currentMonth) :
+    zoomPreset === 'custom' ? customStart :
+    startOfMonth(currentMonth);
+  const periodEnd =
+    zoomPreset === 'year'   ? new Date(currentMonth.getFullYear(), 11, 31) :
+    zoomPreset === 'fiscal' ? getFiscalYearEnd(currentMonth) :
+    zoomPreset === 'custom' ? customEnd :
+    endOfMonth(addMonths(currentMonth, (zoomPreset as number) - 1));
 
   // ── Filtered chantiers ─────────────────────────────────────────────────────
   const filtered = chantiers.filter(c => {
@@ -145,6 +166,17 @@ export default function PlanDeCharge() {
     c.periodePreconiseeDebut && c.periodePreconiseeFin &&
     (c.dateDebut < c.periodePreconiseeDebut || c.dateFin > c.periodePreconiseeFin)
   ).length;
+
+  // ── Fiscal year estimate (always based on today's fiscal year) ────────────
+  const fiscalYStart      = getFiscalYearStart(new Date());
+  const fiscalYEnd        = getFiscalYearEnd(new Date());
+  const fiscalYLabel      = `${fiscalYStart.getFullYear()}/${fiscalYEnd.getFullYear()}`;
+  const inFiscalY         = (c: Chantier) =>
+    new Date(c.dateFin) >= fiscalYStart && new Date(c.dateDebut) <= fiscalYEnd;
+  const fiscalConfirmeCA  = chantiers.filter(c => c.status === 'confirme'  && inFiscalY(c))
+    .reduce((s, c) => s + caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees), 0);
+  const fiscalPotentielCA = chantiers.filter(c => c.status === 'potentiel' && inFiscalY(c))
+    .reduce((s, c) => s + caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees), 0);
 
   // ── Working-day occupancy for the visible period ───────────────────────────
   const periodWd = useMemo(
@@ -184,11 +216,23 @@ export default function PlanDeCharge() {
   const handleResize = useCallback(async (id: string, e: string) => updateChantier(id, { dateFin: e }), [updateChantier]);
 
   // ── Zoom / fit ─────────────────────────────────────────────────────────────
-  const fitDayWidth = useCallback((p: ZoomPreset, baseMonth: Date): number => {
-    const start = startOfMonth(baseMonth);
-    const end = p === 'year'
-      ? new Date(baseMonth.getFullYear(), 11, 31)
-      : endOfMonth(addMonths(start, (p as number) - 1));
+  const fitDayWidth = useCallback((
+    p: ZoomPreset, baseMonth: Date, cStart?: Date, cEnd?: Date
+  ): number => {
+    let start: Date, end: Date;
+    if (p === 'fiscal') {
+      start = getFiscalYearStart(baseMonth);
+      end   = getFiscalYearEnd(baseMonth);
+    } else if (p === 'custom') {
+      start = cStart!;
+      end   = cEnd!;
+    } else if (p === 'year') {
+      start = startOfMonth(baseMonth);
+      end   = new Date(baseMonth.getFullYear(), 11, 31);
+    } else {
+      start = startOfMonth(baseMonth);
+      end   = endOfMonth(addMonths(start, (p as number) - 1));
+    }
     const numDays = differenceInCalendarDays(end, start) + 1;
     const availableW = (containerRef.current?.clientWidth ?? window.innerWidth) - GANTT_SIDEBAR;
     return Math.max(3, availableW / numDays);
@@ -196,36 +240,55 @@ export default function PlanDeCharge() {
 
   const applyPreset = (p: ZoomPreset) => {
     setZoomPreset(p);
-    setDayWidth(fitDayWidth(p, currentMonth));
+    setDayWidth(fitDayWidth(p, currentMonth, customStart, customEnd));
   };
   const handleDayWidthChange = useCallback((w: number) => setDayWidth(w), []);
   const zoomIn  = () => setDayWidth(w => Math.min(100, w * 1.3));
   const zoomOut = () => setDayWidth(w => Math.max(3,   w / 1.3));
 
   // ── Navigation ─────────────────────────────────────────────────────────────
-  const step       = zoomPreset === 'year' ? 12 : zoomPreset as number;
+  const step = zoomPreset === 'year' || zoomPreset === 'fiscal' ? 12
+             : typeof zoomPreset === 'number' ? zoomPreset : 1;
+
   const prevPeriod = () => {
-    const next = subMonths(currentMonth, step);
-    setCurrentMonth(next);
-    setDayWidth(fitDayWidth(zoomPreset, next));
+    if (zoomPreset === 'custom') {
+      const dur = differenceInCalendarDays(customEnd, customStart);
+      const ns = addDays(customStart, -(dur + 1));
+      const ne = addDays(customEnd,   -(dur + 1));
+      setCustomStart(ns); setCustomEnd(ne);
+      setDayWidth(fitDayWidth('custom', currentMonth, ns, ne));
+    } else {
+      const next = subMonths(currentMonth, step);
+      setCurrentMonth(next);
+      setDayWidth(fitDayWidth(zoomPreset, next));
+    }
   };
   const nextPeriod = () => {
-    const next = addMonths(currentMonth, step);
-    setCurrentMonth(next);
-    setDayWidth(fitDayWidth(zoomPreset, next));
+    if (zoomPreset === 'custom') {
+      const dur = differenceInCalendarDays(customEnd, customStart);
+      const ns = addDays(customStart, dur + 1);
+      const ne = addDays(customEnd,   dur + 1);
+      setCustomStart(ns); setCustomEnd(ne);
+      setDayWidth(fitDayWidth('custom', currentMonth, ns, ne));
+    } else {
+      const next = addMonths(currentMonth, step);
+      setCurrentMonth(next);
+      setDayWidth(fitDayWidth(zoomPreset, next));
+    }
   };
   const goToday = () => {
     const t = new Date();
     setCurrentMonth(t);
-    setDayWidth(fitDayWidth(zoomPreset, t));
+    if (zoomPreset !== 'custom') setDayWidth(fitDayWidth(zoomPreset, t));
   };
 
   // ── Period label ──────────────────────────────────────────────────────────
-  const periodLabel = zoomPreset === 'year'
-    ? `Année ${currentMonth.getFullYear()}`
-    : zoomPreset === 1
-      ? `${MONTH_FR[periodStart.getMonth()]} ${periodStart.getFullYear()}`
-      : `${MONTH_FR[periodStart.getMonth()]} – ${MONTH_FR[periodEnd.getMonth()]} ${periodEnd.getFullYear()}`;
+  const periodLabel =
+    zoomPreset === 'year'   ? `Année ${currentMonth.getFullYear()}` :
+    zoomPreset === 'fiscal' ? `Exercice ${getFiscalYearStart(currentMonth).getFullYear()}/${getFiscalYearEnd(currentMonth).getFullYear()}` :
+    zoomPreset === 'custom' ? `${format(periodStart, 'd MMM yyyy', { locale: fr })} – ${format(periodEnd, 'd MMM yyyy', { locale: fr })}` :
+    zoomPreset === 1        ? `${MONTH_FR[periodStart.getMonth()]} ${periodStart.getFullYear()}` :
+    `${MONTH_FR[periodStart.getMonth()]} – ${MONTH_FR[periodEnd.getMonth()]} ${periodEnd.getFullYear()}`;
 
   // ── Smart reorganization ───────────────────────────────────────────────────
   const handleReorganize = async () => {
@@ -366,6 +429,20 @@ export default function PlanDeCharge() {
             )}
           </div>
 
+          {/* Fiscal toggle — desktop */}
+          <div className="hidden sm:block">
+            <button
+              onClick={() => setShowFiscal(f => !f)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                showFiscal
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400'
+              }`}>
+              <TrendingUp size={12}/>
+              Exercice {fiscalYLabel}
+            </button>
+          </div>
+
           {/* Desktop action buttons */}
           <div className="hidden sm:flex items-center gap-2">
             <div className="flex rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden text-xs">
@@ -439,10 +516,11 @@ export default function PlanDeCharge() {
             </div>
             {/* Section toggle chips */}
             {([
-              { key: 'CA',  active: showStats, toggle: () => setShowStats(s => !s) },
-              { key: 'Eng', active: showEquip, toggle: () => setShowEquip(e => !e) },
-              { key: 'Dsp', active: showGaps,  toggle: () => setShowGaps(g => !g) },
-              { key: 'Nav', active: showNav,   toggle: () => setShowNav(n => !n) },
+              { key: 'CA',  active: showStats,  toggle: () => setShowStats(s => !s) },
+              { key: 'Eng', active: showEquip,  toggle: () => setShowEquip(e => !e) },
+              { key: 'Fis', active: showFiscal, toggle: () => setShowFiscal(f => !f) },
+              { key: 'Dsp', active: showGaps,   toggle: () => setShowGaps(g => !g) },
+              { key: 'Nav', active: showNav,    toggle: () => setShowNav(n => !n) },
             ] as const).map(({ key, active, toggle }) => (
               <button key={key} onClick={toggle}
                 className={`px-1.5 py-1 rounded-md text-[10px] font-bold transition-colors ${
@@ -487,12 +565,16 @@ export default function PlanDeCharge() {
                   <div className="px-3 py-1.5">
                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Vue</p>
                     <div className="flex flex-wrap gap-1">
-                      {([1, 2, 3, 6, 'year'] as ZoomPreset[]).map(p => (
+                      {([1, 2, 3, 6, 'year', 'fiscal', 'custom'] as ZoomPreset[]).map(p => (
                         <button key={String(p)} onClick={() => { applyPreset(p); setShowMenu(false); }}
                           className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                            zoomPreset === p ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'
+                            zoomPreset === p
+                              ? p === 'fiscal' ? 'bg-indigo-600 text-white'
+                              : p === 'custom' ? 'bg-sky-600 text-white'
+                              : 'bg-slate-800 text-white'
+                              : 'bg-slate-100 text-slate-600'
                           }`}>
-                          {p === 1 ? '1 mois' : p === 2 ? '2 mois' : p === 3 ? '3 mois' : p === 6 ? '6 mois' : 'Année'}
+                          {p === 1 ? '1 mois' : p === 2 ? '2 mois' : p === 3 ? '3 mois' : p === 6 ? '6 mois' : p === 'year' ? 'Année' : p === 'fiscal' ? 'Fiscal' : 'Dates'}
                         </button>
                       ))}
                       <button onClick={() => { goToday(); setShowMenu(false); }}
@@ -500,6 +582,37 @@ export default function PlanDeCharge() {
                         <Calendar size={11}/> Auj.
                       </button>
                     </div>
+                    {/* Custom date inputs for mobile */}
+                    {zoomPreset === 'custom' && (
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 w-8">Début</span>
+                          <input
+                            type="date"
+                            value={format(customStart, 'yyyy-MM-dd')}
+                            onChange={e => {
+                              if (!e.target.value) return;
+                              const d = parseDateInput(e.target.value);
+                              setCustomStart(d);
+                              setDayWidth(fitDayWidth('custom', currentMonth, d, customEnd));
+                            }}
+                            className="flex-1 text-xs border border-slate-200 rounded px-2 py-1 text-slate-600" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 w-8">Fin</span>
+                          <input
+                            type="date"
+                            value={format(customEnd, 'yyyy-MM-dd')}
+                            onChange={e => {
+                              if (!e.target.value) return;
+                              const d = parseDateInput(e.target.value);
+                              setCustomEnd(d);
+                              setDayWidth(fitDayWidth('custom', currentMonth, customStart, d));
+                            }}
+                            className="flex-1 text-xs border border-slate-200 rounded px-2 py-1 text-slate-600" />
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" />
                   <button
@@ -590,6 +703,45 @@ export default function PlanDeCharge() {
           </div>
         )}
 
+        {/* Fiscal year estimate — toggled by Fis chip (mobile) or always visible (desktop) */}
+        {showFiscal && (
+          <div className="border-b border-slate-100 dark:border-slate-700/50 px-3 sm:px-6 py-2 flex flex-wrap items-center gap-3 bg-indigo-50/50 dark:bg-indigo-900/10">
+            <div className="flex flex-col flex-shrink-0">
+              <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
+                Exercice {fiscalYLabel}
+              </span>
+              <span className="text-[9px] text-slate-400">
+                {format(fiscalYStart, 'd MMM yyyy', { locale: fr })} → {format(fiscalYEnd, 'd MMM yyyy', { locale: fr })}
+              </span>
+            </div>
+            <div className="w-px h-7 bg-indigo-100 dark:bg-indigo-800 flex-shrink-0" />
+            <div className="flex items-center gap-4 overflow-x-auto">
+              <div className="flex-shrink-0 text-center">
+                <p className="text-[9px] text-slate-400 uppercase tracking-wide">CA signé</p>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{fiscalConfirmeCA.toLocaleString('fr-FR')} €</p>
+              </div>
+              <div className="flex-shrink-0 text-center">
+                <p className="text-[9px] text-slate-400 uppercase tracking-wide">Potentiel</p>
+                <p className="text-xs font-semibold text-slate-400">{fiscalPotentielCA.toLocaleString('fr-FR')} €</p>
+              </div>
+              <div className="flex-shrink-0 text-center">
+                <p className="text-[9px] text-slate-400 uppercase tracking-wide flex items-center gap-0.5 justify-center">
+                  <TrendingUp size={8} className="text-indigo-500"/> Total exercice
+                </p>
+                <p className="text-xs font-bold text-indigo-600">{(fiscalConfirmeCA + fiscalPotentielCA).toLocaleString('fr-FR')} €</p>
+              </div>
+              <div className="flex-shrink-0 text-center">
+                <p className="text-[9px] text-slate-400 uppercase tracking-wide">Tx. conversion</p>
+                <p className="text-xs font-bold text-emerald-600">
+                  {fiscalConfirmeCA + fiscalPotentielCA > 0
+                    ? Math.round((fiscalConfirmeCA / (fiscalConfirmeCA + fiscalPotentielCA)) * 100)
+                    : 0}%
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Navigation + zoom + tabs — always desktop, toggled on mobile */}
         <div className={`items-center gap-1.5 sm:gap-3 px-3 sm:px-6 py-2 ${showNav ? 'flex' : 'hidden sm:flex'}`}>
           {/* Prev / Today / Next */}
@@ -610,16 +762,46 @@ export default function PlanDeCharge() {
           </span>
 
           {/* Zoom presets — desktop */}
-          <div className="hidden sm:flex items-center gap-1">
+          <div className="hidden sm:flex items-center gap-1 flex-wrap">
             <span className="text-xs text-slate-400 mr-1">Vue :</span>
-            {([1, 2, 3, 6, 'year'] as ZoomPreset[]).map(p => (
+            {([1, 2, 3, 6, 'year', 'fiscal', 'custom'] as ZoomPreset[]).map(p => (
               <button key={String(p)} onClick={() => applyPreset(p)}
                 className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
-                  zoomPreset === p ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  zoomPreset === p
+                    ? p === 'fiscal' ? 'bg-indigo-600 text-white'
+                    : p === 'custom' ? 'bg-sky-600 text-white'
+                    : 'bg-slate-800 dark:bg-slate-600 text-white'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}>
-                {p === 1 ? '1 mois' : p === 2 ? '2 mois' : p === 3 ? '3 mois' : p === 6 ? '6 mois' : 'Année'}
+                {p === 1 ? '1 mois' : p === 2 ? '2 mois' : p === 3 ? '3 mois' : p === 6 ? '6 mois' : p === 'year' ? 'Année' : p === 'fiscal' ? 'Fiscal' : 'Dates'}
               </button>
             ))}
+            {/* Custom date pickers — shown inline when custom is active */}
+            {zoomPreset === 'custom' && (
+              <div className="flex items-center gap-1 ml-1 px-2 py-0.5 border border-sky-200 dark:border-sky-700 rounded-lg bg-sky-50 dark:bg-sky-900/20">
+                <input
+                  type="date"
+                  value={format(customStart, 'yyyy-MM-dd')}
+                  onChange={e => {
+                    if (!e.target.value) return;
+                    const d = parseDateInput(e.target.value);
+                    setCustomStart(d);
+                    setDayWidth(fitDayWidth('custom', currentMonth, d, customEnd));
+                  }}
+                  className="text-xs text-slate-600 dark:text-slate-300 bg-transparent border-none outline-none cursor-pointer w-28" />
+                <span className="text-slate-300 text-xs">–</span>
+                <input
+                  type="date"
+                  value={format(customEnd, 'yyyy-MM-dd')}
+                  onChange={e => {
+                    if (!e.target.value) return;
+                    const d = parseDateInput(e.target.value);
+                    setCustomEnd(d);
+                    setDayWidth(fitDayWidth('custom', currentMonth, customStart, d));
+                  }}
+                  className="text-xs text-slate-600 dark:text-slate-300 bg-transparent border-none outline-none cursor-pointer w-28" />
+              </div>
+            )}
             <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden ml-1">
               <button onClick={zoomOut} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors" title="Dézoomer">
                 <ZoomOut size={13} />
