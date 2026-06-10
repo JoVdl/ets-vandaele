@@ -19,7 +19,7 @@ import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import { reorganize, type ReorganizeMode } from '../lib/reorganize';
 import { geocode, extractLocationCandidates } from '../lib/geocoder';
-import { countWorkingDays, caAnnuel, findGaps } from '../lib/workingDays';
+import { countWorkingDays, caAnnuel } from '../lib/workingDays';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
   CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon, RouleauIcon,
@@ -156,11 +156,12 @@ export default function PlanDeCharge() {
     return new Date(c.dateDebut) <= periodEnd && new Date(c.dateFin) >= periodStart;
   });
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
-  const confirmes   = chantiers.filter(c => c.status === 'confirme');
-  const potentiels  = chantiers.filter(c => c.status === 'potentiel');
-  const caConfirme  = confirmes.reduce((s, c)  => s + caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees), 0);
-  const caPotentiel = potentiels.reduce((s, c) => s + caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees), 0);
+  // ── Stats — scoped to the current view period ─────────────────────────────
+  const inPeriod    = (c: Chantier) => new Date(c.dateFin) >= periodStart && new Date(c.dateDebut) <= periodEnd;
+  const periodConf  = chantiers.filter(c => c.status === 'confirme'  && inPeriod(c));
+  const periodPot   = chantiers.filter(c => c.status === 'potentiel' && inPeriod(c));
+  const caConfirme  = periodConf.reduce((s, c) => s + caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees), 0);
+  const caPotentiel = periodPot.reduce((s, c)  => s + caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees), 0);
 
   const warnCount = chantiers.filter(c =>
     c.periodePreconiseeDebut && c.periodePreconiseeFin &&
@@ -184,14 +185,23 @@ export default function PlanDeCharge() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [periodStart.getTime(), periodEnd.getTime()]
   );
-  const freeWd = useMemo(() => {
-    const intervals = filtered.map(c => ({
-      start: startOfDay(new Date(c.dateDebut)),
-      end:   startOfDay(new Date(c.dateFin)),
-    }));
-    return findGaps(startOfDay(periodStart), startOfDay(periodEnd), intervals)
-      .reduce((s, g) => s + g.workingDays, 0);
-  }, [filtered, periodStart, periodEnd]);
+  // ── Forecast (CA moyen/jour × taux de remplissage potentiel) ─────────────
+  const { confirmedWD, potentialWD, caPerWD, fillRate, previsionnel } = useMemo(() => {
+    const clampWD = (c: Chantier) => {
+      const s = startOfDay(new Date(c.dateDebut) < periodStart ? periodStart : new Date(c.dateDebut));
+      const e = startOfDay(new Date(c.dateFin)   > periodEnd   ? periodEnd   : new Date(c.dateFin));
+      return Math.max(0, countWorkingDays(s, e));
+    };
+    const confWD = periodConf.reduce((s, c) => s + clampWD(c), 0);
+    const potWD  = periodPot.reduce((s, c)  => s + clampWD(c), 0);
+    const perWD  = confWD > 0 ? Math.round(caConfirme / confWD) : 0;
+    const total  = countWorkingDays(periodStart, periodEnd);
+    const rate   = total > 0 ? Math.round(((confWD + potWD) / total) * 100) : 0;
+    const freeF  = Math.max(0, total - confWD - potWD);
+    const prev   = perWD > 0 ? Math.round(caConfirme + caPotentiel + freeF * perWD) : null;
+    return { confirmedWD: confWD, potentialWD: potWD, caPerWD: perWD, fillRate: rate, previsionnel: prev };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodConf.length, periodPot.length, caConfirme, caPotentiel, periodStart.getTime(), periodEnd.getTime()]);
 
   // ── Equipment utilization (visible period) ────────────────────────────────
   const equipLines = useMemo(
@@ -407,32 +417,42 @@ export default function PlanDeCharge() {
             </div>
           </div>
 
-          {/* CA summary — desktop only */}
-          <div className="hidden sm:flex items-center gap-5">
+          {/* CA summary — desktop only, scoped to current period */}
+          <div className="hidden sm:flex items-center gap-4">
+            {/* Period label as context */}
             <div className="text-right">
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide">CA validé</p>
+              <p className="text-[9px] text-slate-300 uppercase tracking-wide mb-0.5">{periodLabel}</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide">CA signé</p>
               <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{caConfirme.toLocaleString('fr-FR')} €</p>
             </div>
             <div className="w-px h-8 bg-slate-100 dark:bg-slate-700" />
             <div className="text-right">
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide">CA potentiel</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide">Potentiel</p>
               <p className="text-sm font-semibold text-slate-400">{caPotentiel.toLocaleString('fr-FR')} €</p>
             </div>
+            {previsionnel !== null && (
+              <>
+                <div className="w-px h-8 bg-slate-100 dark:bg-slate-700" />
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wide flex items-center gap-1 justify-end">
+                    <TrendingUp size={10} className="text-emerald-500"/> Prévisionnel
+                  </p>
+                  <p className="text-sm font-bold text-emerald-600">{previsionnel.toLocaleString('fr-FR')} €</p>
+                  <p className="text-[10px] text-slate-400">{caPerWD.toLocaleString('fr-FR')} €/j · {fillRate}%</p>
+                </div>
+              </>
+            )}
             <div className="w-px h-8 bg-slate-100 dark:bg-slate-700" />
             <div className="text-right">
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide flex items-center gap-1 justify-end">
-                <TrendingUp size={10} className="text-green-500"/> Total
-              </p>
-              <p className="text-sm font-bold text-blue-600">{(caConfirme + caPotentiel).toLocaleString('fr-FR')} €</p>
-            </div>
-            <div className="w-px h-8 bg-slate-100 dark:bg-slate-700" />
-            <div className="text-right">
-              <p className="text-[10px] text-slate-400 uppercase tracking-wide">Jours ouvrés</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide">Remplissage</p>
               <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                {periodWd - freeWd}
-                <span className="text-xs font-normal text-slate-400"> / {periodWd}</span>
+                {confirmedWD + potentialWD}
+                <span className="text-xs font-normal text-slate-400"> / {periodWd} j</span>
               </p>
-              <p className="text-[10px] text-green-600">{freeWd} dispo</p>
+              <p className="text-[10px]">
+                <span className="text-blue-600">{confirmedWD}j signé</span>
+                {potentialWD > 0 && <span className="text-slate-400"> + {potentialWD}j pot.</span>}
+              </p>
             </div>
             {warnCount > 0 && (
               <>
@@ -682,23 +702,24 @@ export default function PlanDeCharge() {
         {/* Mobile CA stats row — toggled by the CA button */}
         <div className={`sm:hidden divide-x divide-slate-100 dark:divide-slate-700 border-b border-slate-100 dark:border-slate-700/50 ${showStats ? 'flex' : 'hidden'}`}>
           <div className="flex-1 px-2 py-1.5 text-center">
-            <p className="text-[9px] text-slate-400 uppercase tracking-wide">Validé</p>
+            <p className="text-[9px] text-slate-400 uppercase tracking-wide">Signé</p>
             <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{caConfirme.toLocaleString('fr-FR')} €</p>
           </div>
           <div className="flex-1 px-2 py-1.5 text-center">
             <p className="text-[9px] text-slate-400 uppercase tracking-wide">Potentiel</p>
-            <p className="text-xs font-semibold text-slate-400">{caPotentiel.toLocaleString('fr-FR')} €</p>
+            <p className="text-xs font-semibold text-amber-600">{caPotentiel.toLocaleString('fr-FR')} €</p>
           </div>
-          <div className="flex-1 px-2 py-1.5 text-center">
-            <p className="text-[9px] text-slate-400 uppercase tracking-wide flex items-center justify-center gap-0.5"><TrendingUp size={8} className="text-green-500"/> Total</p>
-            <p className="text-xs font-bold text-blue-600">{(caConfirme + caPotentiel).toLocaleString('fr-FR')} €</p>
-          </div>
+          {previsionnel !== null && (
+            <div className="flex-1 px-2 py-1.5 text-center">
+              <p className="text-[9px] text-slate-400 uppercase tracking-wide flex items-center justify-center gap-0.5"><TrendingUp size={8} className="text-green-500"/> Prév.</p>
+              <p className="text-xs font-bold text-green-700">{previsionnel.toLocaleString('fr-FR')} €</p>
+              {caPerWD > 0 && <p className="text-[9px] text-slate-400">{caPerWD.toLocaleString('fr-FR')} €/j</p>}
+            </div>
+          )}
           <div className="px-2 py-1.5 text-center">
-            <p className="text-[9px] text-slate-400 uppercase tracking-wide">Jours</p>
-            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
-              {periodWd - freeWd}<span className="font-normal text-slate-400">/{periodWd}</span>
-            </p>
-            <p className="text-[9px] text-green-600">{freeWd} dispo</p>
+            <p className="text-[9px] text-slate-400 uppercase tracking-wide">Rempl.</p>
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{fillRate}%</p>
+            <p className="text-[9px] text-slate-400">{confirmedWD + potentialWD}/{periodWd}j</p>
           </div>
           {warnCount > 0 && (
             <div className="px-2 py-1.5 text-center">
