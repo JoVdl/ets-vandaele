@@ -242,9 +242,25 @@ export default function PlanDeCharge() {
     setZoomPreset(p);
     setDayWidth(fitDayWidth(p, currentMonth, customStart, customEnd));
   };
+  const goToFiscalYear = (startYear: number) => {
+    const base = new Date(startYear, 6, 1);
+    setZoomPreset('fiscal');
+    setCurrentMonth(base);
+    setDayWidth(fitDayWidth('fiscal', base));
+  };
   const handleDayWidthChange = useCallback((w: number) => setDayWidth(w), []);
   const zoomIn  = () => setDayWidth(w => Math.min(100, w * 1.3));
   const zoomOut = () => setDayWidth(w => Math.max(3,   w / 1.3));
+
+  // ── Fiscal year quick-access (prev / current / next) ─────────────────────
+  const curFiscalYear    = getFiscalYearStart(new Date()).getFullYear();
+  const activeFiscalYear = zoomPreset === 'fiscal' ? getFiscalYearStart(currentMonth).getFullYear() : -1;
+  const fiscalShortcuts  = [
+    { year: curFiscalYear - 1, tag: null },
+    { year: curFiscalYear,     tag: 'en cours' },
+    { year: curFiscalYear + 1, tag: 'prév.' },
+  ];
+  const shortLabel = (y: number) => `${String(y).slice(-2)}/${String(y + 1).slice(-2)}`;
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   const step = zoomPreset === 'year' || zoomPreset === 'fiscal' ? 12
@@ -439,7 +455,7 @@ export default function PlanDeCharge() {
                   : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400'
               }`}>
               <TrendingUp size={12}/>
-              Exercice {fiscalYLabel}
+              Exercice {shortLabel(curFiscalYear)}
             </button>
           </div>
 
@@ -565,18 +581,29 @@ export default function PlanDeCharge() {
                   <div className="px-3 py-1.5">
                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Vue</p>
                     <div className="flex flex-wrap gap-1">
-                      {([1, 2, 3, 6, 'year', 'fiscal', 'custom'] as ZoomPreset[]).map(p => (
+                      {([1, 2, 3, 6, 'year'] as ZoomPreset[]).map(p => (
                         <button key={String(p)} onClick={() => { applyPreset(p); setShowMenu(false); }}
                           className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                            zoomPreset === p
-                              ? p === 'fiscal' ? 'bg-indigo-600 text-white'
-                              : p === 'custom' ? 'bg-sky-600 text-white'
-                              : 'bg-slate-800 text-white'
-                              : 'bg-slate-100 text-slate-600'
+                            zoomPreset === p ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'
                           }`}>
-                          {p === 1 ? '1 mois' : p === 2 ? '2 mois' : p === 3 ? '3 mois' : p === 6 ? '6 mois' : p === 'year' ? 'Année' : p === 'fiscal' ? 'Fiscal' : 'Dates'}
+                          {p === 1 ? '1 mois' : p === 2 ? '2 mois' : p === 3 ? '3 mois' : p === 6 ? '6 mois' : 'Année'}
                         </button>
                       ))}
+                      {fiscalShortcuts.map(({ year, tag }) => (
+                        <button key={year} onClick={() => { goToFiscalYear(year); setShowMenu(false); }}
+                          className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${
+                            activeFiscalYear === year ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700'
+                          }`}>
+                          {shortLabel(year)}
+                          {tag && <span className="text-[9px] opacity-80">{tag === 'en cours' ? '●' : '~'}</span>}
+                        </button>
+                      ))}
+                      <button onClick={() => { applyPreset('custom'); setShowMenu(false); }}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                          zoomPreset === 'custom' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                        Dates
+                      </button>
                       <button onClick={() => { goToday(); setShowMenu(false); }}
                         className="px-2.5 py-1 text-xs font-medium rounded-md bg-blue-50 text-blue-600 flex items-center gap-1">
                         <Calendar size={11}/> Auj.
@@ -764,18 +791,47 @@ export default function PlanDeCharge() {
           {/* Zoom presets — desktop */}
           <div className="hidden sm:flex items-center gap-1 flex-wrap">
             <span className="text-xs text-slate-400 mr-1">Vue :</span>
-            {([1, 2, 3, 6, 'year', 'fiscal', 'custom'] as ZoomPreset[]).map(p => (
+            {([1, 2, 3, 6, 'year'] as ZoomPreset[]).map(p => (
               <button key={String(p)} onClick={() => applyPreset(p)}
                 className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
                   zoomPreset === p
-                    ? p === 'fiscal' ? 'bg-indigo-600 text-white'
-                    : p === 'custom' ? 'bg-sky-600 text-white'
-                    : 'bg-slate-800 dark:bg-slate-600 text-white'
+                    ? 'bg-slate-800 dark:bg-slate-600 text-white'
                     : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}>
-                {p === 1 ? '1 mois' : p === 2 ? '2 mois' : p === 3 ? '3 mois' : p === 6 ? '6 mois' : p === 'year' ? 'Année' : p === 'fiscal' ? 'Fiscal' : 'Dates'}
+                {p === 1 ? '1 mois' : p === 2 ? '2 mois' : p === 3 ? '3 mois' : p === 6 ? '6 mois' : 'Année'}
               </button>
             ))}
+            {/* Fiscal year shortcuts */}
+            <div className="flex items-center gap-0.5 border-l border-slate-200 dark:border-slate-600 pl-1.5 ml-0.5">
+              {fiscalShortcuts.map(({ year, tag }) => (
+                <button key={year} onClick={() => goToFiscalYear(year)}
+                  className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    activeFiscalYear === year
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
+                  }`}>
+                  {shortLabel(year)}
+                  {tag && (
+                    <span className={`text-[9px] px-1 py-px rounded-full ${
+                      activeFiscalYear === year
+                        ? 'bg-white/20 text-white'
+                        : tag === 'en cours' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {tag}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {/* Custom date range */}
+            <button onClick={() => applyPreset('custom')}
+              className={`px-2.5 py-1 text-xs font-medium rounded transition-colors border-l border-slate-200 dark:border-slate-600 ml-0.5 pl-2.5 ${
+                zoomPreset === 'custom'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}>
+              Dates
+            </button>
             {/* Custom date pickers — shown inline when custom is active */}
             {zoomPreset === 'custom' && (
               <div className="flex items-center gap-1 ml-1 px-2 py-0.5 border border-sky-200 dark:border-sky-700 rounded-lg bg-sky-50 dark:bg-sky-900/20">
