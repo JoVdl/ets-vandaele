@@ -185,7 +185,9 @@ export default function PlanDeCharge() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [periodStart.getTime(), periodEnd.getTime()]
   );
-  // ── Forecast (CA moyen/jour × taux de remplissage potentiel) ─────────────
+  // ── Forecast (CA signé + jours libres × CA moyen/jour ouvré) ────────────
+  // Fill rate = jours signés uniquement (les potentiels ne sont pas comptabilisés)
+  // Prévisionnel = CA signé + jours encore libres × CA moyen/jour (si on remplit bien le planning)
   const { confirmedWD, potentialWD, caPerWD, fillRate, previsionnel } = useMemo(() => {
     const clampWD = (c: Chantier) => {
       const s = startOfDay(new Date(c.dateDebut) < periodStart ? periodStart : new Date(c.dateDebut));
@@ -196,12 +198,14 @@ export default function PlanDeCharge() {
     const potWD  = periodPot.reduce((s, c)  => s + clampWD(c), 0);
     const perWD  = confWD > 0 ? Math.round(caConfirme / confWD) : 0;
     const total  = countWorkingDays(periodStart, periodEnd);
-    const rate   = total > 0 ? Math.round(((confWD + potWD) / total) * 100) : 0;
-    const freeF  = Math.max(0, total - confWD - potWD);
-    const prev   = perWD > 0 ? Math.round(caConfirme + caPotentiel + freeF * perWD) : null;
+    // Taux de remplissage : chantiers signés seulement
+    const rate   = total > 0 ? Math.round((confWD / total) * 100) : 0;
+    // Prévisionnel : CA signé + jours libres (hors signés) × CA moyen/jour
+    const freeF  = Math.max(0, total - confWD);
+    const prev   = perWD > 0 ? Math.round(caConfirme + freeF * perWD) : null;
     return { confirmedWD: confWD, potentialWD: potWD, caPerWD: perWD, fillRate: rate, previsionnel: prev };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodConf.length, periodPot.length, caConfirme, caPotentiel, periodStart.getTime(), periodEnd.getTime()]);
+  }, [periodConf.length, periodPot.length, caConfirme, periodStart.getTime(), periodEnd.getTime()]);
 
   // ── Equipment utilization (visible period) ────────────────────────────────
   const equipLines = useMemo(
@@ -438,7 +442,7 @@ export default function PlanDeCharge() {
                     <TrendingUp size={10} className="text-emerald-500"/> Prévisionnel
                   </p>
                   <p className="text-sm font-bold text-emerald-600">{previsionnel.toLocaleString('fr-FR')} €</p>
-                  <p className="text-[10px] text-slate-400">{caPerWD.toLocaleString('fr-FR')} €/j · {fillRate}%</p>
+                  <p className="text-[10px] text-slate-400">{caPerWD.toLocaleString('fr-FR')} €/j · {fillRate}% signé</p>
                 </div>
               </>
             )}
@@ -446,12 +450,13 @@ export default function PlanDeCharge() {
             <div className="text-right">
               <p className="text-[10px] text-slate-400 uppercase tracking-wide">Remplissage</p>
               <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                {confirmedWD + potentialWD}
-                <span className="text-xs font-normal text-slate-400"> / {periodWd} j</span>
+                {fillRate}%
+                <span className="text-xs font-normal text-slate-400"> signé</span>
               </p>
               <p className="text-[10px]">
-                <span className="text-blue-600">{confirmedWD}j signé</span>
-                {potentialWD > 0 && <span className="text-slate-400"> + {potentialWD}j pot.</span>}
+                <span className="text-blue-600">{confirmedWD}j</span>
+                <span className="text-slate-400"> / {periodWd} j ouvrés</span>
+                {potentialWD > 0 && <span className="text-amber-500"> + {potentialWD}j pot.</span>}
               </p>
             </div>
             {warnCount > 0 && (
@@ -719,7 +724,7 @@ export default function PlanDeCharge() {
           <div className="px-2 py-1.5 text-center">
             <p className="text-[9px] text-slate-400 uppercase tracking-wide">Rempl.</p>
             <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{fillRate}%</p>
-            <p className="text-[9px] text-slate-400">{confirmedWD + potentialWD}/{periodWd}j</p>
+            <p className="text-[9px] text-slate-400">{confirmedWD}/{periodWd}j</p>
           </div>
           {warnCount > 0 && (
             <div className="px-2 py-1.5 text-center">
