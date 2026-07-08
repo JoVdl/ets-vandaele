@@ -130,7 +130,12 @@ export default function PlanDeCharge() {
   const [showFiscal, setShowFiscal] = useState(false);
   const [customStart, setCustomStart] = useState(() => startOfMonth(new Date()));
   const [customEnd,   setCustomEnd]   = useState(() => endOfMonth(addMonths(new Date(), 2)));
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [showMonthlyCA,   setShowMonthlyCA]   = useState(false);
+  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
+  const [monthPickerYear, setMonthPickerYear] = useState(new Date().getFullYear());
+  const [monthPickerAnchor, setMonthPickerAnchor] = useState<Date | null>(null);
+  const menuRef       = useRef<HTMLDivElement>(null);
+  const monthPickRef  = useRef<HTMLDivElement>(null);
 
   // ── Period ─────────────────────────────────────────────────────────────────
   const periodStart =
@@ -206,6 +211,35 @@ export default function PlanDeCharge() {
     return { confirmedWD: confWD, potentialWD: potWD, caPerWD: perWD, fillRate: rate, previsionnel: prev };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodConf.length, periodPot.length, caConfirme, periodStart.getTime(), periodEnd.getTime()]);
+
+  // ── Monthly CA breakdown (confirmed, prorated by working days) ───────────
+  const monthlyCAData = useMemo(() => {
+    const months: Array<{ start: Date; label: string; ca: number; cumulCA: number }> = [];
+    let m = startOfMonth(periodStart);
+    while (m <= periodEnd) {
+      const mEnd = endOfMonth(m);
+      const mStart = m < periodStart ? periodStart : m;
+      const mEndClamped = mEnd > periodEnd ? periodEnd : mEnd;
+      let ca = 0;
+      for (const c of periodConf) {
+        const cs = startOfDay(new Date(c.dateDebut));
+        const ce = startOfDay(new Date(c.dateFin));
+        const oS = cs < mStart ? startOfDay(mStart) : cs;
+        const oE = ce > mEndClamped ? startOfDay(mEndClamped) : ce;
+        if (oS > oE) continue;
+        const totalWD = countWorkingDays(cs, ce);
+        if (totalWD <= 0) continue;
+        const monthWD = countWorkingDays(oS, oE);
+        ca += Math.round(caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees) * monthWD / totalWD);
+      }
+      months.push({ start: m, label: format(m, 'MMM', { locale: fr }), ca, cumulCA: 0 });
+      m = addMonths(m, 1);
+    }
+    let cumul = 0;
+    for (const mo of months) { cumul += mo.ca; mo.cumulCA = cumul; }
+    return months;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodConf.length, caConfirme, periodStart.getTime(), periodEnd.getTime()]);
 
   // ── Equipment utilization (visible period) ────────────────────────────────
   const equipLines = useMemo(
@@ -385,6 +419,10 @@ export default function PlanDeCharge() {
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false);
+      if (monthPickRef.current && !monthPickRef.current.contains(e.target as Node)) {
+        setMonthPickerOpen(false);
+        setMonthPickerAnchor(null);
+      }
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -470,8 +508,8 @@ export default function PlanDeCharge() {
             )}
           </div>
 
-          {/* Fiscal toggle — desktop */}
-          <div className="hidden sm:block">
+          {/* Fiscal + monthly CA toggles — desktop */}
+          <div className="hidden sm:flex items-center gap-1.5">
             <button
               onClick={() => setShowFiscal(f => !f)}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
@@ -481,6 +519,16 @@ export default function PlanDeCharge() {
               }`}>
               <TrendingUp size={12}/>
               Exercice {shortLabel(curFiscalYear)}
+            </button>
+            <button
+              onClick={() => setShowMonthlyCA(s => !s)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                showMonthlyCA
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400'
+              }`}>
+              <BarChart2 size={12}/>
+              CA/mois
             </button>
           </div>
 
@@ -557,11 +605,12 @@ export default function PlanDeCharge() {
             </div>
             {/* Section toggle chips */}
             {([
-              { key: 'CA',  active: showStats,  toggle: () => setShowStats(s => !s) },
-              { key: 'Eng', active: showEquip,  toggle: () => setShowEquip(e => !e) },
-              { key: 'Fis', active: showFiscal, toggle: () => setShowFiscal(f => !f) },
-              { key: 'Dsp', active: showGaps,   toggle: () => setShowGaps(g => !g) },
-              { key: 'Nav', active: showNav,    toggle: () => setShowNav(n => !n) },
+              { key: 'CA',  active: showStats,     toggle: () => setShowStats(s => !s) },
+              { key: 'Eng', active: showEquip,     toggle: () => setShowEquip(e => !e) },
+              { key: 'Fis', active: showFiscal,    toggle: () => setShowFiscal(f => !f) },
+              { key: 'Mois',active: showMonthlyCA, toggle: () => setShowMonthlyCA(s => !s) },
+              { key: 'Dsp', active: showGaps,      toggle: () => setShowGaps(g => !g) },
+              { key: 'Nav', active: showNav,       toggle: () => setShowNav(n => !n) },
             ] as const).map(({ key, active, toggle }) => (
               <button key={key} onClick={toggle}
                 className={`px-1.5 py-1 rounded-md text-[10px] font-bold transition-colors ${
@@ -795,6 +844,38 @@ export default function PlanDeCharge() {
           </div>
         )}
 
+        {/* Monthly CA breakdown — toggled by CA/mois */}
+        {showMonthlyCA && monthlyCAData.length > 0 && (() => {
+          const maxCA = Math.max(...monthlyCAData.map(m => m.ca), 1);
+          const fmt = (v: number) => v >= 1_000_000 ? `${(v/1_000_000).toFixed(1)}M` : v >= 1000 ? `${Math.round(v/1000)}k` : `${v}`;
+          return (
+            <div className="border-b border-slate-100 dark:border-slate-700/50 px-3 sm:px-6 py-2 bg-blue-50/40 dark:bg-blue-900/5">
+              <div className="flex items-stretch gap-px overflow-x-auto">
+                {monthlyCAData.map((mo, i) => {
+                  const pct = maxCA > 0 ? (mo.ca / maxCA) * 100 : 0;
+                  const isToday = new Date() >= mo.start && new Date() <= endOfMonth(mo.start);
+                  return (
+                    <div key={i} className={`flex-shrink-0 flex flex-col items-center w-[52px] sm:w-[60px] px-0.5 rounded-md ${isToday ? 'bg-blue-100/60 dark:bg-blue-800/20' : ''}`}>
+                      <span className={`text-[9px] uppercase tracking-wide mb-1 ${isToday ? 'text-blue-600 font-bold' : 'text-slate-400'}`}>{mo.label}</span>
+                      <div className="w-full h-10 bg-slate-100 dark:bg-slate-700 rounded relative overflow-hidden flex-shrink-0">
+                        <div
+                          className={`absolute bottom-0 left-0 right-0 rounded transition-all ${isToday ? 'bg-blue-500' : 'bg-blue-400/70 dark:bg-blue-500/60'}`}
+                          style={{ height: `${pct}%` }}
+                        />
+                      </div>
+                      {mo.ca > 0
+                        ? <span className="text-[8px] font-semibold text-blue-700 dark:text-blue-300 mt-0.5 tabular-nums">{fmt(mo.ca)}</span>
+                        : <span className="text-[8px] text-slate-300 mt-0.5">—</span>
+                      }
+                      <span className="text-[8px] text-slate-400 tabular-nums">∑{fmt(mo.cumulCA)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Navigation + zoom + tabs — always desktop, toggled on mobile */}
         <div className={`items-center gap-1.5 sm:gap-3 px-3 sm:px-6 py-2 ${showNav ? 'flex' : 'hidden sm:flex'}`}>
           {/* Prev / Today / Next */}
@@ -849,15 +930,77 @@ export default function PlanDeCharge() {
                 </button>
               ))}
             </div>
-            {/* Custom date range */}
-            <button onClick={() => applyPreset('custom')}
-              className={`px-2.5 py-1 text-xs font-medium rounded transition-colors border-l border-slate-200 dark:border-slate-600 ml-0.5 pl-2.5 ${
-                zoomPreset === 'custom'
-                  ? 'bg-sky-600 text-white'
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-              }`}>
-              Dates
-            </button>
+            {/* Month range picker + custom date range */}
+            <div className="relative border-l border-slate-200 dark:border-slate-600 ml-0.5 pl-2.5 flex items-center gap-1" ref={monthPickRef}>
+              <button
+                onClick={() => { setMonthPickerOpen(o => !o); setMonthPickerAnchor(null); setMonthPickerYear(periodStart.getFullYear()); }}
+                className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                  monthPickerOpen ? 'bg-teal-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}>
+                Mois…
+              </button>
+              {monthPickerOpen && (
+                <div className="absolute top-full mt-1 left-0 z-50 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-3 w-60">
+                  <div className="flex items-center justify-between mb-2">
+                    <button onClick={() => setMonthPickerYear(y => y - 1)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-300 transition-colors">
+                      <ChevronLeft size={13}/>
+                    </button>
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{monthPickerYear}</span>
+                    <button onClick={() => setMonthPickerYear(y => y + 1)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-300 transition-colors">
+                      <ChevronRight size={13}/>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-center text-slate-400 mb-2">
+                    {monthPickerAnchor
+                      ? `Début : ${format(monthPickerAnchor, 'MMM yyyy', { locale: fr })} — cliquez la fin`
+                      : 'Cliquez le mois de début'}
+                  </p>
+                  <div className="grid grid-cols-4 gap-1">
+                    {['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'].map((lbl, mi) => {
+                      const clicked = new Date(monthPickerYear, mi, 1);
+                      const isAnchor = monthPickerAnchor && monthPickerAnchor.getFullYear() === monthPickerYear && monthPickerAnchor.getMonth() === mi;
+                      return (
+                        <button key={mi}
+                          onClick={() => {
+                            if (!monthPickerAnchor) {
+                              setMonthPickerAnchor(clicked);
+                            } else {
+                              const s = clicked < monthPickerAnchor ? clicked : monthPickerAnchor;
+                              const e = clicked < monthPickerAnchor ? monthPickerAnchor : clicked;
+                              const ns = startOfMonth(s);
+                              const ne = endOfMonth(e);
+                              setCustomStart(ns); setCustomEnd(ne);
+                              setZoomPreset('custom');
+                              setDayWidth(fitDayWidth('custom', currentMonth, ns, ne));
+                              setMonthPickerOpen(false); setMonthPickerAnchor(null);
+                            }
+                          }}
+                          className={`py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                            isAnchor
+                              ? 'bg-teal-600 text-white'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-teal-900/20 hover:text-teal-700'
+                          }`}>
+                          {lbl}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+                    <button onClick={() => { setMonthPickerOpen(false); setMonthPickerAnchor(null); }} className="text-xs text-slate-400 px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors">
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              )}
+              <button onClick={() => applyPreset('custom')}
+                className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                  zoomPreset === 'custom'
+                    ? 'bg-sky-600 text-white'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}>
+                Dates
+              </button>
+            </div>
             {/* Custom date pickers — shown inline when custom is active */}
             {zoomPreset === 'custom' && (
               <div className="flex items-center gap-1 ml-1 px-2 py-0.5 border border-sky-200 dark:border-sky-700 rounded-lg bg-sky-50 dark:bg-sky-900/20">
