@@ -134,8 +134,20 @@ export default function PlanDeCharge() {
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [monthPickerYear, setMonthPickerYear] = useState(new Date().getFullYear());
   const [monthPickerAnchor, setMonthPickerAnchor] = useState<Date | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
   const menuRef       = useRef<HTMLDivElement>(null);
   const monthPickRef  = useRef<HTMLDivElement>(null);
+  const isPanningRef  = useRef(false);
+  const panRef = useRef<{
+    startX: number;
+    startPeriodStart: Date;
+    startPeriodEnd: Date;
+    origPreset: ZoomPreset;
+    origMonth: Date;
+    origDayWidth: number;
+    lastDayShift: number;
+    moved: boolean;
+  } | null>(null);
 
   // ── Period ─────────────────────────────────────────────────────────────────
   const periodStart =
@@ -428,6 +440,62 @@ export default function PlanDeCharge() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  // ── Drag-to-pan (pointer events, works for mouse + touch) ─────────────────
+  const onPanDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    if (activeTab === 'carte') return;
+    const target = e.target as HTMLElement;
+    // Skip interactive elements and draggable chantier bars
+    if (target.closest('button, input, a, select, textarea, [draggable="true"]')) return;
+    panRef.current = {
+      startX: e.clientX,
+      startPeriodStart: periodStart,
+      startPeriodEnd: periodEnd,
+      origPreset: zoomPreset,
+      origMonth: currentMonth,
+      origDayWidth: dayWidth,
+      lastDayShift: 0,
+      moved: false,
+    };
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+  }, [activeTab, periodStart, periodEnd, zoomPreset, currentMonth, dayWidth]);
+
+  const onPanMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!panRef.current) return;
+    const dx = panRef.current.startX - e.clientX; // positive → dragging left → future
+    if (!panRef.current.moved && Math.abs(dx) < 8) return; // dead zone
+    panRef.current.moved = true;
+    if (!isPanningRef.current) { isPanningRef.current = true; setIsPanning(true); }
+
+    const dayShift = Math.round(dx / panRef.current.origDayWidth);
+    if (dayShift === panRef.current.lastDayShift) return;
+    panRef.current.lastDayShift = dayShift;
+
+    const newStart = addDays(panRef.current.startPeriodStart, dayShift);
+    const newEnd   = addDays(panRef.current.startPeriodEnd,   dayShift);
+    setCustomStart(newStart);
+    setCustomEnd(newEnd);
+    // Switch to custom so the period slides freely (dayWidth preserved)
+    if (panRef.current.origPreset !== 'custom') setZoomPreset('custom');
+  }, []);
+
+  const onPanUp = useCallback(() => {
+    if (!panRef.current) return;
+    const { origPreset, origDayWidth, startPeriodStart, lastDayShift, moved } = panRef.current;
+    panRef.current = null;
+    isPanningRef.current = false;
+    setIsPanning(false);
+    if (!moved) return;
+
+    if (origPreset !== 'custom') {
+      // Restore original preset anchored at new position; snap to month start
+      const newStart = addDays(startPeriodStart, lastDayShift);
+      setCurrentMonth(origPreset === 'fiscal' ? newStart : startOfMonth(newStart));
+      setZoomPreset(origPreset);
+      setDayWidth(origDayWidth);
+    }
+  }, []);
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500">
@@ -441,7 +509,15 @@ export default function PlanDeCharge() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div ref={containerRef} className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
+    <div
+      ref={containerRef}
+      className="flex flex-col h-full bg-slate-50 dark:bg-slate-900"
+      onPointerDown={onPanDown}
+      onPointerMove={onPanMove}
+      onPointerUp={onPanUp}
+      onPointerCancel={onPanUp}
+      style={{ cursor: isPanning ? 'grabbing' : undefined }}
+    >
 
       {/* ── Top bar ── */}
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
