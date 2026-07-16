@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
-import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen, HardHat } from 'lucide-react';
+import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen, HardHat, Copy } from 'lucide-react';
 import type { Chantier, ChantierType, ChantierStatus, TypePelle } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
-import { format } from 'date-fns';
+import { format, addYears } from 'date-fns';
 import { geocode, geocodeSearch, extractLocation, type GeoResult } from '../lib/geocoder';
 import { nextWorkingDay, prevWorkingDay, addWorkingDays, countWorkingDays } from '../lib/workingDays';
 
@@ -15,6 +15,7 @@ interface Props {
   onSave: (data: Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onDelete?: () => void;
   onConfirm?: () => void;
+  onDuplicate?: (copies: Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'>[]) => Promise<void>;
 }
 
 const PELLES_ALL: TypePelle[] = ['1.5t', '3t', '8t', '16t'];
@@ -59,7 +60,7 @@ function isOutOfPreconisee(form: ReturnType<typeof emptyForm>): boolean {
   return form.dateDebut < form.periodePreconiseeDebut || form.dateFin > form.periodePreconiseeFin;
 }
 
-export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDebut, onSave, onDelete, onConfirm }: Props) {
+export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDebut, onSave, onDelete, onConfirm, onDuplicate }: Props) {
   const [form, setForm]         = useState(emptyForm());
   const [geocoding, setGeocoding]       = useState(false);
   const [suggestions, setSuggestions]   = useState<GeoResult[]>([]);
@@ -147,6 +148,32 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
     onSave(clean);
     onClose();
   };
+
+  // Duplication pluriannuelle : génère les interventions pour les années 2, 3, ...N
+  const handleDuplicate = useCallback(async () => {
+    if (!onDuplicate || !chantier) return;
+    const nAns = form.nombreAnnees ?? 1;
+    if (nAns <= 1) return;
+    const annualCA = Math.round((form.chiffreAffaire ?? 0) / nAns);
+    const shiftDate = (d: string, years: number) =>
+      format(addYears(new Date(d + 'T00:00:00'), years), 'yyyy-MM-dd');
+    const copies = Array.from({ length: nAns - 1 }, (_, i) => {
+      const offset = i + 1;
+      return {
+        ...form,
+        dateDebut:              shiftDate(form.dateDebut, offset),
+        dateFin:                shiftDate(form.dateFin,   offset),
+        periodePreconiseeDebut: form.periodePreconiseeDebut ? shiftDate(form.periodePreconiseeDebut, offset) : undefined,
+        periodePreconiseeFin:   form.periodePreconiseeFin   ? shiftDate(form.periodePreconiseeFin,   offset) : undefined,
+        chiffreAffaire: annualCA,
+        nombreAnnees:   1,
+        status:         'potentiel' as const,
+        datesVerrouillees: false,
+      };
+    });
+    await onDuplicate(copies);
+    onClose();
+  }, [chantier, form, onDuplicate, onClose]);
 
   const pelleOptions = meta.pellesOptions ?? PELLES_ALL;
   const warn = isOutOfPreconisee(form);
@@ -542,6 +569,25 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </label>
           </form>
+
+          {/* Bannière pluriannuelle — visible si contrat > 1 an et chantier existant */}
+          {chantier && (form.nombreAnnees ?? 1) > 1 && onDuplicate && (
+            <div className="mx-4 mb-3 sm:mx-6 p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-start gap-3">
+              <Copy size={15} className="text-indigo-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-indigo-800">Contrat sur {form.nombreAnnees} ans</p>
+                <p className="text-[11px] text-indigo-600 mt-0.5">
+                  Cliquez pour générer automatiquement {(form.nombreAnnees ?? 1) - 1} intervention{(form.nombreAnnees ?? 1) > 2 ? 's' : ''} supplémentaire{(form.nombreAnnees ?? 1) > 2 ? 's' : ''} (années {Array.from({ length: (form.nombreAnnees ?? 1) - 1 }, (_, i) => new Date(form.dateDebut + 'T00:00:00').getFullYear() + i + 1).join(', ')}) avec les mêmes fenêtres d'intervention — statut potentiel, CA annuel {Math.round((form.chiffreAffaire ?? 0) / (form.nombreAnnees ?? 1)).toLocaleString('fr-FR')} €.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleDuplicate}
+                className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                Générer
+              </button>
+            </div>
+          )}
 
           {/* Footer */}
           <div className="flex justify-end gap-2 px-4 py-3 sm:px-6 sm:py-4 border-t border-slate-100">

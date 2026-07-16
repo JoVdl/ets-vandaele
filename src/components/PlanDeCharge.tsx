@@ -291,6 +291,9 @@ export default function PlanDeCharge() {
   };
   const handleDelete  = async () => { if (modal.chantier) await deleteChantier(modal.chantier.id); };
   const handleConfirm = async () => { if (modal.chantier) await confirmChantier(modal.chantier.id); };
+  const handleDuplicate = useCallback(async (copies: Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'>[]) => {
+    for (const copy of copies) await addChantier(copy);
+  }, [addChantier]);
 
   const handleMove   = useCallback(async (id: string, s: string, e: string) => updateChantier(id, { dateDebut: s, dateFin: e }), [updateChantier]);
   const handleResize = useCallback(async (id: string, e: string) => updateChantier(id, { dateFin: e }), [updateChantier]);
@@ -1354,6 +1357,7 @@ export default function PlanDeCharge() {
         onSave={handleSave}
         onDelete={modal.chantier ? handleDelete : undefined}
         onConfirm={modal.chantier?.status === 'potentiel' ? handleConfirm : undefined}
+        onDuplicate={modal.chantier ? handleDuplicate : undefined}
       />
     </div>
   );
