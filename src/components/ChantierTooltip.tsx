@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { MapPin, Users, User, Calendar, Euro, Lock } from 'lucide-react';
+import { MapPin, Users, User, Calendar, Euro, Lock, HardHat } from 'lucide-react';
 import cenLogoUrl from '../assets/cen-logo.png';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
@@ -220,9 +220,13 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
             )}
 
             {/* Personnel */}
-            <div className="flex items-center gap-1 mt-0.5 text-xs text-slate-500">
+            <div className="flex items-center gap-1.5 mt-0.5 text-xs text-slate-500 flex-wrap">
               {nb >= 2 ? <Users size={11}/> : <User size={11}/>}
               <span>{nb} personne{nb > 1 ? 's' : ''}</span>
+              {c.patronRequis === false
+                ? <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-slate-100 text-slate-400 text-[9px]"><HardHat size={9}/> sans patron</span>
+                : <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-orange-50 text-orange-600 text-[9px]"><HardHat size={9}/> patron requis</span>
+              }
             </div>
 
             {/* Equipment */}

@@ -59,6 +59,10 @@ export interface Chantier {
   // Personnel
   nombrePersonnes?: number;
 
+  // Présence du patron requise sur ce chantier (défaut : true)
+  // Si false, le salarié peut y être seul → pas de conflit patron avec un autre chantier simultané
+  patronRequis?: boolean;
+
   // Dates verrouillées : exclues de la réorganisation automatique
   datesVerrouillees?: boolean;
 

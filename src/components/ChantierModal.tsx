@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
-import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen } from 'lucide-react';
+import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen, HardHat } from 'lucide-react';
 import type { Chantier, ChantierType, ChantierStatus, TypePelle } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { format } from 'date-fns';
@@ -48,6 +48,7 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   drague: false,
   telesco: false,
   nombrePersonnes: 1,
+  patronRequis: true,
   pellePrepaBassin: '8t',
   nombreJoursPrepa: 0,
   datesVerrouillees: false,
@@ -511,6 +512,27 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                   onChange={e => set('nombrePersonnes', Number(e.target.value))}
                   className="mt-0.5 w-24 px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white" />
               </label>
+
+              {/* Patron requis */}
+              <button
+                type="button"
+                onClick={() => set('patronRequis', !(form.patronRequis ?? true))}
+                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-sm transition-colors ${
+                  (form.patronRequis ?? true)
+                    ? 'bg-orange-50 border-orange-300 text-orange-800'
+                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
+                }`}
+              >
+                <HardHat size={14} className={(form.patronRequis ?? true) ? 'text-orange-600 flex-shrink-0' : 'flex-shrink-0 opacity-40'} />
+                <span className="font-medium">
+                  {(form.patronRequis ?? true) ? 'Patron requis' : 'Patron non requis'}
+                </span>
+                <span className="ml-auto text-xs opacity-60">
+                  {(form.patronRequis ?? true)
+                    ? 'Ne peut pas se faire en simultané avec un autre chantier patron requis'
+                    : 'Le salarié peut y être seul'}
+                </span>
+              </button>
             </div>
 
             {/* Notes */}
