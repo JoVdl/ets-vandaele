@@ -253,6 +253,26 @@ export default function PlanDeCharge() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodConf.length, caConfirme, periodStart.getTime(), periodEnd.getTime()]);
 
+  // ── Booking horizon — jusqu'où a-t-on du boulot confirmé ? ──────────────
+  const bookingHorizon = useMemo(() => {
+    const today = startOfDay(new Date());
+    const conf = chantiers.filter(c => c.status === 'confirme');
+    if (!conf.length) return null;
+    const lastConf = conf.reduce((mx, c) => (c.dateFin > mx ? c.dateFin : mx), '');
+    const lastConfDate = startOfDay(new Date(lastConf + 'T00:00:00'));
+    const daysAhead = differenceInCalendarDays(lastConfDate, today);
+    if (daysAhead < 0) return null; // tout est passé
+    const weeksAhead  = Math.round(daysAhead / 7);
+    const monthsAhead = +(daysAhead / 30.44).toFixed(1);
+    // Potentiels: jusqu'où si tout se confirme
+    const withPot = chantiers.filter(c => c.status === 'confirme' || c.status === 'potentiel');
+    const lastPot = withPot.reduce((mx, c) => (c.dateFin > mx ? c.dateFin : mx), '');
+    const lastPotDate = startOfDay(new Date(lastPot + 'T00:00:00'));
+    const extraPotDays = differenceInCalendarDays(lastPotDate, lastConfDate);
+    return { lastConfDate, lastPotDate, daysAhead, weeksAhead, monthsAhead, extraPotDays };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chantiers.map(c => `${c.id}:${c.dateFin}:${c.status}`).join(',')]);
+
   // ── Equipment utilization (visible period) ────────────────────────────────
   const equipLines = useMemo(
     () => computeEquipUtilization(filtered, periodStart, periodEnd),
@@ -573,6 +593,31 @@ export default function PlanDeCharge() {
                 {potentialWD > 0 && <span className="text-amber-500"> + {potentialWD}j pot.</span>}
               </p>
             </div>
+            {bookingHorizon && (
+              <>
+                <div className="w-px h-8 bg-slate-100 dark:bg-slate-700" />
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wide">Boulot jusqu'au</p>
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    {format(bookingHorizon.lastConfDate, 'd MMM yyyy', { locale: fr })}
+                  </p>
+                  <p className="text-[10px]">
+                    <span className={bookingHorizon.monthsAhead >= 3 ? 'text-emerald-600' : bookingHorizon.monthsAhead >= 1.5 ? 'text-amber-500' : 'text-red-500'}>
+                      {bookingHorizon.monthsAhead >= 2
+                        ? `~${Math.round(bookingHorizon.monthsAhead)} mois d'avance`
+                        : bookingHorizon.weeksAhead > 0
+                        ? `~${bookingHorizon.weeksAhead} sem. d'avance`
+                        : 'cette semaine'}
+                    </span>
+                    {bookingHorizon.extraPotDays > 7 && (
+                      <span className="text-amber-400 ml-1" title="Extension avec potentiels">
+                        +{Math.round(bookingHorizon.extraPotDays / 7)}sem. pot.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </>
+            )}
             {warnCount > 0 && (
               <>
                 <div className="w-px h-8 bg-slate-100 dark:bg-slate-700" />
@@ -851,6 +896,17 @@ export default function PlanDeCharge() {
             <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{fillRate}%</p>
             <p className="text-[9px] text-slate-400">{confirmedWD}/{periodWd}j</p>
           </div>
+          {bookingHorizon && (
+            <div className="px-2 py-1.5 text-center">
+              <p className="text-[9px] text-slate-400 uppercase tracking-wide">Planifié</p>
+              <p className={`text-xs font-bold ${bookingHorizon.monthsAhead >= 3 ? 'text-emerald-600' : bookingHorizon.monthsAhead >= 1.5 ? 'text-amber-500' : 'text-red-500'}`}>
+                {bookingHorizon.monthsAhead >= 2
+                  ? `~${Math.round(bookingHorizon.monthsAhead)}m`
+                  : `~${bookingHorizon.weeksAhead}sem`}
+              </p>
+              <p className="text-[9px] text-slate-400">{format(bookingHorizon.lastConfDate, 'd MMM', { locale: fr })}</p>
+            </div>
+          )}
           {warnCount > 0 && (
             <div className="px-2 py-1.5 text-center">
               <p className="text-[9px] text-orange-400 uppercase tracking-wide">Hors pér.</p>
