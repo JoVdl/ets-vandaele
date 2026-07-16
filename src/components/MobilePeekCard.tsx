@@ -135,9 +135,7 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
             <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
               {/* Statut facture */}
               <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                c.factureFaite
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'bg-red-50 text-red-500'
+                c.factureFaite ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-500'
               }`}>
                 {c.factureFaite
                   ? <><CheckCheck size={11}/> Facture envoyée</>
@@ -145,16 +143,21 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
                 }
               </span>
               {/* Statut paiement */}
-              <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                c.datePaiement
-                  ? 'bg-green-50 text-green-600'
-                  : 'bg-slate-100 text-slate-400'
-              }`}>
-                {c.datePaiement
-                  ? <><CheckCheck size={11}/> Payé le {c.datePaiement}</>
-                  : <><CircleAlert size={11}/> Non payé</>
-                }
-              </span>
+              {(() => {
+                const total = caAn;
+                const paye  = c.montantPaye ?? 0;
+                const pct   = total > 0 && paye > 0 ? Math.round(paye / total * 100) : null;
+                return (
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                    paye > 0 ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-400'
+                  }`}>
+                    {paye > 0
+                      ? <><CheckCheck size={11}/> {paye.toLocaleString('fr-FR')} €{pct !== null ? ` (${pct}%)` : ''}</>
+                      : <><CircleAlert size={11}/> Non payé</>
+                    }
+                  </span>
+                );
+              })()}
             </div>
           )}
 

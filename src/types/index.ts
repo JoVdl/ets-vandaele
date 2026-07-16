@@ -66,6 +66,7 @@ export interface Chantier {
   // Facturation
   factureFaite?: boolean;       // facture envoyée au client
   dateFacture?: string;         // date d'envoi facture (YYYY-MM-DD)
+  montantPaye?: number;         // montant effectivement encaissé (€)
   datePaiement?: string;        // date de réception du paiement (YYYY-MM-DD)
 
   // Dates verrouillées : exclues de la réorganisation automatique

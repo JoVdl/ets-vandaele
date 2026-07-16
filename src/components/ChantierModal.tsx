@@ -52,6 +52,7 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   patronRequis: true,
   factureFaite: false,
   dateFacture: '',
+  montantPaye: 0,
   datePaiement: '',
   pellePrepaBassin: '8t',
   nombreJoursPrepa: 0,
@@ -589,6 +590,12 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                     <span className="text-xs text-slate-500">Date paiement reçu</span>
                     <input type="date" value={form.datePaiement ?? ''}
                       onChange={e => set('datePaiement', e.target.value)}
+                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  </label>
+                  <label className="block sm:col-span-2">
+                    <span className="text-xs text-slate-500">Montant encaissé (€)</span>
+                    <input type="number" min={0} value={form.montantPaye ?? 0}
+                      onChange={e => set('montantPaye', Number(e.target.value))}
                       className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
                   </label>
                 </div>
