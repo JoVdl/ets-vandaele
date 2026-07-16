@@ -132,17 +132,29 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
 
           {/* Facturation */}
           {isPast && (
-            <div className={`flex items-center gap-1.5 text-xs font-medium mb-1.5 ${
-              c.datePaiement    ? 'text-green-600'
-              : c.factureFaite ? 'text-amber-500'
-              :                  'text-red-500'
-            }`}>
-              {c.datePaiement
-                ? <><CheckCheck size={13}/> Payé le {c.datePaiement}</>
-                : c.factureFaite
-                  ? <><CheckCheck size={13}/> Facture envoyée — paiement en attente</>
-                  : <><CircleAlert size={13}/> Facture non envoyée</>
-              }
+            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+              {/* Statut facture */}
+              <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                c.factureFaite
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'bg-red-50 text-red-500'
+              }`}>
+                {c.factureFaite
+                  ? <><CheckCheck size={11}/> Facture envoyée</>
+                  : <><CircleAlert size={11}/> Facture non envoyée</>
+                }
+              </span>
+              {/* Statut paiement */}
+              <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                c.datePaiement
+                  ? 'bg-green-50 text-green-600'
+                  : 'bg-slate-100 text-slate-400'
+              }`}>
+                {c.datePaiement
+                  ? <><CheckCheck size={11}/> Payé le {c.datePaiement}</>
+                  : <><CircleAlert size={11}/> Non payé</>
+                }
+              </span>
             </div>
           )}
 
