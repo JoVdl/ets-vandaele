@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { MapPin, Users, User, Calendar, Euro, Lock, HardHat } from 'lucide-react';
+import { MapPin, Users, User, Calendar, Euro, Lock, HardHat, CheckCheck, CircleAlert } from 'lucide-react';
 import cenLogoUrl from '../assets/cen-logo.png';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
@@ -112,6 +112,7 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
   const meta = CHANTIER_TYPES[c.type];
   const isPotentiel = c.status === 'potentiel';
   const isArchived  = c.status === 'refuse' || c.status === 'annule';
+  const isPast      = !isPotentiel && !isArchived && new Date(c.dateFin) < new Date();
   const nb   = c.nombrePersonnes ?? 1;
   const hasMap = !!(c.latitude && c.longitude);
 
@@ -231,6 +232,22 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
 
             {/* Equipment */}
             <EquipSummary c={c} />
+
+            {/* Facturation */}
+            {isPast && (
+              <div className={`mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium border-t border-slate-50 pt-1.5 ${
+                c.datePaiement     ? 'text-green-700'
+                : c.factureFaite  ? 'text-amber-600'
+                :                   'text-red-500'
+              }`}>
+                {c.datePaiement
+                  ? <><CheckCheck size={11}/> Payé le {c.datePaiement}</>
+                  : c.factureFaite
+                    ? <><CheckCheck size={11}/> Facture envoyée — paiement en attente</>
+                    : <><CircleAlert size={11}/> Facture non envoyée</>
+                }
+              </div>
+            )}
 
             {/* Période préconisée */}
             {c.periodePreconiseeDebut && c.periodePreconiseeFin && (
