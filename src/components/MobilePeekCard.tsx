@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Calendar, MapPin, Euro, Users, User, Lock, Pencil } from 'lucide-react';
+import { Calendar, MapPin, Euro, Users, User, Lock, Pencil, CheckCheck, CircleAlert } from 'lucide-react';
 import cenLogoUrl from '../assets/cen-logo.png';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
@@ -16,6 +16,7 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
   const meta        = CHANTIER_TYPES[c.type];
   const isPotentiel = c.status === 'potentiel';
   const isArchived  = c.status === 'refuse' || c.status === 'annule';
+  const isPast      = !isPotentiel && !isArchived && new Date(c.dateFin) < new Date();
   const nb          = c.nombrePersonnes ?? 1;
   const wd          = countWorkingDays(new Date(c.dateDebut), new Date(c.dateFin));
   const nAns        = c.nombreAnnees ?? 1;
@@ -126,6 +127,22 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
               {equip.map((it, i) => (
                 <span key={i} className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">{it}</span>
               ))}
+            </div>
+          )}
+
+          {/* Facturation */}
+          {isPast && (
+            <div className={`flex items-center gap-1.5 text-xs font-medium mb-1.5 ${
+              c.datePaiement    ? 'text-green-600'
+              : c.factureFaite ? 'text-amber-500'
+              :                  'text-red-500'
+            }`}>
+              {c.datePaiement
+                ? <><CheckCheck size={13}/> Payé le {c.datePaiement}</>
+                : c.factureFaite
+                  ? <><CheckCheck size={13}/> Facture envoyée — paiement en attente</>
+                  : <><CircleAlert size={13}/> Facture non envoyée</>
+              }
             </div>
           )}
 
