@@ -578,28 +578,30 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                   className="w-4 h-4 rounded accent-green-600" />
                 <span className="text-sm text-slate-600">Facture envoyée</span>
               </label>
-              {form.factureFaite && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                  <label className="block">
-                    <span className="text-xs text-slate-500">Date envoi facture</span>
-                    <input type="date" value={form.dateFacture ?? ''}
-                      onChange={e => set('dateFacture', e.target.value)}
-                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-slate-500">Date paiement reçu</span>
-                    <input type="date" value={form.datePaiement ?? ''}
-                      onChange={e => set('datePaiement', e.target.value)}
-                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-                  </label>
-                  <label className="block sm:col-span-2">
-                    <span className="text-xs text-slate-500">Montant encaissé (€)</span>
-                    <input type="number" min={0} value={form.montantPaye ?? 0}
-                      onChange={e => set('montantPaye', Number(e.target.value))}
-                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-                  </label>
-                </div>
-              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                <label className="block sm:col-span-2">
+                  <span className="text-xs text-slate-500">Montant encaissé (€)</span>
+                  <input type="number" min={0} value={form.montantPaye ?? 0}
+                    onChange={e => set('montantPaye', Number(e.target.value))}
+                    className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </label>
+                {form.factureFaite && (
+                  <>
+                    <label className="block">
+                      <span className="text-xs text-slate-500">Date envoi facture</span>
+                      <input type="date" value={form.dateFacture ?? ''}
+                        onChange={e => set('dateFacture', e.target.value)}
+                        className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-slate-500">Date paiement reçu</span>
+                      <input type="date" value={form.datePaiement ?? ''}
+                        onChange={e => set('datePaiement', e.target.value)}
+                        className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                    </label>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Notes */}
