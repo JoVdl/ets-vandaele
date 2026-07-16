@@ -63,6 +63,11 @@ export interface Chantier {
   // Si false, le salarié peut y être seul → pas de conflit patron avec un autre chantier simultané
   patronRequis?: boolean;
 
+  // Facturation
+  factureFaite?: boolean;       // facture envoyée au client
+  dateFacture?: string;         // date d'envoi facture (YYYY-MM-DD)
+  datePaiement?: string;        // date de réception du paiement (YYYY-MM-DD)
+
   // Dates verrouillées : exclues de la réorganisation automatique
   datesVerrouillees?: boolean;
 

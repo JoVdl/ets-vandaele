@@ -6,7 +6,7 @@ import { fr } from 'date-fns/locale';
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, CalendarDays, BarChart2,
   TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2, Moon, Sun, MapPin, MoreVertical,
-  List, Users, User,
+  List, Users, User, Receipt,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { useChantiers } from '../hooks/useChantiers';
@@ -15,6 +15,7 @@ import ChantierModal from './ChantierModal';
 import ImportButton from './ImportButton';
 import MapView from './MapView';
 import CalendarView from './CalendarView';
+import FacturationView from './FacturationView';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import { reorganize, type ReorganizeMode } from '../lib/reorganize';
@@ -26,7 +27,7 @@ import {
 } from './EquipmentIcons';
 
 type ZoomPreset = 1 | 2 | 3 | 6 | 'year' | 'fiscal' | 'custom';
-type ViewTab = 'gantt' | 'carte' | 'liste' | 'calendrier';
+type ViewTab = 'gantt' | 'carte' | 'liste' | 'calendrier' | 'facturation';
 
 // Fiscal year: 1 Jul → 30 Jun
 function getFiscalYearStart(ref: Date): Date {
@@ -714,10 +715,11 @@ export default function PlanDeCharge() {
             {/* Tab switcher — always accessible */}
             <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden mr-0.5">
               {([
-                { key: 'gantt',       icon: <BarChart2 size={12}/> },
-                { key: 'carte',       icon: <Map size={12}/> },
-                { key: 'calendrier',  icon: <CalendarDays size={12}/> },
-                { key: 'liste',       icon: <List size={12}/> },
+                { key: 'gantt',        icon: <BarChart2 size={12}/> },
+                { key: 'carte',        icon: <Map size={12}/> },
+                { key: 'calendrier',   icon: <CalendarDays size={12}/> },
+                { key: 'liste',        icon: <List size={12}/> },
+                { key: 'facturation',  icon: <Receipt size={12}/> },
               ] as const).map(({ key, icon }) => (
                 <button key={key} onClick={() => setActiveTab(key)}
                   className={`px-2 py-1.5 transition-colors ${
@@ -1187,9 +1189,10 @@ export default function PlanDeCharge() {
           {/* View tabs — desktop only (mobile uses Row 1 tabs) */}
           <div className="hidden sm:flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden ml-auto sm:ml-0">
             {([
-              { key: 'gantt',      icon: <BarChart2 size={13}/>,    label: 'Gantt' },
-              { key: 'carte',      icon: <Map size={13}/>,           label: 'Carte' },
-              { key: 'calendrier', icon: <CalendarDays size={13}/>,  label: 'Calendrier' },
+              { key: 'gantt',        icon: <BarChart2 size={13}/>,    label: 'Gantt' },
+              { key: 'carte',        icon: <Map size={13}/>,           label: 'Carte' },
+              { key: 'calendrier',   icon: <CalendarDays size={13}/>,  label: 'Calendrier' },
+              { key: 'facturation',  icon: <Receipt size={13}/>,       label: 'Facturation' },
             ] as const).map(({ key, icon, label }) => (
               <button key={key} onClick={() => setActiveTab(key)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -1242,6 +1245,9 @@ export default function PlanDeCharge() {
           onClickChantier={openEdit}
           onMoveChantier={handleMove}
         />
+      ) : activeTab === 'facturation' ? (
+        /* ── Facturation ─────────────────────────────────────────────── */
+        <FacturationView chantiers={chantiers} onClickChantier={openEdit} onUpdateChantier={updateChantier} />
       ) : (
         /* ── Liste mobile ──────────────────────────────────────────────── */
         <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 bg-slate-50 dark:bg-slate-900">

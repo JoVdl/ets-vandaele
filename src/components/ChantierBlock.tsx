@@ -1,7 +1,7 @@
 import { useRef, useCallback } from 'react';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
-import { CheckCircle2, Clock, Users, User, AlertTriangle, Lock } from 'lucide-react';
+import { CheckCircle2, Clock, Users, User, AlertTriangle, Lock, CheckCheck, CircleAlert } from 'lucide-react';
 import cenLogoUrl from '../assets/cen-logo.png';
 import { countWorkingDays, caAnnuel } from '../lib/workingDays';
 import {
@@ -128,6 +128,7 @@ export default function ChantierBlock({
     onUnhover?.();
   }, [onUnhover]);
 
+  const isPast      = !isPotentiel && !isArchived && new Date(chantier.dateFin) < new Date();
   const showText    = width > 20;
   const showIcons   = width > 50;
   const showCA       = width > 130 && chantier.chiffreAffaire > 0;
@@ -184,6 +185,20 @@ export default function ChantierBlock({
               : chantier.status === 'confirme'
                 ? <CheckCircle2 size={10} />
                 : <Clock size={10} />}
+          </div>
+        )}
+
+        {/* Invoice badge — only for past confirmed chantiers */}
+        {isPast && showText && (
+          <div
+            className="flex-shrink-0 rounded-full flex items-center justify-center"
+            style={{ width: 12, height: 12, backgroundColor: chantier.factureFaite ? '#16a34a' : '#dc2626' }}
+            title={chantier.factureFaite
+              ? (chantier.datePaiement ? `Payé le ${chantier.datePaiement}` : 'Facture envoyée — paiement en attente')
+              : 'Facture non envoyée'}>
+            {chantier.factureFaite
+              ? <CheckCheck size={7} color="white" strokeWidth={3}/>
+              : <CircleAlert size={7} color="white" strokeWidth={3}/>}
           </div>
         )}
 

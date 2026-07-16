@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
-import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen, HardHat, Copy } from 'lucide-react';
+import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen, HardHat, Copy, Receipt } from 'lucide-react';
 import type { Chantier, ChantierType, ChantierStatus, TypePelle } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { format, addYears } from 'date-fns';
@@ -50,6 +50,9 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   telesco: false,
   nombrePersonnes: 1,
   patronRequis: true,
+  factureFaite: false,
+  dateFacture: '',
+  datePaiement: '',
   pellePrepaBassin: '8t',
   nombreJoursPrepa: 0,
   datesVerrouillees: false,
@@ -560,6 +563,36 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                     : 'Le salarié peut y être seul'}
                 </span>
               </button>
+            </div>
+
+            {/* Facturation */}
+            <div className="border border-slate-100 rounded-xl p-3 bg-slate-50/60 space-y-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Receipt size={13} className="text-slate-400"/>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Facturation</p>
+              </div>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={form.factureFaite ?? false}
+                  onChange={e => { set('factureFaite', e.target.checked); if (!e.target.checked) { set('dateFacture', ''); } }}
+                  className="w-4 h-4 rounded accent-green-600" />
+                <span className="text-sm text-slate-600">Facture envoyée</span>
+              </label>
+              {form.factureFaite && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                  <label className="block">
+                    <span className="text-xs text-slate-500">Date envoi facture</span>
+                    <input type="date" value={form.dateFacture ?? ''}
+                      onChange={e => set('dateFacture', e.target.value)}
+                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-slate-500">Date paiement reçu</span>
+                    <input type="date" value={form.datePaiement ?? ''}
+                      onChange={e => set('datePaiement', e.target.value)}
+                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  </label>
+                </div>
+              )}
             </div>
 
             {/* Notes */}
