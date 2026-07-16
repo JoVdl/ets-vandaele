@@ -131,35 +131,43 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
           )}
 
           {/* Facturation */}
-          {isPast && (
-            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-              {/* Statut facture */}
-              <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                c.factureFaite ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-500'
-              }`}>
-                {c.factureFaite
-                  ? <><CheckCheck size={11}/> Facture envoyée</>
-                  : <><CircleAlert size={11}/> Facture non envoyée</>
-                }
-              </span>
-              {/* Statut paiement */}
-              {(() => {
-                const total = caAn;
-                const paye  = c.montantPaye ?? 0;
-                const pct   = total > 0 && paye > 0 ? Math.round(paye / total * 100) : null;
-                return (
+          {isPast && (() => {
+            const paye = c.montantPaye ?? 0;
+            const pct  = caAn > 0 ? Math.min(100, Math.round(paye / caAn * 100)) : 0;
+            const barColor = pct >= 100 ? '#16a34a' : pct > 0 ? '#3b82f6' : '#e2e8f0';
+            return (
+              <div className="mb-2 space-y-1.5">
+                {/* Jauge */}
+                <div>
+                  <div className="flex justify-between text-[11px] mb-0.5">
+                    <span className="text-slate-400">Encaissé</span>
+                    <span className={`font-semibold ${pct >= 100 ? 'text-green-600' : pct > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
+                      {paye.toLocaleString('fr-FR')} € / {caAn.toLocaleString('fr-FR')} € ({pct}%)
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+                  </div>
+                </div>
+                {/* Badges statut */}
+                <div className="flex gap-1.5 flex-wrap">
                   <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                    paye > 0 ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-400'
+                    c.factureFaite ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-500'
                   }`}>
-                    {paye > 0
-                      ? <><CheckCheck size={11}/> {paye.toLocaleString('fr-FR')} €{pct !== null ? ` (${pct}%)` : ''}</>
-                      : <><CircleAlert size={11}/> Non payé</>
+                    {c.factureFaite
+                      ? <><CheckCheck size={11}/> Facture envoyée</>
+                      : <><CircleAlert size={11}/> Facture non envoyée</>
                     }
                   </span>
-                );
-              })()}
-            </div>
-          )}
+                  {c.datePaiement && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-600">
+                      <CheckCheck size={11}/> Payé le {c.datePaiement}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Recommended period */}
           {c.periodePreconiseeDebut && c.periodePreconiseeFin && (

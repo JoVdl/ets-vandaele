@@ -388,42 +388,103 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
               </div>
             </div>
 
-            {/* Financier */}
-            <div className="space-y-3">
+            {/* Financier & Facturation */}
+            <div className="border border-slate-100 rounded-xl p-3 bg-slate-50/60 space-y-3">
+              <div className="flex items-center gap-1.5">
+                <Receipt size={13} className="text-slate-400"/>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Devis & Paiement</p>
+              </div>
+
+              {/* CA + durée */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">CA annuel (€)</span>
+                  <span className="text-xs text-slate-500">CA annuel (€)</span>
                   <input type="number" min="0" value={form.chiffreAffaire} onChange={e => set('chiffreAffaire', Number(e.target.value))}
-                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Durée contrat (années)</span>
+                  <span className="text-xs text-slate-500">Durée contrat (années)</span>
                   <input type="number" min="1" max="10" value={form.nombreAnnees ?? 1}
                     onChange={e => set('nombreAnnees', Math.max(1, Number(e.target.value)))}
-                    className="mt-1 w-20 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    className="mt-1 w-20 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
                 </label>
               </div>
-              <div className="flex gap-6">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={form.devisSigne} onChange={e => set('devisSigne', e.target.checked)}
-                    className="w-4 h-4 rounded accent-blue-600" />
-                  <span className="text-sm text-slate-600">Devis signé</span>
-                </label>
+
+              {/* Jauge de paiement */}
+              {form.chiffreAffaire > 0 && (() => {
+                const ca    = Math.round(form.chiffreAffaire / (form.nombreAnnees ?? 1));
+                const paye  = form.montantPaye ?? 0;
+                const pct   = Math.min(100, Math.round(paye / ca * 100));
+                return (
+                  <div>
+                    <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+                      <span>Encaissé</span>
+                      <span className="font-semibold">{paye.toLocaleString('fr-FR')} € / {ca.toLocaleString('fr-FR')} € ({pct}%)</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? '#16a34a' : pct > 0 ? '#3b82f6' : '#e2e8f0' }} />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Étape 1 : Devis */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={form.devisSigne} onChange={e => set('devisSigne', e.target.checked)}
+                  className="w-4 h-4 rounded accent-blue-600" />
+                <span className="text-sm text-slate-600">Devis signé</span>
+              </label>
+
+              {/* Étape 2 : Acompte */}
+              <div className="space-y-1.5">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" checked={form.acomptePaye} onChange={e => set('acomptePaye', e.target.checked)}
                     className="w-4 h-4 rounded accent-blue-600" />
                   <span className="text-sm text-slate-600">Acompte payé</span>
                 </label>
+                {form.acomptePaye && (
+                  <label className="block pl-7">
+                    <span className="text-xs text-slate-500">Montant acompte (€)</span>
+                    <input type="number" min="0" value={form.montantAcompte ?? 0} onChange={e => set('montantAcompte', Number(e.target.value))}
+                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </label>
+                )}
+              </div>
+
+              {/* Étape 3 : Montant encaissé total */}
+              <label className="block">
+                <span className="text-xs text-slate-500">Montant total encaissé (€)</span>
+                <input type="number" min={0} value={form.montantPaye ?? 0}
+                  onChange={e => set('montantPaye', Number(e.target.value))}
+                  className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </label>
+
+              {/* Étape 4 : Facture */}
+              <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={form.factureFaite ?? false}
+                    onChange={e => { set('factureFaite', e.target.checked); if (!e.target.checked) set('dateFacture', ''); }}
+                    className="w-4 h-4 rounded accent-green-600" />
+                  <span className="text-sm text-slate-600">Facture envoyée</span>
+                </label>
+                {form.factureFaite && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-7">
+                    <label className="block">
+                      <span className="text-xs text-slate-500">Date envoi</span>
+                      <input type="date" value={form.dateFacture ?? ''}
+                        onChange={e => set('dateFacture', e.target.value)}
+                        className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-slate-500">Date paiement reçu</span>
+                      <input type="date" value={form.datePaiement ?? ''}
+                        onChange={e => set('datePaiement', e.target.value)}
+                        className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
-
-            {form.acomptePaye && (
-              <label className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Montant acompte (€)</span>
-                <input type="number" min="0" value={form.montantAcompte ?? 0} onChange={e => set('montantAcompte', Number(e.target.value))}
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </label>
-            )}
 
             {/* Matériel & Personnel */}
             <div className="border border-slate-100 rounded-xl p-3 sm:p-4 bg-slate-50 space-y-3">
@@ -564,44 +625,6 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                     : 'Le salarié peut y être seul'}
                 </span>
               </button>
-            </div>
-
-            {/* Facturation */}
-            <div className="border border-slate-100 rounded-xl p-3 bg-slate-50/60 space-y-2">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Receipt size={13} className="text-slate-400"/>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Facturation</p>
-              </div>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={form.factureFaite ?? false}
-                  onChange={e => { set('factureFaite', e.target.checked); if (!e.target.checked) { set('dateFacture', ''); } }}
-                  className="w-4 h-4 rounded accent-green-600" />
-                <span className="text-sm text-slate-600">Facture envoyée</span>
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                <label className="block sm:col-span-2">
-                  <span className="text-xs text-slate-500">Montant encaissé (€)</span>
-                  <input type="number" min={0} value={form.montantPaye ?? 0}
-                    onChange={e => set('montantPaye', Number(e.target.value))}
-                    className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-                </label>
-                {form.factureFaite && (
-                  <>
-                    <label className="block">
-                      <span className="text-xs text-slate-500">Date envoi facture</span>
-                      <input type="date" value={form.dateFacture ?? ''}
-                        onChange={e => set('dateFacture', e.target.value)}
-                        className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs text-slate-500">Date paiement reçu</span>
-                      <input type="date" value={form.datePaiement ?? ''}
-                        onChange={e => set('datePaiement', e.target.value)}
-                        className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-                    </label>
-                  </>
-                )}
-              </div>
             </div>
 
             {/* Notes */}
