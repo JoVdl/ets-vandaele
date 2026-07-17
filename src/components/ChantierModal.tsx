@@ -217,7 +217,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
           </div>
 
           {/* Body */}
-          <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-4 py-3 sm:px-6 sm:py-4 space-y-3 sm:space-y-4">
+          <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-4 py-2 sm:px-6 sm:py-3 space-y-2">
 
             {/* Période hors préconisée warning */}
             {warn && (
@@ -228,37 +228,37 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             )}
 
             {/* Nom & Client */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <label className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Nom du chantier *</span>
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Nom *</span>
                 <input required value={form.nom} onChange={e => set('nom', e.target.value)}
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </label>
               <label className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Client</span>
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Client</span>
                 <input value={form.client ?? ''} onChange={e => set('client', e.target.value)}
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </label>
             </div>
 
             {/* Lieu + Adresse/Localisation */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <label className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Lieu</span>
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Lieu</span>
                 <input value={form.lieu ?? ''} onChange={e => set('lieu', e.target.value)}
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </label>
               <div className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Adresse (géolocalisation)</span>
-                <div className="mt-1 relative">
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Adresse GPS</span>
+                <div className="mt-0.5 relative">
                   <div className="flex gap-1">
                     <input
                       value={form.adresse ?? ''}
                       onChange={e => handleAddressInput(e.target.value)}
                       onFocus={() => suggestions.length > 0 && setShowSuggest(true)}
                       onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
-                      placeholder="Tapez une ville ou adresse…"
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      placeholder="Ville ou adresse…"
+                      className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <button type="button" onClick={handleGeocode} disabled={geocoding}
                       title="Géocoder depuis le nom du chantier"
                       className="px-2 py-2 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors flex-shrink-0">
@@ -290,22 +290,22 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             </div>
 
             {/* Type & Status */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <label className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Type de chantier</span>
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Type</span>
                 <select value={form.type} onChange={e => set('type', e.target.value as ChantierType)}
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                   {Object.entries(CHANTIER_TYPES).map(([k, v]) => (
                     <option key={k} value={k}>{v.label}</option>
                   ))}
                 </select>
               </label>
               <label className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Statut</span>
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Statut</span>
                 <select value={form.status} onChange={e => set('status', e.target.value as ChantierStatus)}
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                  className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                   <option value="potentiel">Potentiel</option>
-                  <option value="confirme">Confirmé / Signé</option>
+                  <option value="confirme">Confirmé</option>
                   <option value="refuse">Refusé</option>
                   <option value="annule">Annulé</option>
                 </select>
@@ -313,22 +313,21 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             </div>
 
             {/* Dates intervention */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <label className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date début</span>
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Début</span>
                 <input type="date" required value={form.dateDebut}
                   onChange={e => {
                     if (!e.target.value) return;
                     const newStart = format(nextWorkingDay(new Date(e.target.value + 'T00:00:00')), 'yyyy-MM-dd');
-                    // Preserve working-day duration when start changes
                     const dur = countWorkingDays(new Date(form.dateDebut), new Date(form.dateFin));
                     const newEnd = format(addWorkingDays(new Date(newStart + 'T00:00:00'), Math.max(0, dur - 1)), 'yyyy-MM-dd');
                     setForm(prev => ({ ...prev, dateDebut: newStart, dateFin: newEnd }));
                   }}
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </label>
               <label className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Durée (j. ouvrés)</span>
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">J. ouvrés</span>
                 <input
                   type="number" min="1" max="500"
                   value={countWorkingDays(new Date(form.dateDebut), new Date(form.dateFin))}
@@ -337,16 +336,16 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                     const newEnd = format(addWorkingDays(new Date(form.dateDebut + 'T00:00:00'), dur - 1), 'yyyy-MM-dd');
                     set('dateFin', newEnd);
                   }}
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium" />
+                  className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium" />
               </label>
               <label className="block">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date fin</span>
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Fin</span>
                 <input type="date" required value={form.dateFin}
                   onChange={e => {
                     if (!e.target.value) return;
                     set('dateFin', format(prevWorkingDay(new Date(e.target.value + 'T00:00:00')), 'yyyy-MM-dd'));
                   }}
-                  className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </label>
             </div>
 
@@ -354,59 +353,59 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
             <button
               type="button"
               onClick={() => set('datesVerrouillees', !form.datesVerrouillees)}
-              className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-sm transition-colors ${
+              className={`flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded-lg border text-xs transition-colors ${
                 form.datesVerrouillees
                   ? 'bg-amber-50 border-amber-300 text-amber-800'
                   : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
               }`}
             >
               {form.datesVerrouillees
-                ? <Lock size={14} className="text-amber-600 flex-shrink-0"/>
-                : <LockOpen size={14} className="flex-shrink-0"/>}
+                ? <Lock size={12} className="text-amber-600 flex-shrink-0"/>
+                : <LockOpen size={12} className="flex-shrink-0"/>}
               <span className="font-medium">
                 {form.datesVerrouillees ? 'Dates verrouillées' : 'Verrouiller les dates'}
               </span>
-              <span className="ml-auto text-xs opacity-60">
-                {form.datesVerrouillees ? 'Exclues de la réorganisation' : 'La réorganisation peut déplacer ce chantier'}
+              <span className="ml-auto opacity-50">
+                {form.datesVerrouillees ? 'Exclues de la réorganisation' : 'La réorganisation peut les déplacer'}
               </span>
             </button>
 
             {/* Période préconisée */}
-            <div className="border border-dashed border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Période d'intervention préconisée (optionnel)</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mb-1">Période préconisée <span className="normal-case font-normal">(optionnel)</span></p>
+              <div className="grid grid-cols-2 gap-2">
                 <label className="block">
-                  <span className="text-xs text-slate-500">Du</span>
+                  <span className="text-[10px] text-slate-400">Du</span>
                   <input type="date" value={form.periodePreconiseeDebut ?? ''} onChange={e => set('periodePreconiseeDebut', e.target.value)}
-                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+                    className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </label>
                 <label className="block">
-                  <span className="text-xs text-slate-500">Au</span>
+                  <span className="text-[10px] text-slate-400">Au</span>
                   <input type="date" value={form.periodePreconiseeFin ?? ''} onChange={e => set('periodePreconiseeFin', e.target.value)}
-                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+                    className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </label>
               </div>
             </div>
 
             {/* Financier & Facturation */}
-            <div className="border border-slate-100 rounded-xl p-3 bg-slate-50/60 space-y-3">
+            <div className="border border-slate-100 rounded-xl p-2.5 bg-slate-50/60 space-y-2">
               <div className="flex items-center gap-1.5">
-                <Receipt size={13} className="text-slate-400"/>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Devis & Paiement</p>
+                <Receipt size={12} className="text-slate-400"/>
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Devis & Paiement</p>
               </div>
 
               {/* CA + durée */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <label className="block">
-                  <span className="text-xs text-slate-500">CA annuel (€)</span>
+                  <span className="text-[10px] text-slate-500">CA annuel (€)</span>
                   <input type="number" min="0" value={form.chiffreAffaire} onChange={e => set('chiffreAffaire', Number(e.target.value))}
-                    className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+                    className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
                 </label>
                 <label className="block">
-                  <span className="text-xs text-slate-500">Durée contrat (années)</span>
+                  <span className="text-[10px] text-slate-500">Durée contrat (ans)</span>
                   <input type="number" min="1" max="10" value={form.nombreAnnees ?? 1}
                     onChange={e => set('nombreAnnees', Math.max(1, Number(e.target.value)))}
-                    className="mt-1 w-20 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+                    className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
                 </label>
               </div>
 
@@ -417,7 +416,7 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 const pct   = Math.min(100, Math.round(paye / ca * 100));
                 return (
                   <div>
-                    <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+                    <div className="flex justify-between text-[11px] text-slate-500 mb-0.5">
                       <span>Encaissé</span>
                       <span className="font-semibold">{paye.toLocaleString('fr-FR')} € / {ca.toLocaleString('fr-FR')} € ({pct}%)</span>
                     </div>
@@ -428,71 +427,77 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 );
               })()}
 
-              {/* Étape 1 : Devis */}
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={form.devisSigne} onChange={e => set('devisSigne', e.target.checked)}
-                  className="w-4 h-4 rounded accent-blue-600" />
-                <span className="text-sm text-slate-600">Devis signé</span>
-              </label>
-
-              {/* Étape 2 : Acompte */}
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-3 cursor-pointer">
+              {/* Checkboxes en ligne: Devis / Acompte / Facture */}
+              <div className="flex flex-wrap gap-3 pt-0.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.devisSigne} onChange={e => set('devisSigne', e.target.checked)}
+                    className="w-4 h-4 rounded accent-blue-600" />
+                  <span className="text-xs text-slate-600">Devis signé</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.acomptePaye} onChange={e => set('acomptePaye', e.target.checked)}
                     className="w-4 h-4 rounded accent-blue-600" />
-                  <span className="text-sm text-slate-600">Acompte payé</span>
+                  <span className="text-xs text-slate-600">Acompte payé</span>
                 </label>
-                {form.acomptePaye && (
-                  <label className="block pl-7">
-                    <span className="text-xs text-slate-500">Montant acompte (€)</span>
-                    <input type="number" min="0" value={form.montantAcompte ?? 0} onChange={e => set('montantAcompte', Number(e.target.value))}
-                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  </label>
-                )}
-              </div>
-
-              {/* Étape 3 : Montant encaissé total */}
-              <label className="block">
-                <span className="text-xs text-slate-500">Montant total encaissé (€)</span>
-                <input type="number" min={0} value={form.montantPaye ?? 0}
-                  onChange={e => set('montantPaye', Number(e.target.value))}
-                  className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-              </label>
-
-              {/* Étape 4 : Facture */}
-              <div className="space-y-1.5 pt-1 border-t border-slate-100">
-                <label className="flex items-center gap-3 cursor-pointer">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.factureFaite ?? false}
                     onChange={e => { set('factureFaite', e.target.checked); if (!e.target.checked) set('dateFacture', ''); }}
                     className="w-4 h-4 rounded accent-green-600" />
-                  <span className="text-sm text-slate-600">Facture envoyée</span>
+                  <span className="text-xs text-slate-600">Facture envoyée</span>
                 </label>
-                {form.factureFaite && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-7">
-                    <label className="block">
-                      <span className="text-xs text-slate-500">Date envoi</span>
-                      <input type="date" value={form.dateFacture ?? ''}
-                        onChange={e => set('dateFacture', e.target.value)}
-                        className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs text-slate-500">Date paiement reçu</span>
-                      <input type="date" value={form.datePaiement ?? ''}
-                        onChange={e => set('datePaiement', e.target.value)}
-                        className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
-                    </label>
-                  </div>
-                )}
               </div>
+
+              {/* Montants & dates conditionnels */}
+              <div className="grid grid-cols-2 gap-2">
+                {form.acomptePaye && (
+                  <label className="block">
+                    <span className="text-[10px] text-slate-500">Montant acompte (€)</span>
+                    <input type="number" min="0" value={form.montantAcompte ?? 0}
+                      onChange={e => {
+                        const newVal = Number(e.target.value);
+                        const oldVal = form.montantAcompte ?? 0;
+                        setForm(prev => {
+                          const autoSync = (prev.montantPaye ?? 0) === 0 || (prev.montantPaye ?? 0) === oldVal;
+                          return { ...prev, montantAcompte: newVal, montantPaye: autoSync ? newVal : prev.montantPaye ?? 0 };
+                        });
+                      }}
+                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </label>
+                )}
+                <label className={`block ${!form.acomptePaye ? 'col-span-2' : ''}`}>
+                  <span className="text-[10px] text-slate-500">Total encaissé (€)</span>
+                  <input type="number" min={0} value={form.montantPaye ?? 0}
+                    onChange={e => set('montantPaye', Number(e.target.value))}
+                    className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </label>
+              </div>
+
+              {/* Dates facture / paiement */}
+              {form.factureFaite && (
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="text-[10px] text-slate-500">Date envoi facture</span>
+                    <input type="date" value={form.dateFacture ?? ''}
+                      onChange={e => set('dateFacture', e.target.value)}
+                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] text-slate-500">Date paiement reçu</span>
+                    <input type="date" value={form.datePaiement ?? ''}
+                      onChange={e => set('datePaiement', e.target.value)}
+                      className="mt-0.5 w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  </label>
+                </div>
+              )}
             </div>
 
             {/* Matériel & Personnel */}
-            <div className="border border-slate-100 rounded-xl p-3 sm:p-4 bg-slate-50 space-y-3">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Matériel & Personnel</p>
+            <div className="border border-slate-100 rounded-xl p-2.5 bg-slate-50 space-y-2">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Matériel & Personnel</p>
 
               {meta.hasPelles && (
                 <div>
-                  <p className="text-sm text-slate-600 mb-1.5">Pelles :</p>
+                  <p className="text-xs text-slate-500 mb-1">Pelles :</p>
                   <div className="flex flex-wrap gap-2">
                     {pelleOptions.map(p => (
                       <button key={p} type="button" onClick={() => togglePelle(p as TypePelle)}
@@ -598,40 +603,36 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 </div>
               )}
 
-              <label className="block">
-                <span className="text-xs text-slate-500">Nombre de personnes</span>
-                <input type="number" min="1" max="20" value={form.nombrePersonnes ?? 1}
-                  onChange={e => set('nombrePersonnes', Number(e.target.value))}
-                  className="mt-0.5 w-24 px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white" />
-              </label>
-
-              {/* Patron requis */}
-              <button
-                type="button"
-                onClick={() => set('patronRequis', !(form.patronRequis ?? true))}
-                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg border text-sm transition-colors ${
-                  (form.patronRequis ?? true)
-                    ? 'bg-orange-50 border-orange-300 text-orange-800'
-                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
-                }`}
-              >
-                <HardHat size={14} className={(form.patronRequis ?? true) ? 'text-orange-600 flex-shrink-0' : 'flex-shrink-0 opacity-40'} />
-                <span className="font-medium">
-                  {(form.patronRequis ?? true) ? 'Patron requis' : 'Patron non requis'}
-                </span>
-                <span className="ml-auto text-xs opacity-60">
-                  {(form.patronRequis ?? true)
-                    ? 'Ne peut pas se faire en simultané avec un autre chantier patron requis'
-                    : 'Le salarié peut y être seul'}
-                </span>
-              </button>
+              <div className="flex items-end gap-3">
+                <label className="block">
+                  <span className="text-[10px] text-slate-500">Personnes</span>
+                  <input type="number" min="1" max="20" value={form.nombrePersonnes ?? 1}
+                    onChange={e => set('nombrePersonnes', Number(e.target.value))}
+                    className="mt-0.5 w-20 px-2 py-1.5 border border-slate-200 rounded-lg text-sm bg-white" />
+                </label>
+                {/* Patron requis */}
+                <button
+                  type="button"
+                  onClick={() => set('patronRequis', !(form.patronRequis ?? true))}
+                  className={`flex items-center gap-1.5 flex-1 px-2.5 py-1.5 rounded-lg border text-xs transition-colors ${
+                    (form.patronRequis ?? true)
+                      ? 'bg-orange-50 border-orange-300 text-orange-800'
+                      : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300'
+                  }`}
+                >
+                  <HardHat size={12} className={(form.patronRequis ?? true) ? 'text-orange-600 flex-shrink-0' : 'flex-shrink-0 opacity-40'} />
+                  <span className="font-medium">
+                    {(form.patronRequis ?? true) ? 'Patron requis' : 'Patron non requis'}
+                  </span>
+                </button>
+              </div>
             </div>
 
             {/* Notes */}
             <label className="block">
-              <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Notes</span>
+              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Notes</span>
               <textarea rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)}
-                className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </label>
           </form>
 
