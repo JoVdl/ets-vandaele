@@ -273,7 +273,7 @@ export default function GanttChart({
 
       {/* ── Scrollable Gantt ──────────────────────────────────────────────── */}
       <div ref={scrollRef} className="flex-1 overflow-auto" style={{ cursor: 'default' }}>
-        <div style={{ minWidth: SIDE_W + totalW, width: SIDE_W + totalW }}>
+        <div style={{ minWidth: SIDE_W + totalW, width: '100%' }}>
 
           {/* ── STICKY HEADER ROW ──────────────────────────────────────────── */}
           <div className="sticky top-0 z-30 flex border-b border-slate-200 dark:border-slate-700" style={{ height: HEAD_H }}>
@@ -284,7 +284,7 @@ export default function GanttChart({
               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Chantier</span>
             </div>
 
-            <div style={{ width: totalW, minWidth: totalW }}>
+            <div style={{ flex: 1, minWidth: totalW }}>
               {/* Month row */}
               <div className="flex" style={{ height: 22, backgroundColor: 'var(--bg-month-row)' }}>
                 {monthGroups.map(mg => (
@@ -375,7 +375,7 @@ export default function GanttChart({
                 </div>
 
                 {/* Grid cell — isolation:isolate contains block z-indices inside this stacking context */}
-                <div className="relative flex-shrink-0 overflow-hidden" style={{ width: totalW, height: ROW_H, isolation: 'isolate' }}>
+                <div className="relative flex-1 overflow-hidden" style={{ minWidth: totalW, height: ROW_H, isolation: 'isolate' }}>
                   {/* Grid lines */}
                   {!denseGrid
                     ? days.map((d, di) => (

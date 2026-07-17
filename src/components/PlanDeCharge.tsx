@@ -287,8 +287,15 @@ export default function PlanDeCharge() {
   const closeModal = ()                      => setModal({ open: false, chantier: null });
 
   const handleSave = async (data: Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (modal.chantier) await updateChantier(modal.chantier.id, data);
-    else                await addChantier(data);
+    const today = new Date().toISOString().slice(0, 10);
+    const orig  = modal.chantier;
+    // Auto-lock dates when manually editing a started or finished confirmed chantier
+    const datesChanged = orig && (data.dateDebut !== orig.dateDebut || data.dateFin !== orig.dateFin);
+    const isStarted    = data.status === 'confirme' && data.dateDebut <= today;
+    const autoLock     = datesChanged && isStarted && !data.datesVerrouillees;
+    const saved        = autoLock ? { ...data, datesVerrouillees: true } : data;
+    if (orig) await updateChantier(orig.id, saved);
+    else      await addChantier(saved);
   };
   const handleDelete  = async () => { if (modal.chantier) await deleteChantier(modal.chantier.id); };
   const handleConfirm = async () => { if (modal.chantier) await confirmChantier(modal.chantier.id); };
