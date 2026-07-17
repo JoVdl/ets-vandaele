@@ -465,12 +465,19 @@ export default function PlanDeCharge() {
   }, []);
 
   // ── Drag-to-pan (pointer events, works for mouse + touch) ─────────────────
+  const activeTouchesRef = useRef(0);
+
   const onPanDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     if (activeTab === 'carte') return;
+    // Count active touch points — abort if multi-touch (pinch-to-zoom)
+    if (e.pointerType === 'touch') {
+      activeTouchesRef.current += 1;
+      if (activeTouchesRef.current > 1) { panRef.current = null; return; }
+    }
     const target = e.target as HTMLElement;
     // Skip interactive elements and draggable chantier bars
-    if (target.closest('button, input, a, select, textarea, [draggable="true"]')) return;
+    if (target.closest('button, input, a, select, textarea, [draggable="true"], .gantt-block')) return;
     panRef.current = {
       startX: e.clientX,
       startPeriodStart: periodStart,
@@ -486,6 +493,13 @@ export default function PlanDeCharge() {
 
   const onPanMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!panRef.current) return;
+    // Abort pan if a second finger joined (pinch gesture)
+    if (e.pointerType === 'touch' && activeTouchesRef.current > 1) {
+      panRef.current = null;
+      isPanningRef.current = false;
+      setIsPanning(false);
+      return;
+    }
     const dx = panRef.current.startX - e.clientX; // positive → dragging left → future
     if (!panRef.current.moved && Math.abs(dx) < 8) return; // dead zone
     panRef.current.moved = true;
@@ -503,7 +517,8 @@ export default function PlanDeCharge() {
     if (panRef.current.origPreset !== 'custom') setZoomPreset('custom');
   }, []);
 
-  const onPanUp = useCallback(() => {
+  const onPanUp = useCallback((e?: React.PointerEvent<HTMLDivElement>) => {
+    if (e?.pointerType === 'touch') activeTouchesRef.current = Math.max(0, activeTouchesRef.current - 1);
     if (!panRef.current) return;
     const { origPreset, origDayWidth, startPeriodStart, lastDayShift, moved } = panRef.current;
     panRef.current = null;
@@ -538,9 +553,9 @@ export default function PlanDeCharge() {
       className="flex flex-col h-full bg-slate-50 dark:bg-slate-900"
       onPointerDown={onPanDown}
       onPointerMove={onPanMove}
-      onPointerUp={onPanUp}
-      onPointerCancel={onPanUp}
-      style={{ cursor: isPanning ? 'grabbing' : undefined }}
+      onPointerUp={e => onPanUp(e)}
+      onPointerCancel={e => onPanUp(e)}
+      style={{ cursor: isPanning ? 'grabbing' : undefined, touchAction: 'pan-y pinch-zoom' }}
     >
 
       {/* ── Top bar ── */}
