@@ -45,9 +45,20 @@ export default function GanttChart({
   const scrollRef     = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<number | null>(null);
   const prevDayWidth  = useRef(dayWidth);
+  const [containerW, setContainerW] = useState(() => window.innerWidth);
 
   // Sidebar width: smaller on mobile to leave room for the chart
   const SIDE_W = window.innerWidth < 640 ? 120 : 260;
+
+  // Keep container width in sync
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      setContainerW(entries[0].contentRect.width);
+    });
+    ro.observe(scrollRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   // ── Mobile peek card ─────────────────────────────────────────────────────
   const [mobilePeek, setMobilePeek] = useState<Chantier | null>(null);
@@ -78,7 +89,10 @@ export default function GanttChart({
     return arr;
   }, [periodStart, periodEnd]);
 
-  const totalW     = days.length * dayWidth;
+  // Stretch dayWidth so the grid always fills the available width
+  const minDayW    = days.length > 0 ? Math.ceil((containerW - SIDE_W) / days.length) : dayWidth;
+  const effDayW    = Math.max(dayWidth, minDayW);
+  const totalW     = days.length * effDayW;
   const todayIndex = differenceInCalendarDays(startOfDay(new Date()), startOfDay(periodStart));
 
   // ── Month groups ──────────────────────────────────────────────────────────
@@ -118,23 +132,23 @@ export default function GanttChart({
   const blockProps = useCallback((c: Chantier) => {
     const s = differenceInCalendarDays(startOfDay(new Date(c.dateDebut)), startOfDay(periodStart));
     const e = differenceInCalendarDays(startOfDay(new Date(c.dateFin)),   startOfDay(periodStart));
-    const rawLeft  = s * dayWidth;
-    const rawRight = (e + 1) * dayWidth;
+    const rawLeft  = s * effDayW;
+    const rawRight = (e + 1) * effDayW;
     const dispLeft  = Math.max(0, rawLeft);
-    const dispWidth = Math.max(dayWidth, Math.min(totalW, rawRight) - dispLeft);
+    const dispWidth = Math.max(effDayW, Math.min(totalW, rawRight) - dispLeft);
     return { left: dispLeft, width: dispWidth };
-  }, [periodStart, dayWidth, totalW]);
+  }, [periodStart, effDayW, totalW]);
 
   // ── Recommended period overlay position ───────────────────────────────────
   const preconiseeProps = useCallback((c: Chantier) => {
     if (!c.periodePreconiseeDebut || !c.periodePreconiseeFin) return null;
     const s = differenceInCalendarDays(startOfDay(new Date(c.periodePreconiseeDebut)), startOfDay(periodStart));
     const e = differenceInCalendarDays(startOfDay(new Date(c.periodePreconiseeFin)),   startOfDay(periodStart));
-    const left  = Math.max(0, s * dayWidth);
-    const right = Math.min(totalW, (e + 1) * dayWidth);
+    const left  = Math.max(0, s * effDayW);
+    const right = Math.min(totalW, (e + 1) * effDayW);
     if (right <= left) return null;
     return { left, width: right - left };
-  }, [periodStart, dayWidth, totalW]);
+  }, [periodStart, effDayW, totalW]);
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
   const handleMoveEnd = useCallback((id: string, delta: number) => {
@@ -240,7 +254,7 @@ export default function GanttChart({
 
   useEffect(() => {
     if (scrollRef.current && todayIndex > 0)
-      scrollRef.current.scrollLeft = Math.max(0, todayIndex * dayWidth - 160);
+      scrollRef.current.scrollLeft = Math.max(0, todayIndex * effDayW - 160);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -290,11 +304,11 @@ export default function GanttChart({
                 {monthGroups.map(mg => (
                   <div key={`${mg.year}-${mg.month}`}
                     className="flex items-center justify-center border-r border-slate-200 overflow-hidden"
-                    style={{ width: mg.count * dayWidth }}>
+                    style={{ width: mg.count * effDayW }}>
                     <span className="text-xs font-bold text-slate-600 uppercase tracking-wider truncate px-1">
-                      {mg.count * dayWidth > 50
+                      {mg.count * effDayW > 50
                         ? `${mg.label} ${mg.year}`
-                        : mg.count * dayWidth > 20
+                        : mg.count * effDayW > 20
                           ? mg.label.slice(0, 3)
                           : ''}
                     </span>
@@ -315,13 +329,13 @@ export default function GanttChart({
                         ${isTod ? '!bg-blue-50' : ''}
                         ${show ? 'cursor-pointer hover:bg-blue-50' : ''}
                       `}
-                      style={{ width: dayWidth, height: 34, borderColor: '#e2e8f0' }}
+                      style={{ width: effDayW, height: 34, borderColor: '#e2e8f0' }}
                       onClick={() => show && onClickDay(format(nextWorkingDay(d), 'yyyy-MM-dd'))}>
                       {show && (
                         <>
                           <span className={`leading-none
                             ${isTod ? 'font-bold text-blue-600' : !isWD ? 'text-slate-300' : 'text-slate-500'}
-                            ${dayWidth < 18 ? 'text-[9px]' : 'text-xs'}
+                            ${effDayW < 18 ? 'text-[9px]' : 'text-xs'}
                           `}>{format(d, 'd')}</span>
                           {showDOW && (
                             <span className={`text-[9px] leading-none mt-0.5 ${isTod ? 'text-blue-400' : 'text-slate-300'}`}>
@@ -382,8 +396,8 @@ export default function GanttChart({
                     ? days.map((d, di) => (
                         <div key={di} className="absolute top-0 bottom-0 border-r border-slate-50"
                           style={{
-                            left: di * dayWidth,
-                            width: dayWidth,
+                            left: di * effDayW,
+                            width: effDayW,
                             backgroundColor: !isWorkingDay(d)
                               ? 'var(--bg-nonworking)'
                               : isToday(d) ? 'var(--bg-today-col)' : undefined,
@@ -392,7 +406,7 @@ export default function GanttChart({
                     : monthGroups.map(mg => (
                         <div key={`${mg.year}-${mg.month}`}
                           className="absolute top-0 bottom-0 border-r border-slate-100"
-                          style={{ left: mg.startIndex * dayWidth, width: mg.count * dayWidth }} />
+                          style={{ left: mg.startIndex * effDayW, width: mg.count * effDayW }} />
                       ))
                   }
 
@@ -410,13 +424,13 @@ export default function GanttChart({
                   {/* Today line */}
                   {todayIndex >= 0 && todayIndex < days.length && (
                     <div className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-20 pointer-events-none"
-                      style={{ left: todayIndex * dayWidth + dayWidth / 2 }} />
+                      style={{ left: todayIndex * effDayW + effDayW / 2 }} />
                   )}
 
                   {/* Block */}
                   {left + width > 0 && left < totalW && (
                     <ChantierBlock
-                      chantier={c} left={left} width={width} dayWidth={dayWidth}
+                      chantier={c} left={left} width={width} dayWidth={effDayW}
                       onMoveEnd={handleMoveEnd} onResizeEnd={handleResizeEnd}
                       onClick={handleChantierTap} outOfPreconisee={outOfPrecon}
                       onHover={handleHover} onUnhover={handleUnhover}
