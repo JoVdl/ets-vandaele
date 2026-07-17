@@ -16,7 +16,6 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
   const meta        = CHANTIER_TYPES[c.type];
   const isPotentiel = c.status === 'potentiel';
   const isArchived  = c.status === 'refuse' || c.status === 'annule';
-  const isPast      = !isPotentiel && !isArchived && new Date(c.dateFin) < new Date();
   const nb          = c.nombrePersonnes ?? 1;
   const wd          = countWorkingDays(new Date(c.dateDebut), new Date(c.dateFin));
   const nAns        = c.nombreAnnees ?? 1;
@@ -131,7 +130,7 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
           )}
 
           {/* Facturation */}
-          {isPast && (() => {
+          {!isArchived && (() => {
             const paye = c.montantPaye ?? 0;
             const pct  = caAn > 0 ? Math.min(100, Math.round(paye / caAn * 100)) : 0;
             const barColor = pct >= 100 ? '#16a34a' : pct > 0 ? '#3b82f6' : '#e2e8f0';

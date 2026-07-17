@@ -375,7 +375,8 @@ export default function GanttChart({
                 </div>
 
                 {/* Grid cell — isolation:isolate contains block z-indices inside this stacking context */}
-                <div className="relative flex-1 overflow-hidden" style={{ minWidth: totalW, height: ROW_H, isolation: 'isolate' }}>
+                <div className="relative flex-1" style={{ minWidth: totalW, height: ROW_H, isolation: 'isolate', overflow: 'hidden',
+                  backgroundColor: i % 2 === 0 ? 'var(--bg-row-even)' : 'var(--bg-row-odd)' }}>
                   {/* Grid lines */}
                   {!denseGrid
                     ? days.map((d, di) => (
