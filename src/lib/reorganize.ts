@@ -90,8 +90,8 @@ function findSlot(
 }
 
 /**
- * Sort a group of chantiers by periodePreconiseeDebut/dateDebut then apply
- * nearest-neighbor + equipment synergy within each month group.
+ * Sort a group of chantiers using Earliest Deadline First (periodePreconiseeFin) then apply
+ * nearest-neighbor + equipment synergy within each deadline-month group.
  * Returns ordered array and the last geographic position reached.
  */
 function orderByProximity(
@@ -100,14 +100,16 @@ function orderByProximity(
   startLon: number,
   prevChantier: Chantier | null,
 ): { ordered: Chantier[]; lastLat: number; lastLon: number; lastChantier: Chantier | null } {
-  const sorted = [...group].sort((a, b) =>
-    (a.periodePreconiseeDebut ?? a.dateDebut).localeCompare(b.periodePreconiseeDebut ?? b.dateDebut)
-  );
+  // Deadline = fin de préco si définie, sinon début de préco, sinon dateDebut
+  const deadline = (c: Chantier) => c.periodePreconiseeFin ?? c.periodePreconiseeDebut ?? c.dateDebut;
 
-  // Group by YYYY-MM
+  // EDF: les chantiers avec deadline la plus proche passent en premier
+  const sorted = [...group].sort((a, b) => deadline(a).localeCompare(deadline(b)));
+
+  // Group by deadline month (YYYY-MM) — garantit que les fenêtres serrées sont traitées avant
   const byMonth = new Map<string, Chantier[]>();
   for (const c of sorted) {
-    const key = (c.periodePreconiseeDebut ?? c.dateDebut).substring(0, 7);
+    const key = deadline(c).substring(0, 7);
     if (!byMonth.has(key)) byMonth.set(key, []);
     byMonth.get(key)!.push(c);
   }
@@ -220,7 +222,10 @@ export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potent
 
     for (const c of ordered) {
       const wdDur = wdDurations.get(c.id) ?? 1;
-      const searchFrom = nextWorkingDay(startOfDay(new Date(c.periodePreconiseeDebut ?? c.dateDebut)));
+      // Never place a chantier in the past — search from max(today, périodePreconiseeDebut)
+      const today = startOfDay(new Date());
+      const precoOrDate = startOfDay(new Date(c.periodePreconiseeDebut ?? c.dateDebut));
+      const searchFrom = precoOrDate > today ? precoOrDate : today;
       const slot = findSlot(c, wdDur, searchFrom, scheduled);
 
       if (!slot) {
