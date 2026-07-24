@@ -222,10 +222,10 @@ export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potent
 
     for (const c of ordered) {
       const wdDur = wdDurations.get(c.id) ?? 1;
-      // Never place a chantier in the past — search from max(today, périodePreconiseeDebut)
-      const today = startOfDay(new Date());
+      // Never place a chantier before tomorrow — search from max(tomorrow, périodePreconiseeDebut)
+      const tomorrow = addDays(startOfDay(new Date()), 1);
       const precoOrDate = startOfDay(new Date(c.periodePreconiseeDebut ?? c.dateDebut));
-      const searchFrom = precoOrDate > today ? precoOrDate : today;
+      const searchFrom = precoOrDate > tomorrow ? precoOrDate : tomorrow;
       const slot = findSlot(c, wdDur, searchFrom, scheduled);
 
       if (!slot) {
