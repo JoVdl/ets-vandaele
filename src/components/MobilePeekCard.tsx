@@ -5,6 +5,7 @@ import cenLogoUrl from '../assets/cen-logo.png';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { countWorkingDays, caAnnuel } from '../lib/workingDays';
+import { getEffectiveEtat, ETAT_LABELS, ETAT_COLORS } from '../lib/etat';
 
 interface Props {
   chantier: Chantier;
@@ -16,6 +17,7 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
   const meta        = CHANTIER_TYPES[c.type];
   const isPotentiel = c.status === 'potentiel';
   const isArchived  = c.status === 'refuse' || c.status === 'annule';
+  const etat        = getEffectiveEtat(c);
   const nb          = c.nombrePersonnes ?? 1;
   const wd          = countWorkingDays(new Date(c.dateDebut), new Date(c.dateFin));
   const nAns        = c.nombreAnnees ?? 1;
@@ -61,6 +63,11 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
             }`}>
               {c.status === 'refuse' ? 'Refusé' : c.status === 'annule' ? 'Annulé' : isPotentiel ? 'Potentiel' : 'Confirmé'}
             </span>
+            {!isArchived && !isPotentiel && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${ETAT_COLORS[etat].bg} ${ETAT_COLORS[etat].text} ${ETAT_COLORS[etat].border}`}>
+                {ETAT_LABELS[etat]}
+              </span>
+            )}
             {c.datesVerrouillees && (
               <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">
                 <Lock size={9}/> Verrouillé

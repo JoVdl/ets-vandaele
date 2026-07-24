@@ -7,6 +7,7 @@ import cenLogoUrl from '../assets/cen-logo.png';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { countWorkingDays, caAnnuel } from '../lib/workingDays';
+import { getEffectiveEtat, ETAT_LABELS, ETAT_COLORS } from '../lib/etat';
 import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
   CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon,
@@ -112,7 +113,8 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
   const meta = CHANTIER_TYPES[c.type];
   const isPotentiel = c.status === 'potentiel';
   const isArchived  = c.status === 'refuse' || c.status === 'annule';
-  const isPast      = !isPotentiel && !isArchived && new Date(c.dateFin) < new Date();
+  const etat        = getEffectiveEtat(c);
+  const isPast      = !isPotentiel && !isArchived && etat === 'termine';
   const nb   = c.nombrePersonnes ?? 1;
   const hasMap = !!(c.latitude && c.longitude);
 
@@ -167,6 +169,11 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
               }`}>
                 {c.status === 'refuse' ? 'Refusé' : c.status === 'annule' ? 'Annulé' : isPotentiel ? 'Potentiel' : 'Confirmé'}
               </span>
+              {!isArchived && !isPotentiel && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${ETAT_COLORS[etat].bg} ${ETAT_COLORS[etat].text} ${ETAT_COLORS[etat].border}`}>
+                  {ETAT_LABELS[etat]}
+                </span>
+              )}
               {c.datesVerrouillees && (
                 <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700" title="Dates verrouillées — exclues de la réorganisation">
                   <Lock size={9}/> Verrouillé

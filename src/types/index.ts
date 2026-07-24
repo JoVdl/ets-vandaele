@@ -13,6 +13,7 @@ export type ChantierType =
 export type TypeRouleau = '700kg';
 
 export type ChantierStatus = 'potentiel' | 'confirme' | 'refuse' | 'annule';
+export type ChantierEtat = 'a_venir' | 'en_cours' | 'termine';
 export type TypePelle = '1.5t' | '3t' | '8t' | '16t';
 
 export interface Chantier {
@@ -71,6 +72,9 @@ export interface Chantier {
 
   // Dates verrouillées : exclues de la réorganisation automatique
   datesVerrouillees?: boolean;
+
+  // État d'avancement (calculé auto depuis les dates si absent)
+  etat?: ChantierEtat;
 
   // Curage aspiration
   pellePrepaBassin?: '8t' | '16t';

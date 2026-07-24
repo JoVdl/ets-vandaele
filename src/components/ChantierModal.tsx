@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
 import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen, HardHat, Copy, Receipt } from 'lucide-react';
-import type { Chantier, ChantierType, ChantierStatus, TypePelle } from '../types';
+import type { Chantier, ChantierType, ChantierStatus, ChantierEtat, TypePelle } from '../types';
+import { ETAT_LABELS } from '../lib/etat';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { format, addYears } from 'date-fns';
 import { geocode, geocodeSearch, extractLocation, type GeoResult } from '../lib/geocoder';
@@ -57,6 +58,7 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   pellePrepaBassin: '8t',
   nombreJoursPrepa: 0,
   datesVerrouillees: false,
+  etat: 'a_venir' as ChantierEtat,
 });
 
 function isOutOfPreconisee(form: ReturnType<typeof emptyForm>): boolean {
@@ -74,7 +76,13 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
   useEffect(() => {
     if (chantier) {
       const { id, createdAt, updatedAt, ...rest } = chantier;
-      setForm({ ...emptyForm(), ...rest });
+      // Auto-compute etat from dates when not explicitly set
+      const today = new Date().toISOString().slice(0, 10);
+      const computedEtat: ChantierEtat = rest.etat ?? (
+        rest.dateFin < today ? 'termine' :
+        rest.dateDebut <= today ? 'en_cours' : 'a_venir'
+      );
+      setForm({ ...emptyForm(), ...rest, etat: computedEtat });
     } else {
       const f = emptyForm();
       if (defaultDateDebut) {
@@ -310,6 +318,25 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                   <option value="annule">Annulé</option>
                 </select>
               </label>
+            </div>
+
+            {/* État d'avancement */}
+            <div>
+              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide block mb-1">État</span>
+              <div className="flex gap-1.5">
+                {(['a_venir', 'en_cours', 'termine'] as const).map(e => (
+                  <button key={e} type="button" onClick={() => set('etat', e)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                      form.etat === e
+                        ? e === 'a_venir'  ? 'bg-blue-600 text-white border-blue-600'
+                        : e === 'en_cours' ? 'bg-green-600 text-white border-green-600'
+                        :                   'bg-slate-600 text-white border-slate-600'
+                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                    }`}>
+                    {ETAT_LABELS[e]}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Dates intervention */}

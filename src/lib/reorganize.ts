@@ -2,6 +2,7 @@ import { addDays, startOfDay } from 'date-fns';
 import { format } from 'date-fns';
 import type { Chantier } from '../types';
 import { nextWorkingDay, prevWorkingDay, countWorkingDays, addWorkingDays } from './workingDays';
+import { getEffectiveEtat } from './etat';
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -159,30 +160,33 @@ export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potent
   const results: ReorganizeResult[] = [];
   let moved = 0;
 
-  const active = chantiers.filter(c => c.status !== 'refuse' && c.status !== 'annule');
+  // Chantiers terminés sont complètement exclus de la réorganisation
+  const active = chantiers.filter(c =>
+    c.status !== 'refuse' && c.status !== 'annule' &&
+    getEffectiveEtat(c) !== 'termine'
+  );
 
-  // Locked anchors never move regardless of mode
-  const lockedAnchors = active.filter(c => c.datesVerrouillees);
+  // Locked anchors: dates verrouillées OR chantier en cours (déjà démarré → ne peut pas bouger)
+  const lockedAnchors = active.filter(c => c.datesVerrouillees || getEffectiveEtat(c) === 'en_cours');
 
   // Batches: confirmés always scheduled before potentiels to guarantee their priority
   let batch1: Chantier[]; // scheduled first (highest priority)
   let batch2: Chantier[]; // scheduled second (fills remaining gaps)
 
+  const canMove = (c: Chantier) => !c.datesVerrouillees && getEffectiveEtat(c) === 'a_venir';
+
   if (mode === 'potentiel') {
-    // Confirmed (non-locked) are also fixed anchors; only free potentiels move
-    const confirmedAnchors = active.filter(c => c.status === 'confirme' && !c.datesVerrouillees);
-    batch1 = active.filter(c => c.status === 'potentiel' && !c.datesVerrouillees).map(c => ({ ...c }));
+    // Confirmed (non-locked, non en_cours) are also fixed anchors; only free potentiels move
+    const confirmedAnchors = active.filter(c => c.status === 'confirme' && !canMove(c));
+    batch1 = active.filter(c => c.status === 'potentiel' && canMove(c)).map(c => ({ ...c }));
     batch2 = [];
-    // Add confirmed to locked anchors for slot conflict detection
-    lockedAnchors.push(...confirmedAnchors);
+    lockedAnchors.push(...confirmedAnchors.filter(c => !lockedAnchors.includes(c)));
   } else if (mode === 'confirme') {
-    // Potentiels completely ignored; only free confirmed move
-    batch1 = active.filter(c => c.status === 'confirme' && !c.datesVerrouillees).map(c => ({ ...c }));
+    batch1 = active.filter(c => c.status === 'confirme' && canMove(c)).map(c => ({ ...c }));
     batch2 = [];
   } else {
-    // 'all': confirmed are scheduled first (priority), potentiels fill the gaps
-    batch1 = active.filter(c => c.status === 'confirme' && !c.datesVerrouillees).map(c => ({ ...c }));
-    batch2 = active.filter(c => c.status === 'potentiel' && !c.datesVerrouillees).map(c => ({ ...c }));
+    batch1 = active.filter(c => c.status === 'confirme' && canMove(c)).map(c => ({ ...c }));
+    batch2 = active.filter(c => c.status === 'potentiel' && canMove(c)).map(c => ({ ...c }));
   }
 
   if (batch1.length === 0 && batch2.length === 0) {

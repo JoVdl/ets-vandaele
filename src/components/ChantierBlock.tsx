@@ -1,7 +1,8 @@
 import { useRef, useCallback } from 'react';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
-import { CheckCircle2, Clock, Users, User, AlertTriangle, Lock, CheckCheck, CircleAlert } from 'lucide-react';
+import { CheckCircle2, Clock, Users, User, AlertTriangle, Lock, CheckCheck, CircleAlert, Hourglass } from 'lucide-react';
+import { getEffectiveEtat } from '../lib/etat';
 import cenLogoUrl from '../assets/cen-logo.png';
 import { countWorkingDays, caAnnuel } from '../lib/workingDays';
 import {
@@ -128,7 +129,9 @@ export default function ChantierBlock({
     onUnhover?.();
   }, [onUnhover]);
 
-  const isPast      = !isPotentiel && !isArchived && new Date(chantier.dateFin) < new Date();
+  const etat        = getEffectiveEtat(chantier);
+  const isEnCours   = !isPotentiel && !isArchived && etat === 'en_cours';
+  const isPast      = !isPotentiel && !isArchived && etat === 'termine';
   const showText    = width > 20;
   const showIcons   = width > 50;
   const showCA       = width > 130 && chantier.chiffreAffaire > 0;
@@ -141,7 +144,7 @@ export default function ChantierBlock({
 
   const bg    = isArchived ? '#f1f5f9' : isPotentiel ? 'white' : meta.color;
   const fg    = isArchived ? '#94a3b8' : isPotentiel ? meta.color : 'white';
-  const alpha = isArchived ? 0.6 : isPotentiel ? 0.85 : 1;
+  const alpha = isArchived ? 0.6 : isPotentiel ? 0.85 : isPast ? 0.7 : 1;
 
   return (
     <div
@@ -182,10 +185,20 @@ export default function ChantierBlock({
           <div className="flex-shrink-0 opacity-80">
             {chantier.datesVerrouillees
               ? <Lock size={10} style={{ color: isPotentiel ? '#F59E0B' : undefined }} />
-              : chantier.status === 'confirme'
-                ? <CheckCircle2 size={10} />
-                : <Clock size={10} />}
+              : isEnCours
+                ? <Hourglass size={10} />
+                : chantier.status === 'confirme'
+                  ? <CheckCircle2 size={10} />
+                  : <Clock size={10} />}
           </div>
+        )}
+
+        {/* En cours: pulsing dot */}
+        {isEnCours && showText && (
+          <span className="flex-shrink-0 relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ backgroundColor: 'rgba(255,255,255,0.8)' }} />
+            <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: 'rgba(255,255,255,0.95)' }} />
+          </span>
         )}
 
         {/* Invoice badge — only for past confirmed chantiers */}
