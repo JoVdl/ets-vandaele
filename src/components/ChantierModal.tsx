@@ -86,7 +86,11 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
     } else {
       const f = emptyForm();
       if (defaultDateDebut) {
-        const snapped = format(nextWorkingDay(new Date(defaultDateDebut + 'T00:00:00')), 'yyyy-MM-dd');
+        // At minimum tomorrow — never create a chantier starting today
+        const tomorrow = addDays(new Date(), 1);
+        const picked   = new Date(defaultDateDebut + 'T00:00:00');
+        const base     = picked > tomorrow ? picked : tomorrow;
+        const snapped  = format(nextWorkingDay(base), 'yyyy-MM-dd');
         f.dateDebut = snapped;
         f.dateFin   = snapped;
       }

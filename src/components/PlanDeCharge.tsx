@@ -479,11 +479,11 @@ export default function PlanDeCharge() {
     if (loading || autoReorgDone.current || !chantiers.length) return;
     autoReorgDone.current = true;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const todayLocal = format(new Date(), 'yyyy-MM-dd');
     const hasStale = chantiers.some(c =>
       c.status === 'confirme' &&
       getEffectiveEtat(c) === 'a_venir' &&
-      c.dateDebut < today
+      c.dateDebut < todayLocal
     );
     if (!hasStale) return;
 
