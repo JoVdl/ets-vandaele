@@ -4,7 +4,7 @@ import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen,
 import type { Chantier, ChantierType, ChantierStatus, ChantierEtat, TypePelle } from '../types';
 import { ETAT_LABELS } from '../lib/etat';
 import { CHANTIER_TYPES } from '../lib/constants';
-import { format, addYears } from 'date-fns';
+import { format, addDays, addYears } from 'date-fns';
 import { geocode, geocodeSearch, extractLocation, type GeoResult } from '../lib/geocoder';
 import { nextWorkingDay, prevWorkingDay, addWorkingDays, countWorkingDays } from '../lib/workingDays';
 
@@ -27,8 +27,8 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   lieu: '',
   type: 'curage_mecanique',
   status: 'potentiel',
-  dateDebut: format(nextWorkingDay(new Date()), 'yyyy-MM-dd'),
-  dateFin: format(nextWorkingDay(new Date()), 'yyyy-MM-dd'),
+  dateDebut: format(nextWorkingDay(addDays(new Date(), 1)), 'yyyy-MM-dd'),
+  dateFin: format(nextWorkingDay(addDays(new Date(), 1)), 'yyyy-MM-dd'),
   periodePreconiseeDebut: '',
   periodePreconiseeFin: '',
   adresse: '',
