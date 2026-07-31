@@ -19,6 +19,7 @@ import FacturationView from './FacturationView';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import { reorganize, type ReorganizeMode } from '../lib/reorganize';
+import { getEffectiveEtat } from '../lib/etat';
 import { geocode, extractLocationCandidates } from '../lib/geocoder';
 import { countWorkingDays, caAnnuel } from '../lib/workingDays';
 import {
@@ -121,6 +122,8 @@ export default function PlanDeCharge() {
   });
   const [filterStatus, setFilterStatus] = useState<'all' | 'confirme' | 'potentiel' | 'archive'>('confirme');
   const [geocoding, setGeocoding] = useState<{ done: number; total: number } | null>(null);
+  const [autoReorgBanner, setAutoReorgBanner] = useState<{ moved: number; warnings: string[] } | null>(null);
+  const autoReorgDone = useRef(false);
   const { theme, toggle: toggleTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const [showEquip, setShowEquip] = useState(false);
@@ -471,6 +474,30 @@ export default function PlanDeCharge() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  // ── Auto-reorg des confirmés au démarrage si certains sont dans le passé ─────
+  useEffect(() => {
+    if (loading || autoReorgDone.current || !chantiers.length) return;
+    autoReorgDone.current = true;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const hasStale = chantiers.some(c =>
+      c.status === 'confirme' &&
+      getEffectiveEtat(c) === 'a_venir' &&
+      c.dateDebut < today
+    );
+    if (!hasStale) return;
+
+    const result = reorganize(chantiers, 'confirme');
+    if (result.moved === 0) return;
+
+    Promise.all(
+      result.results.map(r => updateChantier(r.id, { dateDebut: r.dateDebut, dateFin: r.dateFin }))
+    ).then(() => {
+      setAutoReorgBanner({ moved: result.moved, warnings: result.warnings });
+      setTimeout(() => setAutoReorgBanner(null), 8000);
+    });
+  }, [loading, chantiers]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Drag-to-pan (pointer events, works for mouse + touch) ─────────────────
   const activeTouchesRef = useRef(0);
 
@@ -564,6 +591,20 @@ export default function PlanDeCharge() {
       onPointerCancel={e => onPanUp(e)}
       style={{ cursor: isPanning ? 'grabbing' : undefined, touchAction: 'pan-y pinch-zoom' }}
     >
+
+      {/* ── Bannière auto-réorg ── */}
+      {autoReorgBanner && (
+        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-violet-50 border-b border-violet-200 text-violet-800 text-xs">
+          <Wand2 size={13} className="flex-shrink-0" />
+          <span>
+            <span className="font-semibold">{autoReorgBanner.moved} chantier{autoReorgBanner.moved > 1 ? 's' : ''} confirmé{autoReorgBanner.moved > 1 ? 's' : ''}</span> repositionné{autoReorgBanner.moved > 1 ? 's' : ''} automatiquement (dates passées détectées).
+            {autoReorgBanner.warnings.length > 0 && (
+              <span className="ml-1 text-amber-700"> ⚠ {autoReorgBanner.warnings.join(' — ')}</span>
+            )}
+          </span>
+          <button onClick={() => setAutoReorgBanner(null)} className="ml-auto flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity">✕</button>
+        </div>
+      )}
 
       {/* ── Top bar ── */}
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
