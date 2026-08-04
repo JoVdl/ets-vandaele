@@ -290,15 +290,28 @@ export default function PlanDeCharge() {
   const closeModal = ()                      => setModal({ open: false, chantier: null });
 
   const handleSave = async (data: Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const orig  = modal.chantier;
-    // Auto-lock dates when manually editing a started or finished confirmed chantier
+    const orig = modal.chantier;
+    // Auto-lock whenever a confirmed chantier's dates are manually changed
     const datesChanged = orig && (data.dateDebut !== orig.dateDebut || data.dateFin !== orig.dateFin);
-    const isStarted    = data.status === 'confirme' && data.dateDebut <= today;
-    const autoLock     = datesChanged && isStarted && !data.datesVerrouillees;
+    const autoLock     = datesChanged && data.status === 'confirme' && !data.datesVerrouillees;
     const saved        = autoLock ? { ...data, datesVerrouillees: true } : data;
+
     if (orig) await updateChantier(orig.id, saved);
     else      await addChantier(saved);
+
+    // After locking, reorganize all non-locked chantiers to resolve any new conflicts
+    if (autoLock && orig) {
+      const updatedChantiers = chantiers.map(c =>
+        c.id === orig.id ? { ...c, ...saved, id: orig.id, createdAt: c.createdAt, updatedAt: c.updatedAt } : c
+      );
+      const result = reorganize(updatedChantiers, 'all');
+      const otherMoves = result.results.filter(r => r.id !== orig.id);
+      if (otherMoves.length > 0) {
+        await Promise.all(otherMoves.map(r => updateChantier(r.id, { dateDebut: r.dateDebut, dateFin: r.dateFin })));
+        setAutoReorgBanner({ moved: otherMoves.length, warnings: result.warnings });
+        setTimeout(() => setAutoReorgBanner(null), 8000);
+      }
+    }
   };
   const handleDelete  = async () => { if (modal.chantier) await deleteChantier(modal.chantier.id); };
   const handleConfirm = async () => { if (modal.chantier) await confirmChantier(modal.chantier.id); };
