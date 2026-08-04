@@ -103,7 +103,7 @@ const TYPE_LABELS = {
 function buildEvent(c) {
   const isPotentiel = c.status === 'potentiel';
   const isArchived  = c.status === 'refuse' || c.status === 'annule';
-  if (isArchived) return null;
+  if (isArchived || isPotentiel) return null;
 
   const status  = isPotentiel ? 'TENTATIVE' : 'CONFIRMED';
   const summary = `${c.nom}${isPotentiel ? ' (potentiel)' : ''}`;
