@@ -10,6 +10,8 @@ import ChantierBlock from './ChantierBlock';
 import ChantierTooltip from './ChantierTooltip';
 import MobilePeekCard from './MobilePeekCard';
 import { isWorkingDay, findGaps, nextWorkingDay, prevWorkingDay } from '../lib/workingDays';
+import { resourceConflict } from '../lib/reorganize';
+import { getEffectiveEtat } from '../lib/etat';
 
 interface Props {
   chantiers: Chantier[];
@@ -118,6 +120,24 @@ export default function GanttChart({
     () => [...chantiers].sort((a, b) => a.dateDebut.localeCompare(b.dateDebut)),
     [chantiers]
   );
+
+  // ── Conflict detection ────────────────────────────────────────────────────
+  const conflictIds = useMemo(() => {
+    const ids = new Set<string>();
+    const active = chantiers.filter(c =>
+      c.status !== 'refuse' && c.status !== 'annule' && getEffectiveEtat(c) !== 'termine'
+    );
+    for (let i = 0; i < active.length; i++) {
+      for (let j = i + 1; j < active.length; j++) {
+        const a = active[i], b = active[j];
+        if (a.dateDebut <= b.dateFin && a.dateFin >= b.dateDebut && resourceConflict(a, b)) {
+          ids.add(a.id);
+          ids.add(b.id);
+        }
+      }
+    }
+    return ids;
+  }, [chantiers]);
 
   // ── Availability gaps ─────────────────────────────────────────────────────
   const gaps = useMemo(() => {
@@ -380,6 +400,9 @@ export default function GanttChart({
                       <p className={`text-xs font-semibold truncate ${isPotentiel ? 'text-slate-400' : 'text-slate-700'}`}>
                         {c.nom}
                       </p>
+                      {conflictIds.has(c.id) && (
+                        <span title="Conflit de ressources" className="flex-shrink-0 text-red-500 text-[10px] font-bold">!</span>
+                      )}
                       {outOfPrecon && (
                         <span title="Hors période préconisée" className="flex-shrink-0 text-orange-400">⚠</span>
                       )}
@@ -434,6 +457,7 @@ export default function GanttChart({
                       onMoveEnd={handleMoveEnd} onResizeEnd={handleResizeEnd}
                       onClick={handleChantierTap} outOfPreconisee={outOfPrecon}
                       onHover={handleHover} onUnhover={handleUnhover}
+                      isConflicting={conflictIds.has(c.id)}
                     />
                   )}
                 </div>

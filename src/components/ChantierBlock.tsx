@@ -1,7 +1,7 @@
 import { useRef, useCallback } from 'react';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
-import { CheckCircle2, Clock, Users, User, AlertTriangle, Lock, CheckCheck, CircleAlert, Hourglass } from 'lucide-react';
+import { CheckCircle2, Clock, Users, User, AlertTriangle, Lock, CheckCheck, CircleAlert, Hourglass, ShieldAlert } from 'lucide-react';
 import { getEffectiveEtat } from '../lib/etat';
 import cenLogoUrl from '../assets/cen-logo.png';
 import { countWorkingDays, caAnnuel } from '../lib/workingDays';
@@ -21,6 +21,7 @@ interface Props {
   onHover?: (chantier: Chantier, x: number, y: number) => void;
   onUnhover?: () => void;
   outOfPreconisee?: boolean;
+  isConflicting?: boolean;
 }
 
 interface EquipChip {
@@ -58,7 +59,7 @@ function buildEquipChips(c: Chantier): EquipChip[] {
 }
 
 export default function ChantierBlock({
-  chantier, left, width, dayWidth, onMoveEnd, onResizeEnd, onClick, onHover, onUnhover, outOfPreconisee,
+  chantier, left, width, dayWidth, onMoveEnd, onResizeEnd, onClick, onHover, onUnhover, outOfPreconisee, isConflicting,
 }: Props) {
   const meta        = CHANTIER_TYPES[chantier.type];
   const isPotentiel = chantier.status === 'potentiel';
@@ -155,9 +156,9 @@ export default function ChantierBlock({
         width: Math.max(width, 4),
         height: 'calc(100% - 8px)',
         backgroundColor: bg,
-        borderColor: isArchived ? '#cbd5e1' : outOfPreconisee ? '#F97316' : meta.color,
+        borderColor: isArchived ? '#cbd5e1' : isConflicting ? '#ef4444' : outOfPreconisee ? '#F97316' : meta.color,
         borderStyle: isPotentiel || isArchived ? 'dashed' : 'solid',
-        borderWidth: outOfPreconisee ? 2 : 1.5,
+        borderWidth: isConflicting ? 2 : outOfPreconisee ? 2 : 1.5,
         opacity: alpha,
         zIndex: 10,
         boxShadow: isPotentiel || isArchived ? 'none' : '0 1px 3px rgba(0,0,0,0.18)',
@@ -172,6 +173,13 @@ export default function ChantierBlock({
       onMouseLeave={handleMouseLeave}
     >
       <div className="h-full flex items-center gap-1 px-1.5 overflow-hidden" style={{ color: fg }}>
+
+        {/* Conflict warning */}
+        {isConflicting && showText && (
+          <div className="flex-shrink-0" title="Conflit de ressources (patron ou équipement) avec un autre chantier">
+            <ShieldAlert size={10} style={{ color: isPotentiel ? '#ef4444' : '#fca5a5' }} />
+          </div>
+        )}
 
         {/* Out-of-recommended-period warning */}
         {outOfPreconisee && showText && (

@@ -38,7 +38,7 @@ function equipmentSynergy(a: Chantier, b: Chantier): number {
  * Assumptions: 2 people total, 1 unit of each equipment type (chenillette, bateauFaucardeur,
  * drague, telesco, each pelle type, bull, dumper, tractoBenne, rouleau).
  */
-function resourceConflict(a: Chantier, b: Chantier): boolean {
+export function resourceConflict(a: Chantier, b: Chantier): boolean {
   if ((a.nombrePersonnes ?? 1) + (b.nombrePersonnes ?? 1) > 2) return true;
   // Patron conflict: if both chantiers require the patron (default = true), they can't run simultaneously
   if ((a.patronRequis !== false) && (b.patronRequis !== false)) return true;
@@ -191,9 +191,18 @@ export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potent
     batch2 = active.filter(c => c.status === 'potentiel' && canMove(c)).map(c => ({ ...c }));
   }
 
+  // Detect conflicts between locked anchors (neither can move → warn the user)
+  for (let i = 0; i < lockedAnchors.length; i++) {
+    for (let j = i + 1; j < lockedAnchors.length; j++) {
+      const a = lockedAnchors[i];
+      const b = lockedAnchors[j];
+      if (a.dateDebut <= b.dateFin && a.dateFin >= b.dateDebut && resourceConflict(a, b))
+        warnings.push(`⚠ Conflit non résolvable : "${a.nom}" et "${b.nom}" se chevauchent (patron ou équipement) et sont tous les deux verrouillés.`);
+    }
+  }
+
   if (batch1.length === 0 && batch2.length === 0) {
-    const label = mode === 'confirme' ? ' confirmé' : mode === 'potentiel' ? ' potentiel (non verrouillé)' : '';
-    return { moved: 0, warnings: [`Aucun chantier${label} à réorganiser.`], results: [] };
+    return { moved: 0, warnings, results: [] };
   }
 
   // Preserve working-day durations for all moveable chantiers

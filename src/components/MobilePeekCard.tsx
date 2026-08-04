@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Calendar, MapPin, Euro, Users, User, Lock, Pencil, CheckCheck, CircleAlert } from 'lucide-react';
+import { Calendar, MapPin, Euro, Users, User, Lock, Pencil, CheckCheck, CircleAlert, HardHat } from 'lucide-react';
 import cenLogoUrl from '../assets/cen-logo.png';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
@@ -121,10 +121,21 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
             </div>
           )}
 
-          {/* Personnel */}
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
-            {nb >= 2 ? <Users size={12} /> : <User size={12} />}
-            <span>{nb} personne{nb > 1 ? 's' : ''}</span>
+          {/* Personnel + patron */}
+          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1.5 flex-wrap">
+            <div className="flex items-center gap-1">
+              {nb >= 2 ? <Users size={12} /> : <User size={12} />}
+              <span>{nb} personne{nb > 1 ? 's' : ''}</span>
+            </div>
+            {c.patronRequis !== false ? (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700 text-[10px] font-medium border border-orange-200">
+                <HardHat size={10}/> Patron requis
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[10px]">
+                <HardHat size={10}/> Sans patron
+              </span>
+            )}
           </div>
 
           {/* Equipment chips */}
