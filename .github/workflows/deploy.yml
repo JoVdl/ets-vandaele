@@ -3,6 +3,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main, claude/loving-wright-Gx3KB]
+  schedule:
+    # Refresh the calendar every 30 min so iPhone stays up-to-date
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -28,6 +31,9 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+
+      - name: Generate calendar.ics
+        run: node scripts/generate-ical.mjs dist/calendar.ics
 
       - uses: actions/upload-pages-artifact@v3
         with:
