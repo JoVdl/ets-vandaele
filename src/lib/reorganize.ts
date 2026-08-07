@@ -90,8 +90,8 @@ function findSlot(
 }
 
 /**
- * Sort a group of chantiers using Earliest Deadline First (periodePreconiseeFin) then apply
- * nearest-neighbor + equipment synergy within each deadline-month group.
+ * Sort a group of chantiers using type priorities first, then Earliest Deadline First
+ * (periodePreconiseeFin), then nearest-neighbor + equipment synergy within each group.
  * Returns ordered array and the last geographic position reached.
  */
 function orderByProximity(
@@ -99,29 +99,39 @@ function orderByProximity(
   startLat: number,
   startLon: number,
   prevChantier: Chantier | null,
+  typePriorities: string[] = [],
 ): { ordered: Chantier[]; lastLat: number; lastLon: number; lastChantier: Chantier | null } {
-  // Deadline = fin de préco si définie, sinon début de préco, sinon dateDebut
   const deadline = (c: Chantier) => c.periodePreconiseeFin ?? c.periodePreconiseeDebut ?? c.dateDebut;
 
-  // EDF: les chantiers avec deadline la plus proche passent en premier
-  const sorted = [...group].sort((a, b) => deadline(a).localeCompare(deadline(b)));
+  // Type priority index: listed types get 0..N-1, unlisted get N (scheduled last)
+  const typePrio = (c: Chantier) => {
+    const idx = typePriorities.indexOf(c.type);
+    return idx === -1 ? typePriorities.length : idx;
+  };
 
-  // Group by deadline month (YYYY-MM) — garantit que les fenêtres serrées sont traitées avant
-  const byMonth = new Map<string, Chantier[]>();
+  // Sort by type priority first, then EDF
+  const sorted = [...group].sort((a, b) => {
+    const pa = typePrio(a), pb = typePrio(b);
+    if (pa !== pb) return pa - pb;
+    return deadline(a).localeCompare(deadline(b));
+  });
+
+  // Group key: type-priority bucket + deadline month — preserves both type order and EDF within type
+  const byGroup = new Map<string, Chantier[]>();
   for (const c of sorted) {
-    const key = deadline(c).substring(0, 7);
-    if (!byMonth.has(key)) byMonth.set(key, []);
-    byMonth.get(key)!.push(c);
+    const key = `${String(typePrio(c)).padStart(4, '0')}_${deadline(c).substring(0, 7)}`;
+    if (!byGroup.has(key)) byGroup.set(key, []);
+    byGroup.get(key)!.push(c);
   }
 
   const ordered: Chantier[] = [];
   let lastLat = startLat, lastLon = startLon;
   let lastChantier = prevChantier;
 
-  for (const key of [...byMonth.keys()].sort()) {
-    const monthGroup = byMonth.get(key)!;
-    const withCoords = monthGroup.filter(c => c.latitude && c.longitude);
-    const noCoords   = monthGroup.filter(c => !c.latitude || !c.longitude);
+  for (const key of [...byGroup.keys()].sort()) {
+    const grp    = byGroup.get(key)!;
+    const withCoords = grp.filter(c => c.latitude && c.longitude);
+    const noCoords   = grp.filter(c => !c.latitude || !c.longitude);
 
     const remaining = [...withCoords];
     while (remaining.length) {
@@ -157,7 +167,7 @@ export type FilterStatus = 'all' | 'confirme' | 'potentiel' | 'archive';
  */
 export type ReorganizeMode = 'all' | 'confirme' | 'potentiel';
 
-export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potentiel'): ReorganizeSummary {
+export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potentiel', typePriorities: string[] = []): ReorganizeSummary {
   const warnings: string[] = [];
   const results: ReorganizeResult[] = [];
   let moved = 0;
@@ -226,7 +236,7 @@ export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potent
   // Schedule one batch, updating scheduled in-place; returns last known geo position
   function scheduleBatch(batch: Chantier[], startLat: number, startLon: number): { lat: number; lon: number } {
     if (!batch.length) return { lat: startLat, lon: startLon };
-    const { ordered } = orderByProximity(batch, startLat, startLon, null);
+    const { ordered } = orderByProximity(batch, startLat, startLon, null, typePriorities);
     let lat = startLat, lon = startLon;
 
     for (const c of ordered) {

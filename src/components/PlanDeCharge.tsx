@@ -6,7 +6,7 @@ import { fr } from 'date-fns/locale';
 import {
   Plus, ChevronLeft, ChevronRight, Calendar, CalendarDays, BarChart2,
   TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2, Moon, Sun, MapPin, MoreVertical,
-  List, Users, User, Receipt,
+  List, Users, User, Receipt, Settings2,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { useChantiers } from '../hooks/useChantiers';
@@ -19,6 +19,8 @@ import FacturationView from './FacturationView';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import { reorganize, type ReorganizeMode } from '../lib/reorganize';
+import { loadReorgSettings, saveReorgSettings, type ReorgSettings } from '../lib/reorgSettings';
+import ReorgSettingsModal from './ReorgSettingsModal';
 import { getEffectiveEtat } from '../lib/etat';
 import { geocode, extractLocationCandidates } from '../lib/geocoder';
 import { countWorkingDays, caAnnuel } from '../lib/workingDays';
@@ -124,6 +126,8 @@ export default function PlanDeCharge() {
   const [geocoding, setGeocoding] = useState<{ done: number; total: number } | null>(null);
   const [autoReorgBanner, setAutoReorgBanner] = useState<{ moved: number; warnings: string[] } | null>(null);
   const autoReorgDone = useRef(false);
+  const [reorgSettings, setReorgSettings] = useState<ReorgSettings>(loadReorgSettings);
+  const [showReorgSettings, setShowReorgSettings] = useState(false);
   const { theme, toggle: toggleTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const [showEquip, setShowEquip] = useState(false);
@@ -304,7 +308,7 @@ export default function PlanDeCharge() {
       const updatedChantiers = chantiers.map(c =>
         c.id === orig.id ? { ...c, ...saved, id: orig.id, createdAt: c.createdAt, updatedAt: c.updatedAt } : c
       );
-      const result = reorganize(updatedChantiers, 'all');
+      const result = reorganize(updatedChantiers, 'all', reorgSettings.typePriorities);
       const otherMoves = result.results.filter(r => r.id !== orig.id);
       if (otherMoves.length > 0) {
         await Promise.all(otherMoves.map(r => updateChantier(r.id, { dateDebut: r.dateDebut, dateFin: r.dateFin })));
@@ -430,7 +434,7 @@ export default function PlanDeCharge() {
 
     setReorganizing(true);
     try {
-      const result = reorganize(chantiers, reorganizeMode);
+      const result = reorganize(chantiers, reorganizeMode, reorgSettings.typePriorities);
       if (result.warnings.length && result.results.length === 0) {
         alert(result.warnings[0]);
         return;
@@ -500,7 +504,7 @@ export default function PlanDeCharge() {
     );
     if (!hasStale) return;
 
-    const result = reorganize(chantiers, 'confirme');
+    const result = reorganize(chantiers, 'confirme', reorgSettings.typePriorities);
     if (result.moved === 0) return;
 
     Promise.all(
@@ -771,14 +775,27 @@ export default function PlanDeCharge() {
                 <option value="confirme">Confirmés</option>
                 <option value="all">Tous</option>
               </select>
-              <button
-                onClick={handleReorganize}
-                disabled={reorganizing || filterStatus === 'archive'}
-                title="Réorganiser les chantiers sélectionnés"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors disabled:opacity-40">
-                {reorganizing ? <Loader2 size={14} className="animate-spin"/> : <Wand2 size={14}/>}
-                Réorganiser
-              </button>
+              <div className="flex items-center">
+                <button
+                  onClick={handleReorganize}
+                  disabled={reorganizing || filterStatus === 'archive'}
+                  title="Réorganiser les chantiers sélectionnés"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 transition-colors disabled:opacity-40 rounded-l-lg">
+                  {reorganizing ? <Loader2 size={14} className="animate-spin"/> : <Wand2 size={14}/>}
+                  Réorganiser
+                </button>
+                <button
+                  onClick={() => setShowReorgSettings(true)}
+                  title="Paramètres de réorganisation"
+                  className={`flex items-center px-2 py-1.5 border-l border-violet-500 text-white text-sm font-medium hover:bg-violet-700 transition-colors rounded-r-lg ${reorgSettings.typePriorities.length > 0 ? 'bg-violet-700' : 'bg-violet-600'}`}>
+                  <Settings2 size={14}/>
+                  {reorgSettings.typePriorities.length > 0 && (
+                    <span className="ml-1 text-[10px] bg-white text-violet-700 rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                      {reorgSettings.typePriorities.length}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
             <button onClick={() => openNew()}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
@@ -1441,6 +1458,14 @@ export default function PlanDeCharge() {
         onConfirm={modal.chantier?.status === 'potentiel' ? handleConfirm : undefined}
         onDuplicate={modal.chantier ? handleDuplicate : undefined}
       />
+
+      {showReorgSettings && (
+        <ReorgSettingsModal
+          settings={reorgSettings}
+          onSave={s => { setReorgSettings(s); saveReorgSettings(s); }}
+          onClose={() => setShowReorgSettings(false)}
+        />
+      )}
     </div>
   );
 }
