@@ -184,7 +184,7 @@ export default function PlanDeCharge() {
   const caConfirme  = periodConf.reduce((s, c) => s + caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees), 0);
   const caPotentiel = periodPot.reduce((s, c)  => s + caAnnuel(c.chiffreAffaire ?? 0, c.nombreAnnees), 0);
 
-  const warnCount = chantiers.filter(c =>
+  const warnCount = filtered.filter(c =>
     c.periodePreconiseeDebut && c.periodePreconiseeFin &&
     (c.dateDebut < c.periodePreconiseeDebut || c.dateFin > c.periodePreconiseeFin)
   ).length;
