@@ -343,6 +343,30 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
               </div>
             </div>
 
+            {/* Priorité réorganisation */}
+            <div>
+              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide block mb-1">Priorité de planification</span>
+              <div className="flex gap-1">
+                {([
+                  { v: 1, label: '🔴 Urgente',       active: 'bg-red-600 text-white border-red-600' },
+                  { v: 2, label: '🟠 Haute',           active: 'bg-orange-500 text-white border-orange-500' },
+                  { v: 3, label: '⚪ Normale',         active: 'bg-slate-500 text-white border-slate-500' },
+                  { v: 4, label: '🔵 Basse',           active: 'bg-blue-400 text-white border-blue-400' },
+                  { v: 5, label: '⬇ Peut attendre',   active: 'bg-slate-300 text-white border-slate-300' },
+                ] as const).map(({ v, label, active }) => (
+                  <button key={v} type="button"
+                    onClick={() => set('priorite', (form.priorite ?? 3) === v ? undefined : v)}
+                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-medium border transition-colors leading-tight text-center ${
+                      (form.priorite ?? 3) === v
+                        ? active
+                        : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Dates intervention */}
             <div className="grid grid-cols-3 gap-2">
               <label className="block">

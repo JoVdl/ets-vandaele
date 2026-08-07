@@ -76,6 +76,9 @@ export interface Chantier {
   // État d'avancement (calculé auto depuis les dates si absent)
   etat?: ChantierEtat;
 
+  // Degré de priorité pour la réorganisation (1 = urgente → 5 = peut attendre, défaut = 3)
+  priorite?: 1 | 2 | 3 | 4 | 5;
+
   // Curage aspiration
   pellePrepaBassin?: '8t' | '16t';
   nombreJoursPrepa?: number;

@@ -174,6 +174,22 @@ export default function ChantierBlock({
     >
       <div className="h-full flex items-center gap-1 px-1.5 overflow-hidden" style={{ color: fg }}>
 
+        {/* Priority indicator */}
+        {showText && (chantier.priorite === 1 || chantier.priorite === 2) && (
+          <div className="flex-shrink-0" title={chantier.priorite === 1 ? 'Urgente' : 'Haute priorité'}>
+            <span className="text-[9px] font-black leading-none" style={{ color: isPotentiel ? (chantier.priorite === 1 ? '#ef4444' : '#f97316') : 'rgba(255,255,255,0.9)' }}>
+              {chantier.priorite === 1 ? '▲▲' : '▲'}
+            </span>
+          </div>
+        )}
+        {showText && (chantier.priorite === 4 || chantier.priorite === 5) && (
+          <div className="flex-shrink-0" title={chantier.priorite === 5 ? 'Peut attendre' : 'Basse priorité'}>
+            <span className="text-[9px] font-black leading-none" style={{ color: isPotentiel ? '#94a3b8' : 'rgba(255,255,255,0.55)' }}>
+              {chantier.priorite === 5 ? '▼▼' : '▼'}
+            </span>
+          </div>
+        )}
+
         {/* Conflict warning */}
         {isConflicting && showText && (
           <div className="flex-shrink-0" title="Conflit de ressources (patron ou équipement) avec un autre chantier">

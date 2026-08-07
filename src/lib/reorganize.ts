@@ -109,17 +109,22 @@ function orderByProximity(
     return idx === -1 ? typePriorities.length : idx;
   };
 
-  // Sort by type priority first, then EDF
+  // Chantier-level priority: 1 (urgente) → 5 (peut attendre), default 3 (normale)
+  const chanPrio = (c: Chantier) => c.priorite ?? 3;
+
+  // Sort: type priority > chantier priority > EDF
   const sorted = [...group].sort((a, b) => {
-    const pa = typePrio(a), pb = typePrio(b);
+    const ta = typePrio(a), tb = typePrio(b);
+    if (ta !== tb) return ta - tb;
+    const pa = chanPrio(a), pb = chanPrio(b);
     if (pa !== pb) return pa - pb;
     return deadline(a).localeCompare(deadline(b));
   });
 
-  // Group key: type-priority bucket + deadline month — preserves both type order and EDF within type
+  // Group key: type-prio + chantier-prio + deadline month
   const byGroup = new Map<string, Chantier[]>();
   for (const c of sorted) {
-    const key = `${String(typePrio(c)).padStart(4, '0')}_${deadline(c).substring(0, 7)}`;
+    const key = `${String(typePrio(c)).padStart(4, '0')}_${chanPrio(c)}_${deadline(c).substring(0, 7)}`;
     if (!byGroup.has(key)) byGroup.set(key, []);
     byGroup.get(key)!.push(c);
   }
@@ -188,8 +193,8 @@ export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potent
   const canMove = (c: Chantier) => !c.datesVerrouillees && getEffectiveEtat(c) === 'a_venir';
 
   if (mode === 'potentiel') {
-    // Confirmed (non-locked, non en_cours) are also fixed anchors; only free potentiels move
-    const confirmedAnchors = active.filter(c => c.status === 'confirme' && !canMove(c));
+    // ALL confirmed chantiers are anchors in potentiel mode — potentiels must fit around them
+    const confirmedAnchors = active.filter(c => c.status === 'confirme');
     batch1 = active.filter(c => c.status === 'potentiel' && canMove(c)).map(c => ({ ...c }));
     batch2 = [];
     lockedAnchors.push(...confirmedAnchors.filter(c => !lockedAnchors.includes(c)));
@@ -201,12 +206,13 @@ export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potent
     batch2 = active.filter(c => c.status === 'potentiel' && canMove(c)).map(c => ({ ...c }));
   }
 
-  // Detect conflicts between locked anchors (neither can move → warn the user)
+  // Detect conflicts between truly immovable anchors (verrouillés or en_cours)
+  const trulyLocked = (c: Chantier) => !!c.datesVerrouillees || getEffectiveEtat(c) === 'en_cours';
   for (let i = 0; i < lockedAnchors.length; i++) {
     for (let j = i + 1; j < lockedAnchors.length; j++) {
-      const a = lockedAnchors[i];
-      const b = lockedAnchors[j];
-      if (a.dateDebut <= b.dateFin && a.dateFin >= b.dateDebut && resourceConflict(a, b))
+      const a = lockedAnchors[i], b = lockedAnchors[j];
+      if (trulyLocked(a) && trulyLocked(b) &&
+          a.dateDebut <= b.dateFin && a.dateFin >= b.dateDebut && resourceConflict(a, b))
         warnings.push(`⚠ Conflit non résolvable : "${a.nom}" et "${b.nom}" se chevauchent (patron ou équipement) et sont tous les deux verrouillés.`);
     }
   }
