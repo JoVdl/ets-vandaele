@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, claude/loving-wright-Gx3KB]
+    branches: [claude/loving-wright-Gx3KB]
   schedule:
     # Refresh the calendar every 5 min so iPhone stays up-to-date
     - cron: '*/5 * * * *'
