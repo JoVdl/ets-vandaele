@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Play, Pause, Square, MapPin, Wifi, WifiOff, LocateFixed,
   ChevronUp, ChevronDown, History, Settings, Ruler, Trash2, Check, X, LogOut,
-  BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers, SlidersHorizontal,
+  BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers, SlidersHorizontal, Radio,
 } from 'lucide-react';
 import SuiviMap, { type ChantierZone } from './SuiviMap';
 import { useGps } from '../../hooks/useGps';
@@ -16,6 +16,9 @@ import {
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
 } from '../../lib/machineParams';
+import {
+  pushLiveSession, clearLiveSession, useLiveSessions,
+} from '../../hooks/useLiveSessions';
 import { saveActiveSession, loadActiveSession, clearActiveSession } from '../../lib/suiviOffline';
 import { clearSession } from '../../lib/suiviConfig';
 import { format } from 'date-fns';
@@ -28,7 +31,7 @@ interface Props {
   onLogout: () => void;
 }
 
-type View = 'map' | 'history' | 'analytics' | 'settings';
+type View = 'map' | 'live' | 'history' | 'analytics' | 'settings';
 
 const TYPE_LABELS: Record<string, string> = {
   curage_aspiration:         'Curage aspiration',
@@ -46,7 +49,11 @@ const TYPE_LABELS: Record<string, string> = {
 export default function SuiviView({ role, onLogout }: Props) {
   const { chantiers, updateChantier } = useChantiers();
   const { sessions, saveSession, syncing } = useSuiviSessions();
+  const { liveSessions } = useLiveSessions();
   const [view, setView] = useState<View>('map');
+
+  // Unique session ID (stable across re-renders, reset on new session start)
+  const sessionIdRef = useRef<string>(`${role}-${Date.now()}`);
 
   // ── Session state ──────────────────────────────────────────────────────
   const [sessionActive, setSessionActive]   = useState(false);
@@ -200,7 +207,45 @@ export default function SuiviView({ role, onLogout }: Props) {
     ? Math.min(100, (areaM / selectedChantier.surface) * 100)
     : null;
 
-  // Reset machine params when chantier type changes
+  // ── Temps restant estimé ───────────────────────────────────────────────
+  const tempsRestantMin = useMemo(() => {
+    if (!selectedChantier?.surface || areaM <= 0 || rendement <= 0) return null;
+    const restantM2 = selectedChantier.surface - areaM;
+    if (restantM2 <= 0) return 0;
+    return (restantM2 / rendement) * 60; // minutes
+  }, [selectedChantier, areaM, rendement]);
+
+  // ── Live Firestore streaming (every 30s during active session) ─────────
+  const liveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!sessionActive || sessionPaused || !currentPos) {
+      if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
+      return;
+    }
+    const push = () => {
+      if (!currentPos || !selectedChantier) return;
+      pushLiveSession(sessionIdRef.current, {
+        operateur:    role,
+        chantierId:   selectedChantier.id,
+        chantierNom:  selectedChantier.nom,
+        lat:          currentPos.lat,
+        lng:          currentPos.lng,
+        accuracy:     accuracy,
+        speedKmh:     speedNow,
+        areaM,
+        distM,
+        rendementM2h: rendement,
+        progressPct:  progress,
+        dureeMinutes: Math.round(elapsed / 60),
+      });
+    };
+    push(); // push immediately
+    liveIntervalRef.current = setInterval(push, 30_000);
+    return () => { if (liveIntervalRef.current) clearInterval(liveIntervalRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionActive, sessionPaused, currentPos]);
+
+  // ── Reset machine params when chantier type changes
   useEffect(() => {
     if (!selectedChantier) return;
     const p = defaultParams(selectedChantier.type);
@@ -262,12 +307,13 @@ export default function SuiviView({ role, onLogout }: Props) {
   // ── Session controls ───────────────────────────────────────────────────
   const handleStart = useCallback(() => {
     if (!selectedChantierId) { setShowChantierPicker(true); return; }
+    sessionIdRef.current = `${role}-${Date.now()}`;
     resetPoints();
     setElapsed(0);
     setSessionStart(new Date());
     setSessionActive(true);
     setSessionPaused(false);
-  }, [selectedChantierId, resetPoints]);
+  }, [selectedChantierId, role, resetPoints]);
 
   const handlePause = useCallback(() => setSessionPaused(p => !p), []);
 
@@ -276,6 +322,7 @@ export default function SuiviView({ role, onLogout }: Props) {
     setSessionActive(false);
     setSessionPaused(false);
     clearActiveSession();
+    clearLiveSession(sessionIdRef.current);
     await saveSession({
       chantierId:   selectedChantier.id,
       chantierNom:  selectedChantier.nom,
@@ -381,6 +428,15 @@ export default function SuiviView({ role, onLogout }: Props) {
           <History size={16} />
         </button>
         {role === 'patron' && (
+          <button onClick={() => setView(v => v === 'live' ? 'map' : 'live')}
+            className={`p-1.5 rounded-lg relative ${view === 'live' ? 'bg-slate-700 text-white' : 'text-slate-400'}`}>
+            <Radio size={16} />
+            {liveSessions.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+            )}
+          </button>
+        )}
+        {role === 'patron' && (
           <button onClick={() => setView(v => v === 'analytics' ? 'map' : 'analytics')}
             className={`p-1.5 rounded-lg ${view === 'analytics' ? 'bg-slate-700 text-white' : 'text-slate-400'}`}>
             <BarChart2 size={16} />
@@ -414,6 +470,8 @@ export default function SuiviView({ role, onLogout }: Props) {
               workColor={workColor}
               largeurM={machineParams.largeurTravailM}
               smoothAlpha={machineParams.smoothAlpha}
+              liveSessions={liveSessions}
+              mySessionId={sessionIdRef.current}
             />
 
             {/* Map control buttons */}
@@ -515,7 +573,13 @@ export default function SuiviView({ role, onLogout }: Props) {
                     <Metric label="Distance" value={formatDistance(distM)} small />
                     {progress != null && <Metric label="Avancement" value={`${Math.round(progress)} %`} small />}
                     {selectedChantier?.surface && (
-                      <Metric label="Surface total" value={formatArea(selectedChantier.surface)} small />
+                      <Metric label="Surface tot." value={formatArea(selectedChantier.surface)} small />
+                    )}
+                    {tempsRestantMin != null && tempsRestantMin > 0 && (
+                      <Metric label="Temps restant" value={formatDuration(tempsRestantMin)} small />
+                    )}
+                    {tempsRestantMin === 0 && (
+                      <Metric label="Terminé !" value="✓" small />
                     )}
                     {drawSaved != null && <Metric label="Zone mesurée" value={formatArea(drawSaved)} small />}
                   </div>
@@ -613,6 +677,101 @@ export default function SuiviView({ role, onLogout }: Props) {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Live view (patron only) ─────────────────────────────────────── */}
+      {view === 'live' && role === 'patron' && (
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-3 py-3">
+            <div className="flex items-center gap-2 mb-3">
+              <Radio size={15} className="text-orange-400" />
+              <h2 className="text-white font-bold text-base">Sessions en cours</h2>
+              {liveSessions.length > 0 && (
+                <span className="ml-auto text-xs bg-orange-500 text-white px-2 py-0.5 rounded-full font-semibold">
+                  {liveSessions.length}
+                </span>
+              )}
+            </div>
+
+            {liveSessions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-slate-800 flex items-center justify-center mb-3">
+                  <Radio size={24} className="text-slate-600" />
+                </div>
+                <p className="text-slate-400 text-sm font-medium">Aucune session active</p>
+                <p className="text-slate-600 text-xs mt-1">Les sessions démarrées apparaîtront ici</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {liveSessions
+                  .filter(s => s.sessionId !== sessionIdRef.current)
+                  .map(s => {
+                    const minsAgo = Math.round((Date.now() - new Date(s.lastUpdate).getTime()) / 60000);
+                    return (
+                      <div key={s.sessionId} className="bg-slate-800 rounded-2xl overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-center gap-3 px-3 pt-3 pb-2">
+                          <div className="w-3 h-3 rounded-full bg-orange-500 animate-pulse flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-semibold truncate">{s.chantierNom}</p>
+                            <p className="text-slate-400 text-[10px]">
+                              {s.operateur === 'salarie' ? 'Salarié' : 'Patron'}
+                              {minsAgo > 0 ? ` · il y a ${minsAgo} min` : ' · maintenant'}
+                            </p>
+                          </div>
+                          {s.progressPct != null && (
+                            <span className="flex-shrink-0 text-xs font-bold text-orange-400 tabular-nums">
+                              {Math.round(s.progressPct)} %
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Progress bar */}
+                        {s.progressPct != null && (
+                          <div className="px-3 pb-2">
+                            <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-orange-500 rounded-full transition-all"
+                                style={{ width: `${Math.min(100, s.progressPct)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Metrics grid */}
+                        <div className="grid grid-cols-4 gap-0 border-t border-slate-700/60 px-1 py-2">
+                          <div className="text-center py-1">
+                            <p className="text-white text-sm font-bold tabular-nums">{s.speedKmh.toFixed(1)}</p>
+                            <p className="text-slate-500 text-[9px] uppercase tracking-wide">km/h</p>
+                          </div>
+                          <div className="text-center py-1">
+                            <p className="text-white text-sm font-bold tabular-nums">{formatArea(s.areaM)}</p>
+                            <p className="text-slate-500 text-[9px] uppercase tracking-wide">Surface</p>
+                          </div>
+                          <div className="text-center py-1">
+                            <p className="text-white text-sm font-bold tabular-nums">{Math.round(s.rendementM2h).toLocaleString('fr-FR')}</p>
+                            <p className="text-slate-500 text-[9px] uppercase tracking-wide">m²/h</p>
+                          </div>
+                          <div className="text-center py-1">
+                            <p className="text-white text-sm font-bold tabular-nums">{formatDuration(s.dureeMinutes)}</p>
+                            <p className="text-slate-500 text-[9px] uppercase tracking-wide">Durée</p>
+                          </div>
+                        </div>
+
+                        {/* GPS accuracy & distance */}
+                        <div className="flex items-center gap-3 px-3 pb-3 text-[10px] text-slate-500">
+                          {s.accuracy != null && (
+                            <span>GPS ±{Math.round(s.accuracy)} m</span>
+                          )}
+                          <span>Distance : {formatDistance(s.distM)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </div>

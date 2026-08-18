@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { GpsPoint } from '../../types/suivi';
 import { areaM2, formatArea, centroid, swathRects, smoothPoints } from '../../lib/geo';
+import type { LiveSession } from '../../hooks/useLiveSessions';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -81,15 +82,28 @@ interface Props {
   chantierZones: ChantierZone[];
   showZones:     boolean;
   satellite:     'ign' | 'esri' | 'osm';
-  workColor:     string;   // color for the work trail (chantier type color)
-  largeurM:      number;   // working width in metres (0 = no swath)
-  smoothAlpha:   number;   // EMA smoothing factor
+  workColor:     string;
+  largeurM:      number;
+  smoothAlpha:   number;
+  liveSessions:  LiveSession[];  // other operators (patron view)
+  mySessionId:   string;         // exclude own session from live markers
+}
+
+function liveIcon(label: string) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+      <div style="width:20px;height:20px;border-radius:50%;background:#f97316;border:3px solid white;box-shadow:0 0 0 4px rgba(249,115,22,.35);"></div>
+      <div style="background:rgba(249,115,22,.9);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;white-space:nowrap;">${label}</div>
+    </div>`,
+    iconSize: [20, 36], iconAnchor: [10, 10],
+  });
 }
 
 export default function SuiviMap({
   gpsPoints, currentPos, drawMode, drawPoints, onDrawPoint,
   followGps, chantierZones, showZones, satellite,
-  workColor, largeurM, smoothAlpha,
+  workColor, largeurM, smoothAlpha, liveSessions, mySessionId,
 }: Props) {
 
   const center: [number, number] = currentPos
@@ -195,6 +209,15 @@ export default function SuiviMap({
         {drawMode && drawPoints.map((p, i) => (
           <Marker key={i} position={[p.lat, p.lng]} icon={drawIcon} />
         ))}
+
+        {/* Live other-operator markers */}
+        {liveSessions
+          .filter(s => s.sessionId !== mySessionId)
+          .map(s => (
+            <Marker key={s.sessionId} position={[s.lat, s.lng]}
+              icon={liveIcon(s.operateur === 'salarie' ? 'Salarié' : 'Patron')} />
+          ))
+        }
 
         {/* Current GPS position */}
         {currentPos && (
