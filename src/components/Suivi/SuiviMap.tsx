@@ -58,9 +58,14 @@ function AutoCenter({ pos, follow }: { pos: [number, number] | null; follow: boo
   return null;
 }
 
-function DrawHandler({ active, onPoint }: { active: boolean; onPoint: (lat: number, lng: number) => void }) {
+function DrawHandler({ active, onPoint, onDrag }: {
+  active: boolean;
+  onPoint: (lat: number, lng: number) => void;
+  onDrag: () => void;
+}) {
   useMapEvents({
     click(e) { if (active) onPoint(e.latlng.lat, e.latlng.lng); },
+    dragstart() { onDrag(); },
   });
   return null;
 }
@@ -73,20 +78,21 @@ export interface ChantierZone {
 }
 
 interface Props {
-  gpsPoints:     GpsPoint[];
-  currentPos:    GpsPoint | null;
-  drawMode:      boolean;
-  drawPoints:    { lat: number; lng: number }[];
-  onDrawPoint:   (lat: number, lng: number) => void;
-  followGps:     boolean;
-  chantierZones: ChantierZone[];
-  showZones:     boolean;
-  satellite:     'ign' | 'esri' | 'osm';
-  workColor:     string;
-  largeurM:      number;
-  smoothAlpha:   number;
-  liveSessions:  LiveSession[];  // other operators (patron view)
-  mySessionId:   string;         // exclude own session from live markers
+  gpsPoints:        GpsPoint[];
+  currentPos:       GpsPoint | null;
+  drawMode:         boolean;
+  drawPoints:       { lat: number; lng: number }[];
+  onDrawPoint:      (lat: number, lng: number) => void;
+  followGps:        boolean;
+  onDisableFollow:  () => void;
+  chantierZones:    ChantierZone[];
+  showZones:        boolean;
+  satellite:        'ign' | 'esri' | 'osm';
+  workColor:        string;
+  largeurM:         number;
+  smoothAlpha:      number;
+  liveSessions:     LiveSession[];
+  mySessionId:      string;
 }
 
 function liveIcon(label: string) {
@@ -102,7 +108,7 @@ function liveIcon(label: string) {
 
 export default function SuiviMap({
   gpsPoints, currentPos, drawMode, drawPoints, onDrawPoint,
-  followGps, chantierZones, showZones, satellite,
+  followGps, onDisableFollow, chantierZones, showZones, satellite,
   workColor, largeurM, smoothAlpha, liveSessions, mySessionId,
 }: Props) {
 
@@ -159,7 +165,7 @@ export default function SuiviMap({
         <TileLayer key={satellite ? 'sat' : 'osm'} url={tileUrl} attribution={tileAttr} maxZoom={20} />
 
         <AutoCenter pos={currentPos ? [currentPos.lat, currentPos.lng] : null} follow={followGps} />
-        <DrawHandler active={drawMode} onPoint={onDrawPoint} />
+        <DrawHandler active={drawMode} onPoint={onDrawPoint} onDrag={onDisableFollow} />
 
         {/* Chantier zones permanentes */}
         {showZones && chantierZones.flatMap(z => {

@@ -478,6 +478,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               drawPoints={drawPoints}
               onDrawPoint={handleDrawPoint}
               followGps={followGps}
+              onDisableFollow={() => setFollowGps(false)}
               chantierZones={chantierZones}
               showZones={showZones}
               satellite={tileMode}
@@ -490,10 +491,11 @@ export default function SuiviView({ role, onLogout }: Props) {
 
             {/* Map control buttons */}
             <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-2">
-              <button onClick={() => setFollowGps(f => !f)}
+              <button onClick={() => setFollowGps(true)}
                 className={`p-2.5 rounded-xl shadow-lg transition-colors ${
                   followGps ? 'bg-green-600 text-white' : 'bg-slate-800/90 text-slate-400'
-                }`}>
+                }`}
+                title="Centrer sur ma position">
                 <LocateFixed size={18} />
               </button>
               <button
