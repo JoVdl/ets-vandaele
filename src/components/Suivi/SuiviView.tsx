@@ -599,7 +599,7 @@ export default function SuiviView({ role, onLogout }: Props) {
 
       {/* ── Chantier picker modal ────────────────────────────────────────── */}
       {showChantierPicker && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-end">
+        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-end">
           <div className="w-full bg-slate-900 rounded-t-3xl max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 flex-shrink-0">
               <h3 className="text-white font-bold">Choisir un chantier</h3>
@@ -635,7 +635,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                       {c.lieu ? ` · ${c.lieu}` : ''}
                       {c.surface ? ` · ${formatArea(c.surface)}` : ''}
                       {c.latitude && c.longitude && currentPos
-                        ? ` · ${Math.round(distanceM(currentPos.lat, currentPos.lng, c.latitude, c.longitude))} m`
+                        ? ` · ${(() => { const d = distanceM(currentPos.lat, currentPos.lng, c.latitude, c.longitude); return d >= 1000 ? `${(d/1000).toFixed(1)} km` : `${Math.round(d)} m`; })()} `
                         : ''}
                     </p>
                   </button>

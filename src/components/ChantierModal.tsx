@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
-import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen, HardHat, Copy, Receipt } from 'lucide-react';
+import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen, HardHat, Copy, Receipt, LocateFixed } from 'lucide-react';
 import type { Chantier, ChantierType, ChantierStatus, ChantierEtat, TypePelle } from '../types';
 import { ETAT_LABELS } from '../lib/etat';
 import { CHANTIER_TYPES } from '../lib/constants';
@@ -276,6 +276,18 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                       title="Géocoder depuis le nom du chantier"
                       className="px-2 py-2 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors flex-shrink-0">
                       {geocoding ? <Loader2 size={15} className="animate-spin"/> : <MapPin size={15}/>}
+                    </button>
+                    <button type="button"
+                      title="Utiliser ma position GPS actuelle"
+                      onClick={() => {
+                        if (!navigator.geolocation) return;
+                        navigator.geolocation.getCurrentPosition(pos => {
+                          set('latitude', pos.coords.latitude);
+                          set('longitude', pos.coords.longitude);
+                        }, null, { enableHighAccuracy: true, timeout: 8000 });
+                      }}
+                      className="px-2 py-2 border border-green-300 rounded-lg text-green-600 hover:bg-green-50 transition-colors flex-shrink-0">
+                      <LocateFixed size={15} />
                     </button>
                   </div>
                   {/* Autocomplete dropdown */}
