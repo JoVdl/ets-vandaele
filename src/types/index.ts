@@ -42,6 +42,9 @@ export interface Chantier {
   montantAcompte?: number;
   notes?: string;
 
+  // Surface de travail (m²) — mesurée sur la carte ou saisie manuellement
+  surface?: number;
+
   // Pelles
   pelles?: TypePelle[];
 

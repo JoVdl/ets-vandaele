@@ -50,6 +50,7 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   drague: false,
   telesco: false,
   nombrePersonnes: 1,
+  surface: undefined,
   patronRequis: true,
   factureFaite: false,
   dateFacture: '',
@@ -682,6 +683,15 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 </button>
               </div>
             </div>
+
+            {/* Surface */}
+            <label className="block">
+              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Surface (m²)</span>
+              <input type="number" min="0" step="100" value={form.surface ?? ''}
+                onChange={e => set('surface', e.target.value ? Number(e.target.value) : undefined)}
+                placeholder="Surface en m² (optionnel)"
+                className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </label>
 
             {/* Notes */}
             <label className="block">
