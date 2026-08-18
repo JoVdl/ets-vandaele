@@ -18,7 +18,17 @@ export function useChantiers() {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Chantier));
+        const data = snap.docs.map((d) => {
+          const raw = { id: d.id, ...d.data() } as unknown as Chantier & { polygon?: unknown };
+          // Migrate old flat polygon {lat,lng}[] → new nested {lat,lng}[][]
+          if (Array.isArray(raw.polygon) && raw.polygon.length > 0) {
+            const first = (raw.polygon as unknown[])[0];
+            if (first && typeof first === 'object' && 'lat' in (first as object)) {
+              (raw as unknown as Record<string, unknown>).polygon = [raw.polygon];
+            }
+          }
+          return raw as unknown as Chantier;
+        });
         setChantiers(data);
         setLoading(false);
       },

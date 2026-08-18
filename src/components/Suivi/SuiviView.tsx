@@ -262,12 +262,12 @@ export default function SuiviView({ role, onLogout }: Props) {
   // ── Chantier zones for map ────────────────────────────────────────────
   const chantierZones = useMemo<ChantierZone[]>(() =>
     chantiers
-      .filter(c => c.polygon && c.polygon.length >= 3 && c.status !== 'refuse' && c.status !== 'annule')
+      .filter(c => c.polygon && c.polygon.length > 0 && c.status !== 'refuse' && c.status !== 'annule')
       .map(c => ({
-        id:      c.id,
-        nom:     c.nom,
-        polygon: c.polygon!,
-        color:   CHANTIER_TYPES[c.type]?.color ?? '#64748B',
+        id:       c.id,
+        nom:      c.nom,
+        polygons: c.polygon!,
+        color:    CHANTIER_TYPES[c.type]?.color ?? '#64748B',
       })),
     [chantiers],
   );
@@ -347,14 +347,26 @@ export default function SuiviView({ role, onLogout }: Props) {
     const area = areaM2(drawPoints);
     setDrawSaved(area);
     setDrawMode(false);
-    // Save polygon + area to the selected chantier in Firestore
     if (selectedChantierId) {
+      const existing = selectedChantier?.polygon ?? [];
+      const newPolygons = [...existing, drawPoints];
+      const totalSurface = newPolygons.reduce((sum, poly) => sum + areaM2(poly), 0);
       await updateChantier(selectedChantierId, {
-        polygon: drawPoints,
-        surface: Math.round(area),
+        polygon: newPolygons,
+        surface: Math.round(totalSurface),
       }).catch(() => {/* offline — ignore */});
     }
     setDrawPoints([]);
+  };
+
+  const handleDeleteLastZone = async () => {
+    if (!selectedChantierId || !selectedChantier?.polygon?.length) return;
+    const newPolygons = selectedChantier.polygon.slice(0, -1);
+    const totalSurface = newPolygons.reduce((sum, poly) => sum + areaM2(poly), 0);
+    await updateChantier(selectedChantierId, {
+      polygon: newPolygons,
+      surface: newPolygons.length > 0 ? Math.round(totalSurface) : 0,
+    }).catch(() => {});
   };
 
   const formatTime = (sec: number) => {
@@ -523,9 +535,18 @@ export default function SuiviView({ role, onLogout }: Props) {
             {drawMode && (
               <div className={`absolute z-[1000] flex items-center gap-2 bg-slate-900/90 rounded-xl px-3 py-2 ${nearbyChantier ? 'top-14' : 'top-3'} left-3 right-20`}>
                 <Ruler size={14} className="text-blue-400 flex-shrink-0" />
-                <span className="text-white text-xs flex-1">Touchez la carte pour tracer</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-white text-xs">
+                    {drawPoints.length === 0 ? 'Touchez la carte pour tracer' : `${drawPoints.length} points`}
+                  </span>
+                  {selectedChantier?.polygon && selectedChantier.polygon.length > 0 && (
+                    <span className="text-slate-400 text-[10px] ml-1.5">
+                      ({selectedChantier.polygon.length} zone{selectedChantier.polygon.length > 1 ? 's' : ''} existante{selectedChantier.polygon.length > 1 ? 's' : ''})
+                    </span>
+                  )}
+                </div>
                 {drawPoints.length >= 3 && (
-                  <button onClick={handleDrawSave} className="p-1 rounded-lg bg-green-600 text-white">
+                  <button onClick={handleDrawSave} className="p-1 rounded-lg bg-green-600 text-white" title="Valider cette zone">
                     <Check size={14} />
                   </button>
                 )}
@@ -534,7 +555,12 @@ export default function SuiviView({ role, onLogout }: Props) {
                   <X size={14} />
                 </button>
                 {drawPoints.length > 0 && (
-                  <button onClick={handleDrawClear} className="p-1 rounded-lg bg-slate-700 text-slate-400">
+                  <button onClick={handleDrawClear} className="p-1 rounded-lg bg-slate-700 text-slate-400" title="Recommencer cette zone">
+                    <Trash2 size={14} />
+                  </button>
+                )}
+                {selectedChantier?.polygon && selectedChantier.polygon.length > 0 && drawPoints.length === 0 && (
+                  <button onClick={handleDeleteLastZone} className="p-1 rounded-lg bg-red-800 text-red-300" title="Supprimer la dernière zone">
                     <Trash2 size={14} />
                   </button>
                 )}

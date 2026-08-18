@@ -68,7 +68,7 @@ function DrawHandler({ active, onPoint }: { active: boolean; onPoint: (lat: numb
 export interface ChantierZone {
   id: string;
   nom: string;
-  polygon: { lat: number; lng: number }[];
+  polygons: { lat: number; lng: number }[][];
   color: string;
 }
 
@@ -163,17 +163,21 @@ export default function SuiviMap({
 
         {/* Chantier zones permanentes */}
         {showZones && chantierZones.flatMap(z => {
-          if (z.polygon.length < 3) return [];
-          const c = centroid(z.polygon);
+          const validPolygons = z.polygons.filter(p => p.length >= 3);
+          if (validPolygons.length === 0) return [];
+          const allPoints = validPolygons.flat();
+          const c = centroid(allPoints);
           return [
-            <Polygon
-              key={`zone-${z.id}`}
-              positions={z.polygon.map(p => [p.lat, p.lng] as [number, number])}
-              color={z.color}
-              fillColor={z.color}
-              fillOpacity={0.22}
-              weight={2.5}
-            />,
+            ...validPolygons.map((poly, pi) => (
+              <Polygon
+                key={`zone-${z.id}-${pi}`}
+                positions={poly.map(p => [p.lat, p.lng] as [number, number])}
+                color={z.color}
+                fillColor={z.color}
+                fillOpacity={0.22}
+                weight={2.5}
+              />
+            )),
             <Marker key={`label-${z.id}`} position={[c.lat, c.lng]} icon={zoneLabel(z.nom, z.color)} />,
           ];
         })}
