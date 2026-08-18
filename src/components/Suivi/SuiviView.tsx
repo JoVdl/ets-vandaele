@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Play, Pause, Square, MapPin, Wifi, WifiOff, LocateFixed,
   ChevronUp, ChevronDown, History, Settings, Ruler, Trash2, Check, X, LogOut,
-  BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers,
+  BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers, SlidersHorizontal,
 } from 'lucide-react';
 import SuiviMap, { type ChantierZone } from './SuiviMap';
 import { useGps } from '../../hooks/useGps';
@@ -11,8 +11,11 @@ import { useChantiers } from '../../hooks/useChantiers';
 import { CHANTIER_TYPES } from '../../lib/constants';
 import {
   areaM2, formatArea, formatDistance, formatDuration,
-  avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM,
+  avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, stripAreaM2,
 } from '../../lib/geo';
+import {
+  type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
+} from '../../lib/machineParams';
 import { saveActiveSession, loadActiveSession, clearActiveSession } from '../../lib/suiviOffline';
 import { clearSession } from '../../lib/suiviConfig';
 import { format } from 'date-fns';
@@ -62,8 +65,12 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [drawSaved, setDrawSaved]   = useState<number | null>(null);
 
   // ── Map display options ────────────────────────────────────────────────
-  const [satellite, setSatellite] = useState(true);
-  const [showZones, setShowZones] = useState(true);
+  const [satellite, setSatellite]     = useState(true);
+  const [showZones, setShowZones]     = useState(true);
+  const [showMachinePanel, setShowMachinePanel] = useState(false);
+
+  // ── Machine params ─────────────────────────────────────────────────────
+  const [machineParams, setMachineParamsState] = useState<MachineParams>(() => loadMachineParams());
 
   // ── GPS ────────────────────────────────────────────────────────────────
   const { points: gpsPoints, currentPos, error: gpsError, accuracy, resetPoints, addPoints } =
@@ -147,20 +154,49 @@ export default function SuiviView({ role, onLogout }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Speed-outlier filter (GPS glitches above machine max speed) ───────
+  const filteredPoints = useMemo(() => {
+    const maxKmh = machineParams.vitesseMaxKmh;
+    return gpsPoints.filter((pt, i) => {
+      if (i === 0) return true;
+      const prev = gpsPoints[i - 1];
+      const dt = (pt.ts - prev.ts) / 1000;
+      if (dt <= 0) return false;
+      const speedKmh = (distanceM(prev.lat, prev.lng, pt.lat, pt.lng) / dt) * 3.6;
+      return speedKmh <= maxKmh * 2; // 2× tolerance before rejecting
+    });
+  }, [gpsPoints, machineParams.vitesseMaxKmh]);
+
   // ── Computed metrics ───────────────────────────────────────────────────
-  const distM    = totalDistanceM(gpsPoints);
-  const areaM    = areaM2(gpsPoints);
-  const speedNow = gpsPoints.length >= 2
-    ? instantSpeedKmh(gpsPoints[gpsPoints.length - 2], gpsPoints[gpsPoints.length - 1])
+  const distM    = totalDistanceM(filteredPoints);
+  const areaM    = machineParams.largeurTravailM > 0
+    ? stripAreaM2(filteredPoints, machineParams.largeurTravailM, machineParams.recouvrementPct)
     : 0;
-  const speedAvg  = avgSpeedKmh(gpsPoints);
+  const speedNow = filteredPoints.length >= 2
+    ? instantSpeedKmh(filteredPoints[filteredPoints.length - 2], filteredPoints[filteredPoints.length - 1])
+    : 0;
+  const speedAvg  = avgSpeedKmh(filteredPoints);
   const elapsedH  = elapsed / 3600;
-  const rendement = elapsedH > 0 ? areaM / elapsedH : 0;
+  const rendement = elapsedH > 0 && areaM > 0 ? areaM / elapsedH : 0;
 
   const selectedChantier = chantiers.find(c => c.id === selectedChantierId);
   const progress = selectedChantier?.surface && areaM > 0
     ? Math.min(100, (areaM / selectedChantier.surface) * 100)
     : null;
+
+  // Reset machine params when chantier type changes
+  useEffect(() => {
+    if (!selectedChantier) return;
+    const p = defaultParams(selectedChantier.type);
+    setMachineParamsState(p);
+    saveMachineParams(p);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChantier?.type]);
+
+  // ── Work trail color (from chantier type) ─────────────────────────────
+  const workColor = selectedChantier
+    ? (CHANTIER_TYPES[selectedChantier.type]?.color ?? '#22c55e')
+    : '#22c55e';
 
   // ── Chantier zones for map ────────────────────────────────────────────
   const chantierZones = useMemo<ChantierZone[]>(() =>
@@ -346,7 +382,7 @@ export default function SuiviView({ role, onLogout }: Props) {
         <>
           <div className="flex-1 relative overflow-hidden">
             <SuiviMap
-              gpsPoints={gpsPoints}
+              gpsPoints={filteredPoints}
               currentPos={currentPos}
               drawMode={drawMode}
               drawPoints={drawPoints}
@@ -355,6 +391,9 @@ export default function SuiviView({ role, onLogout }: Props) {
               chantierZones={chantierZones}
               showZones={showZones}
               satellite={satellite}
+              workColor={workColor}
+              largeurM={machineParams.largeurTravailM}
+              smoothAlpha={machineParams.smoothAlpha}
             />
 
             {/* Map control buttons */}
@@ -476,6 +515,12 @@ export default function SuiviView({ role, onLogout }: Props) {
                       drawMode ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                     }`}>
                     <Ruler size={18} />
+                  </button>
+                  <button
+                    onClick={() => setShowMachinePanel(true)}
+                    className="p-3 rounded-xl bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                    title="Paramètres machine">
+                    <SlidersHorizontal size={18} />
                   </button>
 
                   <div className="flex-1 flex items-center gap-2 justify-center">
@@ -642,6 +687,16 @@ export default function SuiviView({ role, onLogout }: Props) {
       {/* ── Settings view (patron only) ──────────────────────────────────── */}
       {view === 'settings' && role === 'patron' && <SettingsPanel />}
 
+      {/* ── Machine params panel ────────────────────────────────────────── */}
+      {showMachinePanel && (
+        <MachineParamsPanel
+          params={machineParams}
+          chantierType={selectedChantier?.type}
+          onClose={() => setShowMachinePanel(false)}
+          onChange={p => { setMachineParamsState(p); saveMachineParams(p); }}
+        />
+      )}
+
       {/* ── Chantier picker modal ────────────────────────────────────────── */}
       {showChantierPicker && (
         <div className="fixed inset-0 z-[9999] bg-black/60 flex items-end">
@@ -734,6 +789,138 @@ function OperatorBar({ label, hours, total, color }: { label: string; hours: num
       </div>
       <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function MachineParamsPanel({
+  params, chantierType, onClose, onChange,
+}: {
+  params: MachineParams;
+  chantierType?: string;
+  onClose: () => void;
+  onChange: (p: MachineParams) => void;
+}) {
+  const [local, setLocal] = useState<MachineParams>({ ...params });
+  const set = <K extends keyof MachineParams>(k: K, v: MachineParams[K]) =>
+    setLocal(p => ({ ...p, [k]: v }));
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/60 flex items-end">
+      <div className="w-full bg-slate-900 rounded-t-3xl max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 flex-shrink-0">
+          <h3 className="text-white font-bold">Paramètres machine</h3>
+          <button onClick={onClose} className="text-slate-400 p-1"><X size={20} /></button>
+        </div>
+        <div className="overflow-y-auto flex-1 px-4 py-4 space-y-5">
+
+          {chantierType && (
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-xs">Type de chantier</span>
+              <button
+                onClick={() => {
+                  const d = defaultParams(chantierType);
+                  setLocal(d);
+                }}
+                className="text-xs text-green-400 hover:text-green-300">
+                Réinitialiser défauts
+              </button>
+            </div>
+          )}
+
+          <div>
+            <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
+              Largeur de travail (m)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range" min="0" max="8" step="0.1"
+                value={local.largeurTravailM}
+                onChange={e => set('largeurTravailM', parseFloat(e.target.value))}
+                className="flex-1 accent-green-500"
+              />
+              <span className="text-white font-bold tabular-nums w-12 text-right">
+                {local.largeurTravailM === 0 ? '—' : `${local.largeurTravailM.toFixed(1)} m`}
+              </span>
+            </div>
+            <p className="text-slate-500 text-[10px] mt-1">
+              0 = pas de suivi de surface par bandes
+            </p>
+          </div>
+
+          <div>
+            <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
+              Vitesse max GPS (km/h)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range" min="2" max="60" step="1"
+                value={local.vitesseMaxKmh}
+                onChange={e => set('vitesseMaxKmh', parseInt(e.target.value))}
+                className="flex-1 accent-green-500"
+              />
+              <span className="text-white font-bold tabular-nums w-14 text-right">
+                {local.vitesseMaxKmh} km/h
+              </span>
+            </div>
+            <p className="text-slate-500 text-[10px] mt-1">
+              Points GPS au-delà de cette vitesse sont ignorés
+            </p>
+          </div>
+
+          <div>
+            <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
+              Recouvrement des passes (%)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range" min="0" max="40" step="5"
+                value={local.recouvrementPct}
+                onChange={e => set('recouvrementPct', parseInt(e.target.value))}
+                className="flex-1 accent-green-500"
+              />
+              <span className="text-white font-bold tabular-nums w-12 text-right">
+                {local.recouvrementPct} %
+              </span>
+            </div>
+            {local.largeurTravailM > 0 && (
+              <p className="text-slate-500 text-[10px] mt-1">
+                Largeur effective : {(local.largeurTravailM * (1 - local.recouvrementPct / 100)).toFixed(2)} m
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
+              Lissage GPS
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range" min="0" max="0.9" step="0.05"
+                value={local.smoothAlpha}
+                onChange={e => set('smoothAlpha', parseFloat(e.target.value))}
+                className="flex-1 accent-green-500"
+              />
+              <span className="text-white font-bold tabular-nums w-14 text-right">
+                {local.smoothAlpha === 0 ? 'Aucun' :
+                 local.smoothAlpha < 0.3 ? 'Léger' :
+                 local.smoothAlpha < 0.6 ? 'Moyen' : 'Fort'}
+              </span>
+            </div>
+            <p className="text-slate-500 text-[10px] mt-1">
+              Réduit le zigzag du tracé, recommandé : Moyen en marais
+            </p>
+          </div>
+
+        </div>
+        <div className="px-4 pb-6 pt-2 flex-shrink-0 border-t border-slate-800">
+          <button
+            onClick={() => { onChange(local); onClose(); }}
+            className="w-full h-12 rounded-xl bg-green-600 text-white font-bold hover:bg-green-500 transition-colors">
+            Appliquer
+          </button>
+        </div>
       </div>
     </div>
   );

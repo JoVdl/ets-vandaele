@@ -59,6 +59,70 @@ export function formatDistance(m: number): string {
   return `${Math.round(m)} m`;
 }
 
+/** Exponential moving average smoothing on lat/lng. alpha: 0=no smooth, 1=max. */
+export function smoothPoints(points: GpsPoint[], alpha: number): GpsPoint[] {
+  if (points.length < 2 || alpha <= 0) return points;
+  const a = Math.min(1, Math.max(0, alpha));
+  const out: GpsPoint[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const prev = out[i - 1];
+    out.push({
+      ...points[i],
+      lat: a * points[i].lat + (1 - a) * prev.lat,
+      lng: a * points[i].lng + (1 - a) * prev.lng,
+    });
+  }
+  return out;
+}
+
+/**
+ * Compute swath rectangle corners for each GPS segment.
+ * Returns an array of 4-point polygons (one per segment pair).
+ * halfWidthM = largeurTravailM / 2
+ */
+export function swathRects(
+  points: GpsPoint[],
+  halfWidthM: number,
+): [number, number][][] {
+  if (points.length < 2 || halfWidthM <= 0) return [];
+  const R = 6371000;
+  const out: [number, number][][] = [];
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const dist = distanceM(p1.lat, p1.lng, p2.lat, p2.lng);
+    if (dist < 0.5) continue; // skip noise
+
+    const lat1R = p1.lat * Math.PI / 180;
+    const dLat  = (p2.lat - p1.lat) * Math.PI / 180;
+    const dLng  = (p2.lng - p1.lng) * Math.PI / 180;
+    const bearing = Math.atan2(dLng * Math.cos(lat1R), dLat);
+
+    const cosLat = Math.cos(((p1.lat + p2.lat) / 2) * Math.PI / 180);
+    const dLatDeg = -Math.sin(bearing) * halfWidthM / R * (180 / Math.PI);
+    const dLngDeg =  Math.cos(bearing) * halfWidthM / (R * cosLat) * (180 / Math.PI);
+
+    out.push([
+      [p1.lat + dLatDeg, p1.lng + dLngDeg],
+      [p1.lat - dLatDeg, p1.lng - dLngDeg],
+      [p2.lat - dLatDeg, p2.lng - dLngDeg],
+      [p2.lat + dLatDeg, p2.lng + dLngDeg],
+    ]);
+  }
+  return out;
+}
+
+/**
+ * Surface covered by strip-based work: distance × effective width.
+ * More accurate than Shoelace for back-and-forth row patterns.
+ */
+export function stripAreaM2(points: GpsPoint[], largeurM: number, recouvrementPct: number): number {
+  if (largeurM <= 0) return 0;
+  const effectiveWidth = largeurM * (1 - recouvrementPct / 100);
+  return totalDistanceM(points) * effectiveWidth;
+}
+
 export function centroid(points: { lat: number; lng: number }[]): { lat: number; lng: number } {
   if (!points.length) return { lat: 0, lng: 0 };
   return {

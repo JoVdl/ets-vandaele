@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap, useMapEvent
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { GpsPoint } from '../../types/suivi';
-import { areaM2, formatArea, centroid } from '../../lib/geo';
+import { areaM2, formatArea, centroid, swathRects, smoothPoints } from '../../lib/geo';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -39,13 +39,9 @@ function zoneLabel(nom: string, color: string) {
       transform:translateX(-50%);
       display:inline-block;
       background:${color}cc;
-      color:#fff;
-      font-size:10px;
-      font-weight:700;
-      padding:2px 6px;
-      border-radius:4px;
-      white-space:nowrap;
-      pointer-events:none;
+      color:#fff;font-size:10px;font-weight:700;
+      padding:2px 6px;border-radius:4px;
+      white-space:nowrap;pointer-events:none;
       text-shadow:0 1px 2px rgba(0,0,0,.5);
       border:1px solid rgba(255,255,255,.3);
     ">${nom}</div>`,
@@ -85,17 +81,16 @@ interface Props {
   chantierZones: ChantierZone[];
   showZones:     boolean;
   satellite:     boolean;
+  workColor:     string;   // color for the work trail (chantier type color)
+  largeurM:      number;   // working width in metres (0 = no swath)
+  smoothAlpha:   number;   // EMA smoothing factor
 }
 
 export default function SuiviMap({
   gpsPoints, currentPos, drawMode, drawPoints, onDrawPoint,
   followGps, chantierZones, showZones, satellite,
+  workColor, largeurM, smoothAlpha,
 }: Props) {
-
-  const trail = useMemo(
-    () => gpsPoints.map(p => [p.lat, p.lng] as [number, number]),
-    [gpsPoints],
-  );
 
   const center: [number, number] = currentPos
     ? [currentPos.lat, currentPos.lng]
@@ -106,14 +101,37 @@ export default function SuiviMap({
   const tileUrl = satellite
     ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
     : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
   const tileAttr = satellite
     ? '&copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics'
     : '&copy; <a href="https://openstreetmap.org">OSM</a>';
 
+  // Smooth GPS points for display
+  const smoothed = useMemo(
+    () => smoothPoints(gpsPoints, smoothAlpha),
+    [gpsPoints, smoothAlpha],
+  );
+
+  // Swath rectangles (one per GPS segment)
+  const rects = useMemo(
+    () => swathRects(smoothed, largeurM / 2),
+    [smoothed, largeurM],
+  );
+
+  // Fallback polyline when no width
+  const trail = useMemo(
+    () => smoothed.map(p => [p.lat, p.lng] as [number, number]),
+    [smoothed],
+  );
+
   return (
     <div className="relative w-full h-full">
-      <MapContainer center={center} zoom={17} className="w-full h-full" zoomControl={false}>
+      <MapContainer
+        center={center}
+        zoom={17}
+        className="w-full h-full"
+        zoomControl={false}
+        preferCanvas={true}
+      >
         <TileLayer key={satellite ? 'sat' : 'osm'} url={tileUrl} attribution={tileAttr} maxZoom={20} />
 
         <AutoCenter pos={currentPos ? [currentPos.lat, currentPos.lng] : null} follow={followGps} />
@@ -129,22 +147,35 @@ export default function SuiviMap({
               positions={z.polygon.map(p => [p.lat, p.lng] as [number, number])}
               color={z.color}
               fillColor={z.color}
-              fillOpacity={0.25}
+              fillOpacity={0.22}
               weight={2.5}
             />,
             <Marker key={`label-${z.id}`} position={[c.lat, c.lng]} icon={zoneLabel(z.nom, z.color)} />,
           ];
         })}
 
-        {/* GPS trail */}
-        {trail.length > 1 && (
-          <Polyline positions={trail} color="#22c55e" weight={4} opacity={0.85} />
-        )}
+        {/* Work trail — swath rectangles or polyline */}
+        {largeurM > 0
+          ? rects.map((rect, i) => (
+              <Polygon
+                key={i}
+                positions={rect}
+                color={workColor}
+                fillColor={workColor}
+                fillOpacity={0.55}
+                weight={0}
+                stroke={false}
+              />
+            ))
+          : trail.length > 1 && (
+              <Polyline positions={trail} color={workColor} weight={4} opacity={0.85} />
+            )
+        }
 
         {/* Draw polygon */}
         {drawPoints.length >= 3 && (
           <Polygon
-            positions={drawPoints.map(p => [p.lat, p.lng])}
+            positions={drawPoints.map(p => [p.lat, p.lng] as [number, number])}
             color="#3b82f6"
             fillColor="#3b82f6"
             fillOpacity={0.2}
