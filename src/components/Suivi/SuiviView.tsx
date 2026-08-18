@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Play, Pause, Square, MapPin, Wifi, WifiOff, LocateFixed,
   ChevronUp, ChevronDown, History, Settings, Ruler, Trash2, Check, X, LogOut,
-  BarChart2, Home, Navigation,
+  BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers,
 } from 'lucide-react';
-import SuiviMap from './SuiviMap';
+import SuiviMap, { type ChantierZone } from './SuiviMap';
 import { useGps } from '../../hooks/useGps';
 import { useSuiviSessions } from '../../hooks/useSuiviSessions';
 import { useChantiers } from '../../hooks/useChantiers';
+import { CHANTIER_TYPES } from '../../lib/constants';
 import {
   areaM2, formatArea, formatDistance, formatDuration,
   avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM,
@@ -40,7 +41,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export default function SuiviView({ role, onLogout }: Props) {
-  const { chantiers } = useChantiers();
+  const { chantiers, updateChantier } = useChantiers();
   const { sessions, saveSession, syncing } = useSuiviSessions();
   const [view, setView] = useState<View>('map');
 
@@ -59,6 +60,10 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [drawMode, setDrawMode]     = useState(false);
   const [drawPoints, setDrawPoints] = useState<{ lat: number; lng: number }[]>([]);
   const [drawSaved, setDrawSaved]   = useState<number | null>(null);
+
+  // ── Map display options ────────────────────────────────────────────────
+  const [satellite, setSatellite] = useState(true);
+  const [showZones, setShowZones] = useState(true);
 
   // ── GPS ────────────────────────────────────────────────────────────────
   const { points: gpsPoints, currentPos, error: gpsError, accuracy, resetPoints, addPoints } =
@@ -157,6 +162,19 @@ export default function SuiviView({ role, onLogout }: Props) {
     ? Math.min(100, (areaM / selectedChantier.surface) * 100)
     : null;
 
+  // ── Chantier zones for map ────────────────────────────────────────────
+  const chantierZones = useMemo<ChantierZone[]>(() =>
+    chantiers
+      .filter(c => c.polygon && c.polygon.length >= 3 && c.status !== 'refuse' && c.status !== 'annule')
+      .map(c => ({
+        id:      c.id,
+        nom:     c.nom,
+        polygon: c.polygon!,
+        color:   CHANTIER_TYPES[c.type]?.color ?? '#64748B',
+      })),
+    [chantiers],
+  );
+
   // ── Analytics ─────────────────────────────────────────────────────────
   const analytics = useMemo(() => {
     const totalH   = sessions.reduce((a, s) => a + s.dureeMinutes / 60, 0);
@@ -226,9 +244,17 @@ export default function SuiviView({ role, onLogout }: Props) {
     setDrawPoints(p => [...p, { lat, lng }]);
   }, []);
   const handleDrawClear = () => { setDrawPoints([]); setDrawSaved(null); };
-  const handleDrawSave  = () => {
-    setDrawSaved(areaM2(drawPoints));
+  const handleDrawSave  = async () => {
+    const area = areaM2(drawPoints);
+    setDrawSaved(area);
     setDrawMode(false);
+    // Save polygon + area to the selected chantier in Firestore
+    if (selectedChantierId) {
+      await updateChantier(selectedChantierId, {
+        polygon: drawPoints,
+        surface: Math.round(area),
+      }).catch(() => {/* offline — ignore */});
+    }
     setDrawPoints([]);
   };
 
@@ -326,15 +352,34 @@ export default function SuiviView({ role, onLogout }: Props) {
               drawPoints={drawPoints}
               onDrawPoint={handleDrawPoint}
               followGps={followGps}
+              chantierZones={chantierZones}
+              showZones={showZones}
+              satellite={satellite}
             />
 
-            {/* Follow GPS toggle */}
-            <button onClick={() => setFollowGps(f => !f)}
-              className={`absolute top-3 right-3 z-[1000] p-2.5 rounded-xl shadow-lg transition-colors ${
-                followGps ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400'
-              }`}>
-              <LocateFixed size={18} />
-            </button>
+            {/* Map control buttons */}
+            <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-2">
+              <button onClick={() => setFollowGps(f => !f)}
+                className={`p-2.5 rounded-xl shadow-lg transition-colors ${
+                  followGps ? 'bg-green-600 text-white' : 'bg-slate-800/90 text-slate-400'
+                }`}>
+                <LocateFixed size={18} />
+              </button>
+              <button onClick={() => setSatellite(s => !s)}
+                className={`p-2.5 rounded-xl shadow-lg transition-colors ${
+                  satellite ? 'bg-slate-800/90 text-cyan-400' : 'bg-slate-800/90 text-slate-400'
+                }`}
+                title={satellite ? 'Vue OSM' : 'Vue satellite'}>
+                {satellite ? <MapIcon size={18} /> : <Satellite size={18} />}
+              </button>
+              <button onClick={() => setShowZones(z => !z)}
+                className={`p-2.5 rounded-xl shadow-lg transition-colors ${
+                  showZones ? 'bg-slate-800/90 text-amber-400' : 'bg-slate-800/90 text-slate-500'
+                }`}
+                title={showZones ? 'Masquer les zones' : 'Afficher les zones'}>
+                <Layers size={18} />
+              </button>
+            </div>
 
             {/* Nearby chantier suggestion */}
             {nearbyChantier && (
@@ -357,7 +402,7 @@ export default function SuiviView({ role, onLogout }: Props) {
 
             {/* Draw mode toolbar */}
             {drawMode && (
-              <div className={`absolute z-[1000] flex items-center gap-2 bg-slate-900/90 rounded-xl px-3 py-2 ${nearbyChantier ? 'top-14' : 'top-3'} left-3 right-16`}>
+              <div className={`absolute z-[1000] flex items-center gap-2 bg-slate-900/90 rounded-xl px-3 py-2 ${nearbyChantier ? 'top-14' : 'top-3'} left-3 right-20`}>
                 <Ruler size={14} className="text-blue-400 flex-shrink-0" />
                 <span className="text-white text-xs flex-1">Touchez la carte pour tracer</span>
                 {drawPoints.length >= 3 && (

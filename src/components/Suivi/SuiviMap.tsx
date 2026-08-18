@@ -3,9 +3,8 @@ import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap, useMapEvent
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { GpsPoint } from '../../types/suivi';
-import { areaM2, formatArea } from '../../lib/geo';
+import { areaM2, formatArea, centroid } from '../../lib/geo';
 
-// Fix default icon paths broken by Vite
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -20,8 +19,7 @@ const currentIcon = L.divIcon({
     background:#22c55e;border:3px solid white;
     box-shadow:0 0 0 4px rgba(34,197,94,.3);
   "></div>`,
-  iconSize:   [18, 18],
-  iconAnchor: [9, 9],
+  iconSize: [18, 18], iconAnchor: [9, 9],
 });
 
 const drawIcon = L.divIcon({
@@ -31,11 +29,30 @@ const drawIcon = L.divIcon({
     background:#3b82f6;border:2px solid white;
     box-shadow:0 0 0 3px rgba(59,130,246,.4);
   "></div>`,
-  iconSize:   [14, 14],
-  iconAnchor: [7, 7],
+  iconSize: [14, 14], iconAnchor: [7, 7],
 });
 
-// Re-centers map when GPS position changes
+function zoneLabel(nom: string, color: string) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      transform:translateX(-50%);
+      display:inline-block;
+      background:${color}cc;
+      color:#fff;
+      font-size:10px;
+      font-weight:700;
+      padding:2px 6px;
+      border-radius:4px;
+      white-space:nowrap;
+      pointer-events:none;
+      text-shadow:0 1px 2px rgba(0,0,0,.5);
+      border:1px solid rgba(255,255,255,.3);
+    ">${nom}</div>`,
+    iconSize: [0, 0], iconAnchor: [0, 8],
+  });
+}
+
 function AutoCenter({ pos, follow }: { pos: [number, number] | null; follow: boolean }) {
   const map = useMap();
   useEffect(() => {
@@ -44,20 +61,18 @@ function AutoCenter({ pos, follow }: { pos: [number, number] | null; follow: boo
   return null;
 }
 
-// Capture map clicks in draw mode
-function DrawHandler({
-  active,
-  onPoint,
-}: {
-  active: boolean;
-  onPoint: (lat: number, lng: number) => void;
-}) {
+function DrawHandler({ active, onPoint }: { active: boolean; onPoint: (lat: number, lng: number) => void }) {
   useMapEvents({
-    click(e) {
-      if (active) onPoint(e.latlng.lat, e.latlng.lng);
-    },
+    click(e) { if (active) onPoint(e.latlng.lat, e.latlng.lng); },
   });
   return null;
+}
+
+export interface ChantierZone {
+  id: string;
+  nom: string;
+  polygon: { lat: number; lng: number }[];
+  color: string;
 }
 
 interface Props {
@@ -67,10 +82,14 @@ interface Props {
   drawPoints:    { lat: number; lng: number }[];
   onDrawPoint:   (lat: number, lng: number) => void;
   followGps:     boolean;
+  chantierZones: ChantierZone[];
+  showZones:     boolean;
+  satellite:     boolean;
 }
 
 export default function SuiviMap({
-  gpsPoints, currentPos, drawMode, drawPoints, onDrawPoint, followGps,
+  gpsPoints, currentPos, drawMode, drawPoints, onDrawPoint,
+  followGps, chantierZones, showZones, satellite,
 }: Props) {
 
   const trail = useMemo(
@@ -80,26 +99,42 @@ export default function SuiviMap({
 
   const center: [number, number] = currentPos
     ? [currentPos.lat, currentPos.lng]
-    : [50.4, 2.8];  // default: Hauts-de-France
+    : [50.4, 2.8];
 
   const drawnArea = drawPoints.length >= 3 ? areaM2(drawPoints) : 0;
 
+  const tileUrl = satellite
+    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+  const tileAttr = satellite
+    ? '&copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics'
+    : '&copy; <a href="https://openstreetmap.org">OSM</a>';
+
   return (
     <div className="relative w-full h-full">
-      <MapContainer
-        center={center}
-        zoom={17}
-        className="w-full h-full"
-        zoomControl={false}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://openstreetmap.org">OSM</a>'
-          maxZoom={20}
-        />
+      <MapContainer center={center} zoom={17} className="w-full h-full" zoomControl={false}>
+        <TileLayer key={satellite ? 'sat' : 'osm'} url={tileUrl} attribution={tileAttr} maxZoom={20} />
 
         <AutoCenter pos={currentPos ? [currentPos.lat, currentPos.lng] : null} follow={followGps} />
         <DrawHandler active={drawMode} onPoint={onDrawPoint} />
+
+        {/* Chantier zones permanentes */}
+        {showZones && chantierZones.flatMap(z => {
+          if (z.polygon.length < 3) return [];
+          const c = centroid(z.polygon);
+          return [
+            <Polygon
+              key={`zone-${z.id}`}
+              positions={z.polygon.map(p => [p.lat, p.lng] as [number, number])}
+              color={z.color}
+              fillColor={z.color}
+              fillOpacity={0.25}
+              weight={2.5}
+            />,
+            <Marker key={`label-${z.id}`} position={[c.lat, c.lng]} icon={zoneLabel(z.nom, z.color)} />,
+          ];
+        })}
 
         {/* GPS trail */}
         {trail.length > 1 && (

@@ -59,6 +59,14 @@ export function formatDistance(m: number): string {
   return `${Math.round(m)} m`;
 }
 
+export function centroid(points: { lat: number; lng: number }[]): { lat: number; lng: number } {
+  if (!points.length) return { lat: 0, lng: 0 };
+  return {
+    lat: points.reduce((s, p) => s + p.lat, 0) / points.length,
+    lng: points.reduce((s, p) => s + p.lng, 0) / points.length,
+  };
+}
+
 export function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);

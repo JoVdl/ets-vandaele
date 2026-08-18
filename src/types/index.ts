@@ -45,6 +45,9 @@ export interface Chantier {
   // Surface de travail (m²) — mesurée sur la carte ou saisie manuellement
   surface?: number;
 
+  // Polygone délimitant la zone de travail (tracé sur la carte)
+  polygon?: { lat: number; lng: number }[];
+
   // Pelles
   pelles?: TypePelle[];
 
