@@ -49,3 +49,25 @@ export function loadSession(): 'patron' | 'salarie' | null {
 export function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
 }
+
+// ── Planning session (PIN patron, 24 h) ─────────────────────────────────────
+
+const PLANNING_KEY = 'ets_planning_session';
+
+export function savePlanningSession(): void {
+  localStorage.setItem(PLANNING_KEY, JSON.stringify({ expiresAt: Date.now() + 24 * 60 * 60 * 1000 }));
+}
+
+export function loadPlanningSession(): boolean {
+  try {
+    const raw = localStorage.getItem(PLANNING_KEY);
+    if (!raw) return false;
+    const { expiresAt } = JSON.parse(raw);
+    if (Date.now() > expiresAt) { localStorage.removeItem(PLANNING_KEY); return false; }
+    return true;
+  } catch { return false; }
+}
+
+export function clearPlanningSession(): void {
+  localStorage.removeItem(PLANNING_KEY);
+}
