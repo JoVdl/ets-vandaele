@@ -47,8 +47,6 @@ const TYPE_LABELS: Record<string, string> = {
   location:                  'Location',
 };
 
-function getLiveIdKey(role: string) { return `suivi_live_id_${role}`; }
-
 export default function SuiviView({ role, onLogout }: Props) {
   const { chantiers, updateChantier } = useChantiers();
   const { sessions, saveSession, syncing } = useSuiviSessions();
@@ -56,15 +54,9 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [view, setView] = useState<View>('map');
   const [selectedSession, setSelectedSession] = useState<SuiviSession | null>(null);
 
-  // Stable live-session ID: persists across page refreshes within the same tab
-  // so Firestore document is updated rather than duplicated on reload.
-  const sessionIdRef = useRef<string>(
-    sessionStorage.getItem(getLiveIdKey(role)) ?? (() => {
-      const id = `${role}-${Date.now()}`;
-      sessionStorage.setItem(getLiveIdKey(role), id);
-      return id;
-    })()
-  );
+  // Use role as the Firestore document ID — guarantees exactly one live document
+  // per role (patron / salarie) regardless of refreshes or tabs.
+  const sessionIdRef = useRef<string>(role);
 
   // ── Session state ──────────────────────────────────────────────────────
   const [sessionActive, setSessionActive]   = useState(false);
@@ -318,9 +310,6 @@ export default function SuiviView({ role, onLogout }: Props) {
   // ── Session controls ───────────────────────────────────────────────────
   const handleStart = useCallback(() => {
     if (!selectedChantierId) { setShowChantierPicker(true); return; }
-    const newId = `${role}-${Date.now()}`;
-    sessionIdRef.current = newId;
-    sessionStorage.setItem(getLiveIdKey(role), newId);
     resetPoints();
     setElapsed(0);
     setSessionStart(new Date());
@@ -336,7 +325,6 @@ export default function SuiviView({ role, onLogout }: Props) {
     setSessionPaused(false);
     clearActiveSession();
     clearLiveSession(sessionIdRef.current);
-    sessionStorage.removeItem(getLiveIdKey(role));
     await saveSession({
       chantierId:   selectedChantier.id,
       chantierNom:  selectedChantier.nom,
