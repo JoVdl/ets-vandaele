@@ -80,7 +80,7 @@ interface Props {
   followGps:     boolean;
   chantierZones: ChantierZone[];
   showZones:     boolean;
-  satellite:     boolean;
+  satellite:     'ign' | 'esri' | 'osm';
   workColor:     string;   // color for the work trail (chantier type color)
   largeurM:      number;   // working width in metres (0 = no swath)
   smoothAlpha:   number;   // EMA smoothing factor
@@ -98,12 +98,22 @@ export default function SuiviMap({
 
   const drawnArea = drawPoints.length >= 3 ? areaM2(drawPoints) : 0;
 
-  const tileUrl = satellite
-    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-  const tileAttr = satellite
-    ? '&copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics'
-    : '&copy; <a href="https://openstreetmap.org">OSM</a>';
+  const tiles: Record<string, { url: string; attr: string }> = {
+    ign: {
+      url:  'https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+      attr: '&copy; <a href="https://www.ign.fr">IGN</a> – Géoplateforme',
+    },
+    esri: {
+      url:  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      attr: '&copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics',
+    },
+    osm: {
+      url:  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      attr: '&copy; <a href="https://openstreetmap.org">OSM</a>',
+    },
+  };
+  const tileKey = satellite as string;
+  const { url: tileUrl, attr: tileAttr } = tiles[tileKey] ?? tiles.ign;
 
   // Smooth GPS points for display
   const smoothed = useMemo(

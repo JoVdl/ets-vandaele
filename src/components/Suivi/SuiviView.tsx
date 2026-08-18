@@ -65,9 +65,25 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [drawSaved, setDrawSaved]   = useState<number | null>(null);
 
   // ── Map display options ────────────────────────────────────────────────
-  const [satellite, setSatellite]     = useState(true);
+  type TileMode = 'ign' | 'esri' | 'osm';
+  const TILE_CYCLE: TileMode[] = ['ign', 'esri', 'osm'];
+  const [tileMode, setTileMode]       = useState<TileMode>('ign');
   const [showZones, setShowZones]     = useState(true);
   const [showMachinePanel, setShowMachinePanel] = useState(false);
+
+  // ── Screen Wake Lock (keeps screen on during active session) ──────────
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  useEffect(() => {
+    if (!sessionActive || sessionPaused) {
+      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+      return;
+    }
+    navigator.wakeLock?.request('screen')
+      .then(wl => { wakeLockRef.current = wl; })
+      .catch(() => {}); // Not available in all browsers
+    return () => { wakeLockRef.current?.release().catch(() => {}); };
+  }, [sessionActive, sessionPaused]);
 
   // ── Machine params ─────────────────────────────────────────────────────
   const [machineParams, setMachineParamsState] = useState<MachineParams>(() => loadMachineParams());
@@ -354,6 +370,10 @@ export default function SuiviView({ role, onLogout }: Props) {
           {accuracy != null && <span className="text-slate-400">{Math.round(accuracy)}m</span>}
         </div>
 
+        {/* Wake lock indicator — screen stays on during session */}
+        {sessionActive && !sessionPaused && wakeLockRef.current && (
+          <span className="text-[10px] text-amber-400" title="Écran maintenu allumé">🔆</span>
+        )}
         {online ? <Wifi size={14} className="text-green-500" /> : <WifiOff size={14} className="text-orange-400" />}
 
         <button onClick={() => setView(v => v === 'history' ? 'map' : 'history')}
@@ -390,7 +410,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               followGps={followGps}
               chantierZones={chantierZones}
               showZones={showZones}
-              satellite={satellite}
+              satellite={tileMode}
               workColor={workColor}
               largeurM={machineParams.largeurTravailM}
               smoothAlpha={machineParams.smoothAlpha}
@@ -404,12 +424,14 @@ export default function SuiviView({ role, onLogout }: Props) {
                 }`}>
                 <LocateFixed size={18} />
               </button>
-              <button onClick={() => setSatellite(s => !s)}
-                className={`p-2.5 rounded-xl shadow-lg transition-colors ${
-                  satellite ? 'bg-slate-800/90 text-cyan-400' : 'bg-slate-800/90 text-slate-400'
-                }`}
-                title={satellite ? 'Vue OSM' : 'Vue satellite'}>
-                {satellite ? <MapIcon size={18} /> : <Satellite size={18} />}
+              <button
+                onClick={() => setTileMode(m => TILE_CYCLE[(TILE_CYCLE.indexOf(m) + 1) % TILE_CYCLE.length])}
+                className="p-2.5 rounded-xl shadow-lg bg-slate-800/90 transition-colors"
+                title={tileMode === 'ign' ? 'IGN France' : tileMode === 'esri' ? 'ESRI Global' : 'OSM'}>
+                {tileMode === 'osm'
+                  ? <MapIcon size={18} className="text-slate-400" />
+                  : <Satellite size={18} className={tileMode === 'ign' ? 'text-green-400' : 'text-cyan-400'} />
+                }
               </button>
               <button onClick={() => setShowZones(z => !z)}
                 className={`p-2.5 rounded-xl shadow-lg transition-colors ${
