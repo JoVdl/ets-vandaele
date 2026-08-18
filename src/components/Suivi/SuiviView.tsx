@@ -5,6 +5,7 @@ import {
   BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers, SlidersHorizontal, Radio,
 } from 'lucide-react';
 import SuiviMap, { type ChantierZone } from './SuiviMap';
+import SessionDetailView from './SessionDetailView';
 import { useGps } from '../../hooks/useGps';
 import { useSuiviSessions } from '../../hooks/useSuiviSessions';
 import { useChantiers } from '../../hooks/useChantiers';
@@ -23,7 +24,7 @@ import { saveActiveSession, loadActiveSession, clearActiveSession } from '../../
 import { clearSession } from '../../lib/suiviConfig';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import type { PinRole } from '../../types/suivi';
+import type { PinRole, SuiviSession } from '../../types/suivi';
 import type { Chantier } from '../../types';
 
 interface Props {
@@ -51,6 +52,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   const { sessions, saveSession, syncing } = useSuiviSessions();
   const { liveSessions } = useLiveSessions();
   const [view, setView] = useState<View>('map');
+  const [selectedSession, setSelectedSession] = useState<SuiviSession | null>(null);
 
   // Unique session ID (stable across re-renders, reset on new session start)
   const sessionIdRef = useRef<string>(`${role}-${Date.now()}`);
@@ -680,7 +682,8 @@ export default function SuiviView({ role, onLogout }: Props) {
             ) : (
               <div className="space-y-2">
                 {sessions.map(s => (
-                  <div key={s.id} className="bg-slate-800 rounded-2xl p-3">
+                  <button key={s.id} onClick={() => setSelectedSession(s)}
+                    className="w-full text-left bg-slate-800 rounded-2xl p-3 hover:bg-slate-700 transition-colors active:scale-[0.99]">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="min-w-0">
                         <p className="text-white text-sm font-semibold truncate">{s.chantierNom}</p>
@@ -701,7 +704,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                       <SmallStat label="Rend."    value={`${Math.round(s.rendementM2h)} m²/h`} />
                       <SmallStat label="Distance" value={formatDistance(s.distanceM)} />
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -901,6 +904,18 @@ export default function SuiviView({ role, onLogout }: Props) {
           chantierType={selectedChantier?.type}
           onClose={() => setShowMachinePanel(false)}
           onChange={p => { setMachineParamsState(p); saveMachineParams(p); }}
+        />
+      )}
+
+      {/* ── Session detail overlay ──────────────────────────────────────── */}
+      {selectedSession && (
+        <SessionDetailView
+          session={selectedSession}
+          chantierZones={chantierZones}
+          workColor={selectedSession.chantierId === selectedChantierId
+            ? workColor
+            : '#22c55e'}
+          onClose={() => setSelectedSession(null)}
         />
       )}
 
