@@ -96,6 +96,14 @@ function AutoCenter({ pos, follow }: { pos: [number, number] | null; follow: boo
   return null;
 }
 
+function JumpTo({ pos }: { pos: [number, number] | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (pos) map.setView(pos, Math.max(map.getZoom(), 17), { animate: true });
+  }, [pos, map]);
+  return null;
+}
+
 function DrawHandler({ active, onPoint, onDrag }: {
   active: boolean;
   onPoint: (lat: number, lng: number) => void;
@@ -133,6 +141,7 @@ interface Props {
   largeurM:         number;
   smoothAlpha:      number;
   sessionActive:    boolean;
+  jumpToPos:        [number, number] | null;
   liveSessions:     LiveSession[];
   mySessionId:      string;
 }
@@ -152,7 +161,7 @@ export default function SuiviMap({
   gpsPoints, currentPos, drawMode, drawPoints, onDrawPoint,
   followGps, onDisableFollow, chantierZones, selectedZoneId, onZoneClick,
   showZones, satellite, workColor, largeurM, smoothAlpha,
-  sessionActive, liveSessions, mySessionId,
+  sessionActive, jumpToPos, liveSessions, mySessionId,
 }: Props) {
 
   const center: [number, number] = currentPos
@@ -216,6 +225,7 @@ export default function SuiviMap({
         <TileLayer key={satellite} url={tileUrl} attribution={tileAttr} maxZoom={20} />
 
         <AutoCenter pos={currentPos ? [currentPos.lat, currentPos.lng] : null} follow={followGps} />
+        <JumpTo pos={jumpToPos} />
         <DrawHandler active={drawMode} onPoint={onDrawPoint} onDrag={onDisableFollow} />
 
         {/* Chantier zones */}

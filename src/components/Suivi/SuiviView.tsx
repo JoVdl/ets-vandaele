@@ -11,7 +11,7 @@ import { useSuiviSessions } from '../../hooks/useSuiviSessions';
 import { useChantiers } from '../../hooks/useChantiers';
 import { CHANTIER_TYPES } from '../../lib/constants';
 import {
-  areaM2, formatArea, formatDistance, formatDuration,
+  areaM2, formatArea, formatDistance, formatDuration, centroid,
   avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, stripAreaM2,
 } from '../../lib/geo';
 import {
@@ -193,18 +193,26 @@ export default function SuiviView({ role, onLogout }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Chantier progress (historical sessions + live) ────────────────────
+  // ── Cumulative stats per chantier (for map labels + history cards) ────
+  const chantierCumul = useMemo(() => {
+    const map: Record<string, { totalCoveredM2: number; sessionCount: number }> = {};
+    for (const s of sessions) {
+      if (!map[s.chantierId]) map[s.chantierId] = { totalCoveredM2: 0, sessionCount: 0 };
+      map[s.chantierId].totalCoveredM2 += s.surfaceCoveredM2;
+      map[s.chantierId].sessionCount++;
+    }
+    return map;
+  }, [sessions]);
+
   const chantierProgress = useMemo(() => {
     const result: Record<string, number> = {};
     for (const c of chantiers) {
       if (!c.surface || c.surface <= 0) continue;
-      const covered = sessions
-        .filter(s => s.chantierId === c.id)
-        .reduce((sum, s) => sum + s.surfaceCoveredM2, 0);
+      const covered = chantierCumul[c.id]?.totalCoveredM2 ?? 0;
       result[c.id] = Math.min(100, Math.round((covered / c.surface) * 100));
     }
     return result;
-  }, [chantiers, sessions]);
+  }, [chantiers, chantierCumul]);
 
   // ── Speed-outlier filter (GPS glitches above machine max speed) ───────
   const filteredPoints = useMemo(() => {
@@ -289,6 +297,23 @@ export default function SuiviView({ role, onLogout }: Props) {
     : '#22c55e';
 
   // ── Chantier zones for map ────────────────────────────────────────────
+  // Center map on selected chantier when it changes (zone centroid or lat/lng)
+  const jumpToPos = useMemo<[number, number] | null>(() => {
+    if (!selectedChantierId) return null;
+    const c = chantiers.find(ch => ch.id === selectedChantierId);
+    if (!c) return null;
+    if (c.polygon && c.polygon.length > 0) {
+      const all = c.polygon.flat();
+      if (all.length > 0) {
+        const ctr = centroid(all);
+        return [ctr.lat, ctr.lng];
+      }
+    }
+    if (c.latitude && c.longitude) return [c.latitude, c.longitude];
+    return null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChantierId]);
+
   const chantierZones = useMemo<ChantierZone[]>(() =>
     chantiers
       .filter(c => c.polygon && c.polygon.length > 0 && c.status !== 'refuse' && c.status !== 'annule')
@@ -509,6 +534,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               chantierZones={chantierZones}
               selectedZoneId={selectedChantierId}
               onZoneClick={id => { setSelectedChantierId(id); setShowChantierPicker(false); }}
+              jumpToPos={jumpToPos}
               showZones={showZones}
               satellite={tileMode}
               workColor={workColor}
@@ -737,31 +763,82 @@ export default function SuiviView({ role, onLogout }: Props) {
               <p className="text-slate-500 text-sm text-center py-8">Aucune session enregistrée</p>
             ) : (
               <div className="space-y-2">
-                {sessions.map(s => (
-                  <button key={s.id} onClick={() => setSelectedSession(s)}
-                    className="w-full text-left bg-slate-800 rounded-2xl p-3 hover:bg-slate-700 transition-colors active:scale-[0.99]">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="min-w-0">
-                        <p className="text-white text-sm font-semibold truncate">{s.chantierNom}</p>
-                        <p className="text-slate-400 text-xs">
-                          {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
-                          {s.operateur === 'patron' ? ' · Patron' : ' · Salarié'}
-                        </p>
+                {sessions.map(s => {
+                  const chan = chantiers.find(c => c.id === s.chantierId);
+                  const cumul = chantierCumul[s.chantierId];
+                  const totalCov = cumul?.totalCoveredM2 ?? 0;
+                  const pct = chan?.surface && chan.surface > 0
+                    ? Math.min(100, Math.round((totalCov / chan.surface) * 100)) : null;
+                  const remaining = chan?.surface && chan.surface > 0
+                    ? Math.max(0, chan.surface - totalCov) : null;
+                  const tempsRestant = remaining != null && remaining > 0 && s.rendementM2h > 0
+                    ? Math.round((remaining / s.rendementM2h) * 60) : null;
+
+                  return (
+                    <button key={s.id} onClick={() => setSelectedSession(s)}
+                      className="w-full text-left bg-slate-800 rounded-2xl p-3 hover:bg-slate-700 transition-colors active:scale-[0.99]">
+
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-white text-sm font-semibold truncate">{s.chantierNom}</p>
+                          <p className="text-slate-400 text-[10px] mt-0.5">
+                            {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
+                            {' · '}{s.operateur === 'patron' ? 'Patron' : 'Salarié'}
+                            {chan?.type ? ` · ${TYPE_LABELS[chan.type] ?? chan.type}` : ''}
+                          </p>
+                        </div>
+                        {s.pendingSync && (
+                          <span className="flex-shrink-0 text-[10px] px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">
+                            Hors-ligne
+                          </span>
+                        )}
                       </div>
-                      {s.pendingSync && (
-                        <span className="flex-shrink-0 text-[10px] px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">
-                          En attente
-                        </span>
+
+                      {/* Primary session metrics */}
+                      <div className="grid grid-cols-4 gap-1 mb-1.5">
+                        <SmallStat label="Durée"    value={formatDuration(s.dureeMinutes)} />
+                        <SmallStat label="Surface"  value={formatArea(s.surfaceCoveredM2)} />
+                        <SmallStat label="Rend."    value={`${Math.round(s.rendementM2h)}`} sub="m²/h" />
+                        <SmallStat label="Vit. moy" value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)}` : '—'} sub="km/h" />
+                      </div>
+
+                      {/* Secondary: distance */}
+                      <p className="text-slate-500 text-[10px] mb-2">
+                        Distance parcourue : {formatDistance(s.distanceM)}
+                        {cumul && cumul.sessionCount > 1 && ` · ${cumul.sessionCount} sessions sur ce chantier`}
+                      </p>
+
+                      {/* Chantier cumulative progress */}
+                      {pct != null && (
+                        <>
+                          <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden mb-1.5">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                pct >= 80 ? 'bg-green-500' : pct >= 40 ? 'bg-amber-400' : 'bg-orange-500'
+                              }`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-slate-400">
+                              Chantier : <span className="text-white font-semibold">{pct}% effectué</span>
+                              {remaining != null && remaining > 0 && (
+                                <span className="text-slate-500"> · {formatArea(remaining)} restants</span>
+                              )}
+                              {pct >= 100 && (
+                                <span className="text-green-400 font-semibold"> · Terminé ✓</span>
+                              )}
+                            </span>
+                            {tempsRestant != null && (
+                              <span className="text-slate-500">~{formatDuration(tempsRestant)} restant</span>
+                            )}
+                          </div>
+                        </>
                       )}
-                    </div>
-                    <div className="grid grid-cols-4 gap-1">
-                      <SmallStat label="Durée"    value={formatDuration(s.dureeMinutes)} />
-                      <SmallStat label="Surface"  value={formatArea(s.surfaceCoveredM2)} />
-                      <SmallStat label="Rend."    value={`${Math.round(s.rendementM2h)} m²/h`} />
-                      <SmallStat label="Distance" value={formatDistance(s.distanceM)} />
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1039,11 +1116,12 @@ function Metric({ label, value, sub, small }: { label: string; value: string; su
   );
 }
 
-function SmallStat({ label, value }: { label: string; value: string }) {
+function SmallStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="bg-slate-700/50 rounded-lg px-2 py-1.5 text-center">
-      <p className="text-white text-xs font-semibold tabular-nums">{value}</p>
-      <p className="text-slate-500 text-[10px]">{label}</p>
+      <p className="text-white text-xs font-semibold tabular-nums leading-tight">{value}</p>
+      {sub && <p className="text-slate-500 text-[9px] leading-none">{sub}</p>}
+      <p className="text-slate-500 text-[10px] mt-0.5">{label}</p>
     </div>
   );
 }
