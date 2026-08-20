@@ -1,9 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { GpsPoint } from '../../types/suivi';
-import { areaM2, formatArea, centroid, swathRects, smoothPoints } from '../../lib/geo';
+import { areaM2, formatArea, centroid, swathRects, smoothPoints, distanceM } from '../../lib/geo';
 import type { LiveSession } from '../../hooks/useLiveSessions';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -11,16 +11,6 @@ L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
   iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-
-const currentIcon = L.divIcon({
-  className: '',
-  html: `<div style="
-    width:18px;height:18px;border-radius:50%;
-    background:#22c55e;border:3px solid white;
-    box-shadow:0 0 0 4px rgba(34,197,94,.3);
-  "></div>`,
-  iconSize: [18, 18], iconAnchor: [9, 9],
 });
 
 const drawIcon = L.divIcon({
@@ -33,21 +23,69 @@ const drawIcon = L.divIcon({
   iconSize: [14, 14], iconAnchor: [7, 7],
 });
 
-function zoneLabel(nom: string, color: string) {
+function zoneLabel(nom: string, color: string, progress: number | null) {
+  const progressStr = progress != null
+    ? `<span style="opacity:.85;font-weight:400;"> · ${progress}%</span>` : '';
   return L.divIcon({
     className: '',
     html: `<div style="
       transform:translateX(-50%);
       display:inline-block;
-      background:${color}cc;
+      background:${color}dd;
       color:#fff;font-size:10px;font-weight:700;
-      padding:2px 6px;border-radius:4px;
+      padding:2px 7px;border-radius:4px;
       white-space:nowrap;pointer-events:none;
       text-shadow:0 1px 2px rgba(0,0,0,.5);
       border:1px solid rgba(255,255,255,.3);
-    ">${nom}</div>`,
+    ">${nom}${progressStr}</div>`,
     iconSize: [0, 0], iconAnchor: [0, 8],
   });
+}
+
+/** Bearing in degrees (0=North, clockwise) from two GPS points. */
+function bearingDeg(p1: { lat: number; lng: number }, p2: { lat: number; lng: number }): number {
+  const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+  const dLng = (p2.lng - p1.lng) * Math.PI / 180;
+  const lat1R = p1.lat * Math.PI / 180;
+  const b = Math.atan2(dLng * Math.cos(lat1R), dLat);
+  return (b * 180 / Math.PI + 360) % 360;
+}
+
+/** Machine-shaped divIcon: oriented rectangle + forward arrow. */
+function machineIcon(bearing: number, largeurM: number, color: string) {
+  const PX_PER_M = 14; // visual scale (screen pixels per metre)
+  const bodyW = Math.max(20, Math.min(72, Math.round(largeurM * PX_PER_M)));
+  const bodyH = largeurM > 0 ? Math.round(bodyH_fromWidth(bodyW)) : bodyW;
+  const arrowW = Math.round(bodyW * 0.55);
+  const arrowH = 10;
+  const totalH = bodyH + arrowH + 2;
+
+  // Bounding box to contain the rotated icon
+  const diag = Math.ceil(Math.sqrt(bodyW * bodyW + totalH * totalH)) + 6;
+
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:${diag}px;height:${diag}px;display:flex;align-items:center;justify-content:center;">
+      <div style="transform:rotate(${bearing}deg);display:flex;flex-direction:column;align-items:center;gap:0;filter:drop-shadow(0 2px 5px rgba(0,0,0,.7));">
+        <div style="width:0;height:0;
+          border-left:${Math.round(arrowW/2)}px solid transparent;
+          border-right:${Math.round(arrowW/2)}px solid transparent;
+          border-bottom:${arrowH}px solid ${color};"></div>
+        <div style="width:${bodyW}px;height:${bodyH}px;
+          background:${color};
+          border:2.5px solid rgba(255,255,255,.92);
+          border-top:none;
+          border-radius:0 0 3px 3px;"></div>
+      </div>
+    </div>`,
+    iconSize: [diag, diag],
+    iconAnchor: [diag / 2, diag / 2],
+  });
+}
+
+function bodyH_fromWidth(w: number): number {
+  // Approximate machine length: chenillette ~3.5m, ratio h/w ≈ 1.5
+  return Math.round(w * 1.5);
 }
 
 function AutoCenter({ pos, follow }: { pos: [number, number] | null; follow: boolean }) {
@@ -75,6 +113,7 @@ export interface ChantierZone {
   nom: string;
   polygons: { lat: number; lng: number }[][];
   color: string;
+  progress: number | null;
 }
 
 interface Props {
@@ -86,11 +125,14 @@ interface Props {
   followGps:        boolean;
   onDisableFollow:  () => void;
   chantierZones:    ChantierZone[];
+  selectedZoneId:   string;
+  onZoneClick:      (id: string) => void;
   showZones:        boolean;
   satellite:        'ign' | 'esri' | 'osm';
   workColor:        string;
   largeurM:         number;
   smoothAlpha:      number;
+  sessionActive:    boolean;
   liveSessions:     LiveSession[];
   mySessionId:      string;
 }
@@ -108,8 +150,9 @@ function liveIcon(label: string) {
 
 export default function SuiviMap({
   gpsPoints, currentPos, drawMode, drawPoints, onDrawPoint,
-  followGps, onDisableFollow, chantierZones, showZones, satellite,
-  workColor, largeurM, smoothAlpha, liveSessions, mySessionId,
+  followGps, onDisableFollow, chantierZones, selectedZoneId, onZoneClick,
+  showZones, satellite, workColor, largeurM, smoothAlpha,
+  sessionActive, liveSessions, mySessionId,
 }: Props) {
 
   const center: [number, number] = currentPos
@@ -132,26 +175,34 @@ export default function SuiviMap({
       attr: '&copy; <a href="https://openstreetmap.org">OSM</a>',
     },
   };
-  const tileKey = satellite as string;
-  const { url: tileUrl, attr: tileAttr } = tiles[tileKey] ?? tiles.ign;
+  const { url: tileUrl, attr: tileAttr } = tiles[satellite as string] ?? tiles.ign;
 
-  // Smooth GPS points for display
   const smoothed = useMemo(
     () => smoothPoints(gpsPoints, smoothAlpha),
     [gpsPoints, smoothAlpha],
   );
 
-  // Swath rectangles (one per GPS segment)
   const rects = useMemo(
     () => swathRects(smoothed, largeurM / 2),
     [smoothed, largeurM],
   );
 
-  // Fallback polyline when no width
   const trail = useMemo(
     () => smoothed.map(p => [p.lat, p.lng] as [number, number]),
     [smoothed],
   );
+
+  // Bearing of the machine: angle from the last two smoothed GPS points
+  const lastBearingRef = useRef(0);
+  const machineBearing = useMemo(() => {
+    if (smoothed.length < 2) return lastBearingRef.current;
+    const p1 = smoothed[smoothed.length - 2];
+    const p2 = smoothed[smoothed.length - 1];
+    if (distanceM(p1.lat, p1.lng, p2.lat, p2.lng) < 1) return lastBearingRef.current;
+    const b = bearingDeg(p1, p2);
+    lastBearingRef.current = b;
+    return b;
+  }, [smoothed]);
 
   return (
     <div className="relative w-full h-full">
@@ -162,17 +213,18 @@ export default function SuiviMap({
         zoomControl={false}
         preferCanvas={true}
       >
-        <TileLayer key={satellite ? 'sat' : 'osm'} url={tileUrl} attribution={tileAttr} maxZoom={20} />
+        <TileLayer key={satellite} url={tileUrl} attribution={tileAttr} maxZoom={20} />
 
         <AutoCenter pos={currentPos ? [currentPos.lat, currentPos.lng] : null} follow={followGps} />
         <DrawHandler active={drawMode} onPoint={onDrawPoint} onDrag={onDisableFollow} />
 
-        {/* Chantier zones permanentes */}
+        {/* Chantier zones */}
         {showZones && chantierZones.flatMap(z => {
           const validPolygons = z.polygons.filter(p => p.length >= 3);
           if (validPolygons.length === 0) return [];
           const allPoints = validPolygons.flat();
           const c = centroid(allPoints);
+          const isSelected = z.id === selectedZoneId;
           return [
             ...validPolygons.map((poly, pi) => (
               <Polygon
@@ -180,11 +232,13 @@ export default function SuiviMap({
                 positions={poly.map(p => [p.lat, p.lng] as [number, number])}
                 color={z.color}
                 fillColor={z.color}
-                fillOpacity={0.22}
-                weight={2.5}
+                fillOpacity={isSelected ? 0.35 : 0.22}
+                weight={isSelected ? 3.5 : 2.5}
+                eventHandlers={{ click: () => onZoneClick(z.id) }}
               />
             )),
-            <Marker key={`label-${z.id}`} position={[c.lat, c.lng]} icon={zoneLabel(z.nom, z.color)} />,
+            <Marker key={`label-${z.id}`} position={[c.lat, c.lng]}
+              icon={zoneLabel(z.nom, z.color, z.progress)} />,
           ];
         })}
 
@@ -229,9 +283,21 @@ export default function SuiviMap({
           ))
         }
 
-        {/* Current GPS position */}
+        {/* Current GPS position — machine icon during session, simple dot otherwise */}
         {currentPos && (
-          <Marker position={[currentPos.lat, currentPos.lng]} icon={currentIcon} />
+          sessionActive && smoothed.length >= 2
+            ? <Marker
+                position={[currentPos.lat, currentPos.lng]}
+                icon={machineIcon(machineBearing, largeurM, workColor)}
+              />
+            : <Marker
+                position={[currentPos.lat, currentPos.lng]}
+                icon={L.divIcon({
+                  className: '',
+                  html: `<div style="width:18px;height:18px;border-radius:50%;background:#22c55e;border:3px solid white;box-shadow:0 0 0 4px rgba(34,197,94,.3);"></div>`,
+                  iconSize: [18, 18], iconAnchor: [9, 9],
+                })}
+              />
         )}
       </MapContainer>
 

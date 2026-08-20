@@ -53,6 +53,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   const { liveSessions } = useLiveSessions();
   const [view, setView] = useState<View>('map');
   const [selectedSession, setSelectedSession] = useState<SuiviSession | null>(null);
+  const [restoredBanner, setRestoredBanner]   = useState<string | null>(null); // chantier nom
 
   // Use role as the Firestore document ID — guarantees exactly one live document
   // per role (patron / salarie) regardless of refreshes or tabs.
@@ -144,41 +145,66 @@ export default function SuiviView({ role, onLogout }: Props) {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [sessionActive, sessionPaused]);
 
-  // ── Crash recovery ─────────────────────────────────────────────────────
-  const crashSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    if (!sessionActive || !selectedChantierId) return;
+  // ── Session autosave (every 10s + on hide/pagehide) ───────────────────
+  const saveActiveRef = useCallback(() => {
     const chantier = chantiers.find(c => c.id === selectedChantierId);
-    crashSaveRef.current = setInterval(() => {
-      if (chantier) {
-        saveActiveSession({
-          chantierId:  chantier.id,
-          chantierNom: chantier.nom,
-          operateur:   role,
-          dateDebut:   sessionStart?.toISOString() ?? new Date().toISOString(),
-          points:      gpsPoints,
-        });
-      }
-    }, 30_000);
-    return () => { if (crashSaveRef.current) clearInterval(crashSaveRef.current); };
-  }, [sessionActive, selectedChantierId, gpsPoints, chantiers, role, sessionStart]);
+    if (!sessionActive || !chantier) return;
+    saveActiveSession({
+      chantierId:  chantier.id,
+      chantierNom: chantier.nom,
+      operateur:   role,
+      dateDebut:   sessionStart?.toISOString() ?? new Date().toISOString(),
+      points:      gpsPoints,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionActive, selectedChantierId, chantiers, role, sessionStart, gpsPoints]);
 
+  // Periodic autosave every 10 s
+  useEffect(() => {
+    if (!sessionActive) return;
+    const t = setInterval(saveActiveRef, 10_000);
+    return () => clearInterval(t);
+  }, [sessionActive, saveActiveRef]);
+
+  // Immediate save when page is hidden (back button, tab switch, home button)
+  useEffect(() => {
+    const onHide = () => saveActiveRef();
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('beforeunload', onHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener('beforeunload', onHide);
+    };
+  }, [saveActiveRef]);
+
+  // Auto-restore on mount (no confirm — silent restore with dismissable banner)
   useEffect(() => {
     const saved = loadActiveSession();
     if (saved && saved.points?.length > 0) {
-      const restore = confirm(`Session précédente récupérée (${saved.chantierNom}) — continuer ?`);
-      if (restore) {
-        setSelectedChantierId(saved.chantierId);
-        setSessionStart(new Date(saved.dateDebut));
-        addPoints(saved.points);
-        setElapsed(Math.round((Date.now() - new Date(saved.dateDebut).getTime()) / 1000));
-        setSessionActive(true);
-      } else {
-        clearActiveSession();
-      }
+      setSelectedChantierId(saved.chantierId);
+      setSessionStart(new Date(saved.dateDebut));
+      addPoints(saved.points);
+      setElapsed(Math.round((Date.now() - new Date(saved.dateDebut).getTime()) / 1000));
+      setSessionActive(true);
+      setRestoredBanner(saved.chantierNom);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Chantier progress (historical sessions + live) ────────────────────
+  const chantierProgress = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const c of chantiers) {
+      if (!c.surface || c.surface <= 0) continue;
+      const covered = sessions
+        .filter(s => s.chantierId === c.id)
+        .reduce((sum, s) => sum + s.surfaceCoveredM2, 0);
+      result[c.id] = Math.min(100, Math.round((covered / c.surface) * 100));
+    }
+    return result;
+  }, [chantiers, sessions]);
 
   // ── Speed-outlier filter (GPS glitches above machine max speed) ───────
   const filteredPoints = useMemo(() => {
@@ -271,8 +297,9 @@ export default function SuiviView({ role, onLogout }: Props) {
         nom:      c.nom,
         polygons: c.polygon!,
         color:    CHANTIER_TYPES[c.type]?.color ?? '#64748B',
+        progress: chantierProgress[c.id] ?? null,
       })),
-    [chantiers],
+    [chantiers, chantierProgress],
   );
 
   // ── Analytics ─────────────────────────────────────────────────────────
@@ -480,11 +507,14 @@ export default function SuiviView({ role, onLogout }: Props) {
               followGps={followGps}
               onDisableFollow={() => setFollowGps(false)}
               chantierZones={chantierZones}
+              selectedZoneId={selectedChantierId}
+              onZoneClick={id => { setSelectedChantierId(id); setShowChantierPicker(false); }}
               showZones={showZones}
               satellite={tileMode}
               workColor={workColor}
               largeurM={machineParams.largeurTravailM}
               smoothAlpha={machineParams.smoothAlpha}
+              sessionActive={sessionActive}
               liveSessions={liveSessions}
               mySessionId={sessionIdRef.current}
             />
@@ -574,6 +604,30 @@ export default function SuiviView({ role, onLogout }: Props) {
             {gpsError && (
               <div className="absolute top-3 left-3 right-3 z-[1000] bg-red-900/90 text-red-300 text-xs px-3 py-2 rounded-xl">
                 {gpsError}
+              </div>
+            )}
+
+            {/* Restored session banner */}
+            {restoredBanner && (
+              <div className="absolute bottom-4 left-3 right-3 z-[1000] bg-amber-900/95 border border-amber-500/40 rounded-xl px-3 py-2 flex items-center gap-2">
+                <span className="text-amber-300 text-xs flex-1">
+                  ↩ Session restaurée : <strong>{restoredBanner}</strong>
+                </span>
+                <button
+                  onClick={() => {
+                    setSessionActive(false);
+                    setSessionPaused(false);
+                    setElapsed(0);
+                    setSessionStart(null);
+                    clearActiveSession();
+                    setRestoredBanner(null);
+                  }}
+                  className="text-[10px] text-amber-400 border border-amber-500/50 rounded-lg px-2 py-1 flex-shrink-0">
+                  Annuler
+                </button>
+                <button onClick={() => setRestoredBanner(null)} className="text-amber-500 flex-shrink-0">
+                  <X size={14} />
+                </button>
               </div>
             )}
           </div>
