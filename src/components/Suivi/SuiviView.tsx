@@ -565,7 +565,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               onDisableFollow={() => setFollowGps(false)}
               chantierZones={chantierZones}
               selectedZoneId={selectedChantierId}
-              onZoneClick={id => { setSelectedChantierId(id); setShowChantierPicker(false); }}
+              onZoneClick={id => { setSelectedChantierId(id); setShowChantierPicker(false); setFollowGps(false); }}
               jumpToPos={jumpToPos}
               showZones={showZones}
               satellite={tileMode}
@@ -613,7 +613,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                   <p className="text-slate-400 text-[10px]">à {nearbyChantier.dist} m</p>
                 </div>
                 <button
-                  onClick={() => { setSelectedChantierId(nearbyChantier.c.id); setNearbyChantier(null); }}
+                  onClick={() => { setSelectedChantierId(nearbyChantier.c.id); setNearbyChantier(null); setFollowGps(false); }}
                   className="flex-shrink-0 text-xs bg-green-600 text-white px-2.5 py-1 rounded-lg font-semibold">
                   Sélectionner
                 </button>
@@ -1183,6 +1183,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                           setSelectedChantierId(c.id);
                           setShowChantierPicker(false);
                           setPickerSearch('');
+                          setFollowGps(false);
                           setRecentChantierIds(prev => {
                             const next = [c.id, ...prev.filter(id => id !== c.id)].slice(0, 5);
                             localStorage.setItem('recentChantierIds', JSON.stringify(next));
@@ -1218,6 +1219,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                       setSelectedChantierId(c.id);
                       setShowChantierPicker(false);
                       setPickerSearch('');
+                      setFollowGps(false);
                       setRecentChantierIds(prev => {
                         const next = [c.id, ...prev.filter(id => id !== c.id)].slice(0, 5);
                         localStorage.setItem('recentChantierIds', JSON.stringify(next));
