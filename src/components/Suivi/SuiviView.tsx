@@ -346,6 +346,14 @@ export default function SuiviView({ role, onLogout }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChantierId]);
 
+  // Historical GPS trails for the selected chantier (all past sessions)
+  const historicalTrails = useMemo(() => {
+    if (!selectedChantierId) return [];
+    return sessions
+      .filter(s => s.chantierId === selectedChantierId && s.gpsPoints.length > 1)
+      .map(s => s.gpsPoints);
+  }, [sessions, selectedChantierId]);
+
   const chantierZones = useMemo<ChantierZone[]>(() =>
     chantiers
       .filter(c => c.polygon && c.polygon.length > 0 && c.status !== 'refuse' && c.status !== 'annule')
@@ -575,6 +583,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               sessionActive={sessionActive}
               liveSessions={liveSessions}
               mySessionId={sessionIdRef.current}
+              historicalTrails={historicalTrails}
             />
 
             {/* Map control buttons */}

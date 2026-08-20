@@ -144,6 +144,7 @@ interface Props {
   jumpToPos:        [number, number] | null;
   liveSessions:     LiveSession[];
   mySessionId:      string;
+  historicalTrails: GpsPoint[][];
 }
 
 function liveIcon(label: string) {
@@ -161,7 +162,7 @@ export default function SuiviMap({
   gpsPoints, currentPos, drawMode, drawPoints, onDrawPoint,
   followGps, onDisableFollow, chantierZones, selectedZoneId, onZoneClick,
   showZones, satellite, workColor, largeurM, smoothAlpha,
-  sessionActive, jumpToPos, liveSessions, mySessionId,
+  sessionActive, jumpToPos, liveSessions, mySessionId, historicalTrails,
 }: Props) {
 
   const center: [number, number] = currentPos
@@ -200,6 +201,13 @@ export default function SuiviMap({
     () => smoothed.map(p => [p.lat, p.lng] as [number, number]),
     [smoothed],
   );
+
+  // Historical trails from past sessions (smoothed + optional swath rects)
+  const historicalRendered = useMemo(() => historicalTrails.map(pts => {
+    const sm = smoothPoints(pts, smoothAlpha);
+    if (largeurM > 0) return { kind: 'rects' as const, data: swathRects(sm, largeurM / 2) };
+    return { kind: 'line' as const, data: sm.map(p => [p.lat, p.lng] as [number, number]) };
+  }), [historicalTrails, smoothAlpha, largeurM]);
 
   // Bearing of the machine: angle from the last two smoothed GPS points
   const lastBearingRef = useRef(0);
@@ -251,6 +259,31 @@ export default function SuiviMap({
               icon={zoneLabel(z.nom, z.color, z.progress)} />,
           ];
         })}
+
+        {/* Historical trails from past sessions */}
+        {historicalRendered.map((h, si) =>
+          h.kind === 'rects'
+            ? h.data.map((rect, i) => (
+                <Polygon
+                  key={`h-${si}-${i}`}
+                  positions={rect}
+                  color={workColor}
+                  fillColor={workColor}
+                  fillOpacity={0.4}
+                  weight={0}
+                  stroke={false}
+                />
+              ))
+            : h.data.length > 1 && (
+                <Polyline
+                  key={`h-${si}`}
+                  positions={h.data}
+                  color={workColor}
+                  weight={3}
+                  opacity={0.5}
+                />
+              )
+        )}
 
         {/* Work trail — swath rectangles or polyline */}
         {largeurM > 0
