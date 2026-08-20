@@ -144,7 +144,7 @@ interface Props {
   jumpToPos:        [number, number] | null;
   liveSessions:     LiveSession[];
   mySessionId:      string;
-  historicalTrails: GpsPoint[][];
+  historicalTrails: { points: GpsPoint[]; color: string }[];
 }
 
 function liveIcon(label: string) {
@@ -203,10 +203,10 @@ export default function SuiviMap({
   );
 
   // Historical trails from past sessions (smoothed + optional swath rects)
-  const historicalRendered = useMemo(() => historicalTrails.map(pts => {
-    const sm = smoothPoints(pts, smoothAlpha);
-    if (largeurM > 0) return { kind: 'rects' as const, data: swathRects(sm, largeurM / 2) };
-    return { kind: 'line' as const, data: sm.map(p => [p.lat, p.lng] as [number, number]) };
+  const historicalRendered = useMemo(() => historicalTrails.map(({ points, color }) => {
+    const sm = smoothPoints(points, smoothAlpha);
+    if (largeurM > 0) return { kind: 'rects' as const, color, data: swathRects(sm, largeurM / 2) };
+    return { kind: 'line' as const, color, data: sm.map(p => [p.lat, p.lng] as [number, number]) };
   }), [historicalTrails, smoothAlpha, largeurM]);
 
   // Bearing of the machine: angle from the last two smoothed GPS points
@@ -267,8 +267,8 @@ export default function SuiviMap({
                 <Polygon
                   key={`h-${si}-${i}`}
                   positions={rect}
-                  color={workColor}
-                  fillColor={workColor}
+                  color={h.color}
+                  fillColor={h.color}
                   fillOpacity={0.4}
                   weight={0}
                   stroke={false}
@@ -278,7 +278,7 @@ export default function SuiviMap({
                 <Polyline
                   key={`h-${si}`}
                   positions={h.data}
-                  color={workColor}
+                  color={h.color}
                   weight={3}
                   opacity={0.5}
                 />

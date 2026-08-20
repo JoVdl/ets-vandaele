@@ -346,13 +346,18 @@ export default function SuiviView({ role, onLogout }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChantierId]);
 
-  // Historical GPS trails for the selected chantier (all past sessions)
+  // Historical GPS trails for all chantiers, coloured by chantier type
   const historicalTrails = useMemo(() => {
-    if (!selectedChantierId) return [];
+    const chanMap: Record<string, Chantier> = {};
+    for (const c of chantiers) chanMap[c.id] = c;
     return sessions
-      .filter(s => s.chantierId === selectedChantierId && s.gpsPoints.length > 1)
-      .map(s => s.gpsPoints);
-  }, [sessions, selectedChantierId]);
+      .filter(s => s.gpsPoints.length > 1)
+      .map(s => {
+        const c = chanMap[s.chantierId];
+        const color = c ? (CHANTIER_TYPES[c.type]?.color ?? '#22c55e') : '#22c55e';
+        return { points: s.gpsPoints, color };
+      });
+  }, [sessions, chantiers]);
 
   const chantierZones = useMemo<ChantierZone[]>(() =>
     chantiers
