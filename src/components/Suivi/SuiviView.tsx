@@ -67,6 +67,9 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [selectedChantierId, setSelectedChantierId] = useState('');
   const [showChantierPicker, setShowChantierPicker] = useState(false);
   const [pickerSearch, setPickerSearch]     = useState('');
+  const [recentChantierIds, setRecentChantierIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('recentChantierIds') ?? '[]'); } catch { return []; }
+  });
   const [panelOpen, setPanelOpen]           = useState(true);
   const [followGps, setFollowGps]           = useState(true);
 
@@ -195,11 +198,21 @@ export default function SuiviView({ role, onLogout }: Props) {
 
   // ── Cumulative stats per chantier (for map labels + history cards) ────
   const chantierCumul = useMemo(() => {
-    const map: Record<string, { totalCoveredM2: number; sessionCount: number }> = {};
+    const map: Record<string, {
+      totalCoveredM2: number; sessionCount: number;
+      totalMinutes: number; rendementSum: number; rendementCount: number;
+    }> = {};
     for (const s of sessions) {
-      if (!map[s.chantierId]) map[s.chantierId] = { totalCoveredM2: 0, sessionCount: 0 };
+      if (!map[s.chantierId]) map[s.chantierId] = {
+        totalCoveredM2: 0, sessionCount: 0, totalMinutes: 0, rendementSum: 0, rendementCount: 0,
+      };
       map[s.chantierId].totalCoveredM2 += s.surfaceCoveredM2;
       map[s.chantierId].sessionCount++;
+      map[s.chantierId].totalMinutes += s.dureeMinutes;
+      if (s.rendementM2h > 0 && s.surfaceCoveredM2 > 0) {
+        map[s.chantierId].rendementSum += s.rendementM2h;
+        map[s.chantierId].rendementCount++;
+      }
     }
     return map;
   }, [sessions]);
@@ -243,6 +256,25 @@ export default function SuiviView({ role, onLogout }: Props) {
   const progress = selectedChantier?.surface && areaM > 0
     ? Math.min(100, (areaM / selectedChantier.surface) * 100)
     : null;
+
+  // ── Pre-computed stats for selected chantier panel ───────────────────
+  const selectedChantierStats = useMemo(() => {
+    if (!selectedChantier) return null;
+    const cumul = chantierCumul[selectedChantier.id];
+    if (!cumul || cumul.sessionCount === 0) return null;
+    const covered      = cumul.totalCoveredM2;
+    const surface      = selectedChantier.surface ?? 0;
+    const pct          = surface > 0 ? Math.min(100, Math.round((covered / surface) * 100)) : null;
+    const remaining    = surface > 0 ? Math.max(0, surface - covered) : null;
+    const rendMoyen    = cumul.rendementCount > 0 ? Math.round(cumul.rendementSum / cumul.rendementCount) : null;
+    const tempsRestant = remaining != null && remaining > 0 && rendMoyen != null && rendMoyen > 0
+      ? Math.round((remaining / rendMoyen) * 60) : null;
+    return {
+      covered, surface, pct, remaining, rendMoyen, tempsRestant,
+      totalMinutes: cumul.totalMinutes,
+      sessionCount: cumul.sessionCount,
+    };
+  }, [selectedChantier, chantierCumul]);
 
   // ── Temps restant estimé ───────────────────────────────────────────────
   const tempsRestantMin = useMemo(() => {
@@ -667,6 +699,66 @@ export default function SuiviView({ role, onLogout }: Props) {
 
             {panelOpen && (
               <>
+                {/* Chantier stats panel — visible when a chantier is selected but not in session */}
+                {!sessionActive && selectedChantier && (
+                  <div className="border-b border-slate-800 px-2 pb-3 pt-1">
+                    <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2 px-1">
+                      {selectedChantier.nom}
+                      {selectedChantier.type ? ` · ${TYPE_LABELS[selectedChantier.type] ?? selectedChantier.type}` : ''}
+                    </p>
+
+                    {selectedChantierStats ? (
+                      <>
+                        <div className="grid grid-cols-4 gap-1 mb-2">
+                          {selectedChantier.surface && selectedChantier.surface > 0 && (
+                            <Metric label="Surface tot." value={formatArea(selectedChantier.surface)} />
+                          )}
+                          <Metric label="Couverte" value={formatArea(selectedChantierStats.covered)} />
+                          {selectedChantierStats.pct != null && (
+                            <Metric label="Effectué" value={`${selectedChantierStats.pct} %`} />
+                          )}
+                          <Metric label="Sessions" value={`${selectedChantierStats.sessionCount}`} />
+                        </div>
+
+                        {selectedChantierStats.pct != null && (
+                          <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden mb-2 mx-1">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                selectedChantierStats.pct >= 80 ? 'bg-green-500'
+                                  : selectedChantierStats.pct >= 40 ? 'bg-amber-400' : 'bg-orange-500'
+                              }`}
+                              style={{ width: `${selectedChantierStats.pct}%` }}
+                            />
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-3 gap-1">
+                          <Metric label="Temps passé" value={formatDuration(selectedChantierStats.totalMinutes)} small />
+                          {selectedChantierStats.rendMoyen != null && (
+                            <Metric label="Rend. moyen" value={`${selectedChantierStats.rendMoyen.toLocaleString('fr-FR')} m²/h`} small />
+                          )}
+                          {selectedChantierStats.remaining != null && selectedChantierStats.remaining > 0 && (
+                            <Metric label="Restant" value={formatArea(selectedChantierStats.remaining)} small />
+                          )}
+                          {selectedChantierStats.pct === 100 && (
+                            <Metric label="Statut" value="Terminé ✓" small />
+                          )}
+                          {selectedChantierStats.tempsRestant != null && selectedChantierStats.tempsRestant > 0 && (
+                            <Metric label="Tps restant" value={formatDuration(selectedChantierStats.tempsRestant)} small />
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-1">
+                        {selectedChantier.surface && selectedChantier.surface > 0 && (
+                          <Metric label="Surface totale" value={formatArea(selectedChantier.surface)} small />
+                        )}
+                        <Metric label="Sessions" value="0" small />
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {sessionActive && (
                   <div className="grid grid-cols-4 gap-0 border-b border-slate-800 px-2 pb-3">
                     <Metric label="Durée" value={formatTime(elapsed)} />
@@ -1044,6 +1136,8 @@ export default function SuiviView({ role, onLogout }: Props) {
       {selectedSession && (
         <SessionDetailView
           session={selectedSession}
+          chantier={chantiers.find(c => c.id === selectedSession.chantierId)}
+          chantierCumul={chantierCumul}
           chantierZones={chantierZones}
           workColor={selectedSession.chantierId === selectedChantierId
             ? workColor
@@ -1074,12 +1168,62 @@ export default function SuiviView({ role, onLogout }: Props) {
               />
             </div>
             <div className="overflow-y-auto flex-1 p-2">
+              {/* Recent chantiers — shown only when no search query */}
+              {!pickerSearch && recentChantierIds.length > 0 && (() => {
+                const recents = recentChantierIds
+                  .map(id => chantiers.find(c => c.id === id))
+                  .filter((c): c is Chantier => !!c && c.status !== 'refuse' && c.status !== 'annule');
+                if (recents.length === 0) return null;
+                return (
+                  <div className="mb-3">
+                    <p className="text-slate-500 text-[10px] uppercase tracking-wide px-1 mb-1.5">Récents</p>
+                    {recents.map(c => (
+                      <button key={c.id}
+                        onClick={() => {
+                          setSelectedChantierId(c.id);
+                          setShowChantierPicker(false);
+                          setPickerSearch('');
+                          setRecentChantierIds(prev => {
+                            const next = [c.id, ...prev.filter(id => id !== c.id)].slice(0, 5);
+                            localStorage.setItem('recentChantierIds', JSON.stringify(next));
+                            return next;
+                          });
+                        }}
+                        className={`w-full text-left px-4 py-2.5 rounded-xl mb-1 transition-colors flex items-center gap-2 ${
+                          c.id === selectedChantierId ? 'bg-green-800 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                        }`}
+                      >
+                        <span className="text-slate-400 text-xs">↩</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm truncate">{c.nom}</p>
+                          <p className="text-xs text-slate-400">{TYPE_LABELS[c.type] ?? c.type}{c.lieu ? ` · ${c.lieu}` : ''}</p>
+                        </div>
+                        {chantierProgress[c.id] != null && (
+                          <span className="text-xs text-slate-400 flex-shrink-0">{chantierProgress[c.id]}%</span>
+                        )}
+                      </button>
+                    ))}
+                    <div className="border-t border-slate-800 mt-2 mb-2" />
+                    <p className="text-slate-500 text-[10px] uppercase tracking-wide px-1 mb-1.5">Tous les chantiers</p>
+                  </div>
+                );
+              })()}
+
               {pickerList.length === 0 ? (
                 <p className="text-slate-500 text-sm text-center py-6">Aucun chantier trouvé</p>
               ) : (
                 pickerList.map(c => (
                   <button key={c.id}
-                    onClick={() => { setSelectedChantierId(c.id); setShowChantierPicker(false); setPickerSearch(''); }}
+                    onClick={() => {
+                      setSelectedChantierId(c.id);
+                      setShowChantierPicker(false);
+                      setPickerSearch('');
+                      setRecentChantierIds(prev => {
+                        const next = [c.id, ...prev.filter(id => id !== c.id)].slice(0, 5);
+                        localStorage.setItem('recentChantierIds', JSON.stringify(next));
+                        return next;
+                      });
+                    }}
                     className={`w-full text-left px-4 py-3 rounded-xl mb-1 transition-colors ${
                       c.id === selectedChantierId ? 'bg-green-800 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                     }`}
