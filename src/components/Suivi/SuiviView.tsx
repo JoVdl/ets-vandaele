@@ -149,33 +149,49 @@ export default function SuiviView({ role, onLogout }: Props) {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [sessionActive, sessionPaused]);
 
-  // ── Auto-pause when GPS moves far from work zone ──────────────────────
-  const farCountRef = useRef(0);
+  // ── Auto-pause / auto-resume when GPS leaves or returns to work zone ───
+  const farCountRef  = useRef(0);
+  const nearCountRef = useRef(0);
   useEffect(() => {
-    if (!sessionActive || sessionPaused || !currentPos || !selectedChantier) return;
-    // Need at least 2 min of session before auto-pause can trigger
-    if (elapsed < 120) { farCountRef.current = 0; return; }
+    if (!sessionActive || !currentPos || !selectedChantier) return;
 
     // Build list of reference points: polygon vertices or chantier lat/lng
     const refPoints: { lat: number; lng: number }[] = selectedChantier.polygon?.flat() ?? [];
     if (refPoints.length === 0) {
       if (selectedChantier.latitude && selectedChantier.longitude) {
         refPoints.push({ lat: selectedChantier.latitude, lng: selectedChantier.longitude });
-      } else return; // no reference — can't check
+      } else return;
     }
 
-    // Minimum distance from current position to any reference point
     const minDist = Math.min(...refPoints.map(p => distanceM(currentPos.lat, currentPos.lng, p.lat, p.lng)));
 
-    if (minDist > 500) {
-      farCountRef.current++;
-      if (farCountRef.current >= 4) { // ~4 GPS fixes far away (≈ 30-60s)
-        setSessionPaused(true);
-        setAutoPausedByZone(true);
+    if (!sessionPaused) {
+      // Active → detect leaving zone (need 2 min before triggering)
+      if (elapsed < 120) { farCountRef.current = 0; return; }
+      if (minDist > 500) {
+        farCountRef.current++;
+        if (farCountRef.current >= 4) {
+          setSessionPaused(true);
+          setAutoPausedByZone(true);
+          farCountRef.current = 0;
+          nearCountRef.current = 0;
+        }
+      } else {
         farCountRef.current = 0;
       }
-    } else {
-      farCountRef.current = 0;
+    } else if (autoPausedByZone) {
+      // Paused by zone → detect return (< 200 m for 3 consecutive reads)
+      if (minDist < 200) {
+        nearCountRef.current++;
+        if (nearCountRef.current >= 3) {
+          setSessionPaused(false);
+          setAutoPausedByZone(false);
+          nearCountRef.current = 0;
+          farCountRef.current = 0;
+        }
+      } else {
+        nearCountRef.current = 0;
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPos]);
