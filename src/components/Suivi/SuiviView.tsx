@@ -54,6 +54,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [view, setView] = useState<View>('map');
   const [selectedSession, setSelectedSession] = useState<SuiviSession | null>(null);
   const [restoredBanner, setRestoredBanner]   = useState<string | null>(null); // chantier nom
+  const [autoPausedByZone, setAutoPausedByZone] = useState(false);
 
   // Use role as the Firestore document ID — guarantees exactly one live document
   // per role (patron / salarie) regardless of refreshes or tabs.
@@ -147,6 +148,37 @@ export default function SuiviView({ role, onLogout }: Props) {
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [sessionActive, sessionPaused]);
+
+  // ── Auto-pause when GPS moves far from work zone ──────────────────────
+  const farCountRef = useRef(0);
+  useEffect(() => {
+    if (!sessionActive || sessionPaused || !currentPos || !selectedChantier) return;
+    // Need at least 2 min of session before auto-pause can trigger
+    if (elapsed < 120) { farCountRef.current = 0; return; }
+
+    // Build list of reference points: polygon vertices or chantier lat/lng
+    const refPoints: { lat: number; lng: number }[] = selectedChantier.polygon?.flat() ?? [];
+    if (refPoints.length === 0) {
+      if (selectedChantier.latitude && selectedChantier.longitude) {
+        refPoints.push({ lat: selectedChantier.latitude, lng: selectedChantier.longitude });
+      } else return; // no reference — can't check
+    }
+
+    // Minimum distance from current position to any reference point
+    const minDist = Math.min(...refPoints.map(p => distanceM(currentPos.lat, currentPos.lng, p.lat, p.lng)));
+
+    if (minDist > 500) {
+      farCountRef.current++;
+      if (farCountRef.current >= 4) { // ~4 GPS fixes far away (≈ 30-60s)
+        setSessionPaused(true);
+        setAutoPausedByZone(true);
+        farCountRef.current = 0;
+      }
+    } else {
+      farCountRef.current = 0;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPos]);
 
   // ── Session autosave (every 10s + on hide/pagehide) ───────────────────
   const saveActiveRef = useCallback(() => {
@@ -414,7 +446,11 @@ export default function SuiviView({ role, onLogout }: Props) {
     setSessionPaused(false);
   }, [selectedChantierId, role, resetPoints]);
 
-  const handlePause = useCallback(() => setSessionPaused(p => !p), []);
+  const handlePause = useCallback(() => {
+    setSessionPaused(p => !p);
+    setAutoPausedByZone(false);
+    farCountRef.current = 0;
+  }, []);
 
   const handleStop = useCallback(async () => {
     if (!selectedChantier) return;
@@ -679,8 +715,25 @@ export default function SuiviView({ role, onLogout }: Props) {
               </div>
             )}
 
+            {/* Auto-paused due to leaving work zone */}
+            {autoPausedByZone && (
+              <div className="absolute bottom-4 left-3 right-3 z-[1000] bg-red-900/95 border border-red-500/40 rounded-xl px-3 py-2 flex items-center gap-2">
+                <span className="text-red-300 text-xs flex-1">
+                  ⏸ Session auto-pausée — vous avez quitté la zone de travail (+ 500 m)
+                </span>
+                <button
+                  onClick={() => { setSessionPaused(false); setAutoPausedByZone(false); farCountRef.current = 0; }}
+                  className="text-[10px] text-red-300 border border-red-500/50 rounded-lg px-2 py-1 flex-shrink-0 font-semibold">
+                  Reprendre
+                </button>
+                <button onClick={() => setAutoPausedByZone(false)} className="text-red-500 flex-shrink-0">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             {/* Restored session banner */}
-            {restoredBanner && (
+            {!autoPausedByZone && restoredBanner && (
               <div className="absolute bottom-4 left-3 right-3 z-[1000] bg-amber-900/95 border border-amber-500/40 rounded-xl px-3 py-2 flex items-center gap-2">
                 <span className="text-amber-300 text-xs flex-1">
                   ↩ Session restaurée : <strong>{restoredBanner}</strong>
