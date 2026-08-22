@@ -21,7 +21,6 @@ import { CHANTIER_TYPES, MONTH_FR } from '../lib/constants';
 import { reorganize, type ReorganizeMode } from '../lib/reorganize';
 import { loadReorgSettings, saveReorgSettings, type ReorgSettings } from '../lib/reorgSettings';
 import ReorgSettingsModal from './ReorgSettingsModal';
-import { getEffectiveEtat } from '../lib/etat';
 import { geocode, extractLocationCandidates } from '../lib/geocoder';
 import { countWorkingDays, caAnnuel } from '../lib/workingDays';
 import {
@@ -497,10 +496,14 @@ export default function PlanDeCharge() {
     autoReorgDone.current = true;
 
     const todayLocal = format(new Date(), 'yyyy-MM-dd');
+    // Stale = confirmed chantier without explicit en_cours/termine etat whose dates are
+    // in the past or touching today (should never be the case for a future chantier)
     const hasStale = chantiers.some(c =>
       c.status === 'confirme' &&
-      getEffectiveEtat(c) === 'a_venir' &&
-      c.dateDebut < todayLocal
+      !c.datesVerrouillees &&
+      c.etat !== 'en_cours' &&
+      c.etat !== 'termine' &&
+      c.dateDebut <= todayLocal
     );
     if (!hasStale) return;
 

@@ -2,7 +2,6 @@ import { addDays, startOfDay } from 'date-fns';
 import { format } from 'date-fns';
 import type { Chantier } from '../types';
 import { nextWorkingDay, prevWorkingDay, countWorkingDays, addWorkingDays } from './workingDays';
-import { getEffectiveEtat } from './etat';
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -177,20 +176,25 @@ export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potent
   const results: ReorganizeResult[] = [];
   let moved = 0;
 
-  // Chantiers terminés sont complètement exclus de la réorganisation
+  // Chantiers explicitement terminés sont exclus de la réorganisation.
+  // Les chantiers avec des dates périmées (passé/aujourd'hui) mais sans etat explicite
+  // sont INCLUS pour être replacés dans le futur.
   const active = chantiers.filter(c =>
     c.status !== 'refuse' && c.status !== 'annule' &&
-    getEffectiveEtat(c) !== 'termine'
+    c.etat !== 'termine'
   );
 
-  // Locked anchors: dates verrouillées OR chantier en cours (déjà démarré → ne peut pas bouger)
-  const lockedAnchors = active.filter(c => c.datesVerrouillees || getEffectiveEtat(c) === 'en_cours');
+  // Locked anchors: dates verrouillées OR explicitement en cours (l'etat doit être posé explicitement).
+  // Un chantier dont les dates tombent par hasard sur aujourd'hui n'est PAS verrouillé.
+  const lockedAnchors = active.filter(c => c.datesVerrouillees || c.etat === 'en_cours');
 
   // Batches: confirmés always scheduled before potentiels to guarantee their priority
   let batch1: Chantier[]; // scheduled first (highest priority)
   let batch2: Chantier[]; // scheduled second (fills remaining gaps)
 
-  const canMove = (c: Chantier) => !c.datesVerrouillees && getEffectiveEtat(c) === 'a_venir';
+  // Peut bouger : pas verrouillé, pas explicitement en_cours ou terminé
+  // (inclut les chantiers avec des dates passées sans etat explicite)
+  const canMove = (c: Chantier) => !c.datesVerrouillees && c.etat !== 'en_cours' && c.etat !== 'termine';
 
   if (mode === 'potentiel') {
     // ALL confirmed chantiers are anchors in potentiel mode — potentiels must fit around them
@@ -207,7 +211,7 @@ export function reorganize(chantiers: Chantier[], mode: ReorganizeMode = 'potent
   }
 
   // Detect conflicts between truly immovable anchors (verrouillés or en_cours)
-  const trulyLocked = (c: Chantier) => !!c.datesVerrouillees || getEffectiveEtat(c) === 'en_cours';
+  const trulyLocked = (c: Chantier) => !!c.datesVerrouillees || c.etat === 'en_cours';
   for (let i = 0; i < lockedAnchors.length; i++) {
     for (let j = i + 1; j < lockedAnchors.length; j++) {
       const a = lockedAnchors[i], b = lockedAnchors[j];
