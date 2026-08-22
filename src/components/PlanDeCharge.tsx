@@ -192,6 +192,39 @@ export default function PlanDeCharge() {
     (c.dateDebut < c.periodePreconiseeDebut || c.dateFin > c.periodePreconiseeFin)
   ).length;
 
+  // ── Slack analysis — battement global ─────────────────────────────────────
+  const slackAnalysis = useMemo(() => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const withPreco = chantiers.filter(c =>
+      c.status === 'confirme' &&
+      c.etat !== 'termine' &&
+      c.periodePreconiseeFin &&
+      c.dateFin >= today
+    );
+    if (withPreco.length === 0) return null;
+
+    const rows = withPreco.map(c => {
+      const slack = differenceInCalendarDays(
+        new Date(c.periodePreconiseeFin!),
+        new Date(c.dateFin),
+      );
+      return { id: c.id, nom: c.nom, slack, precoFin: c.periodePreconiseeFin!, dateFin: c.dateFin, status: c.status };
+    }).sort((a, b) => a.slack - b.slack);
+
+    // Group by deadline month to surface distinct "butées"
+    const byMonth: Record<string, { precoFin: string; slack: number; chantiers: typeof rows }> = {};
+    for (const r of rows) {
+      const key = r.precoFin.slice(0, 7); // YYYY-MM
+      if (!byMonth[key]) byMonth[key] = { precoFin: r.precoFin, slack: r.slack, chantiers: [] };
+      byMonth[key].chantiers.push(r);
+      if (r.slack < byMonth[key].slack) byMonth[key].slack = r.slack;
+    }
+    const groups = Object.values(byMonth).sort((a, b) => a.precoFin.localeCompare(b.precoFin));
+    const globalSlack = rows[0].slack;
+    const bottleneck  = rows[0];
+    return { globalSlack, bottleneck, groups, rows };
+  }, [chantiers]);
+
   // ── Fiscal year estimate (always based on today's fiscal year) ────────────
   const fiscalYStart      = getFiscalYearStart(new Date());
   const fiscalYEnd        = getFiscalYearEnd(new Date());
@@ -611,6 +644,52 @@ export default function PlanDeCharge() {
       onPointerCancel={e => onPanUp(e)}
       style={{ cursor: isPanning ? 'grabbing' : undefined, touchAction: 'pan-y pinch-zoom' }}
     >
+
+      {/* ── Battement global ── */}
+      {slackAnalysis && (
+        <div className={`flex-shrink-0 px-4 py-2 border-b text-xs ${
+          slackAnalysis.globalSlack < 0
+            ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
+            : slackAnalysis.globalSlack <= 7
+            ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+            : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+        }`}>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Global slack pill */}
+            <div className="flex items-center gap-1.5 font-semibold flex-shrink-0">
+              <span>{slackAnalysis.globalSlack < 0 ? '🔴' : slackAnalysis.globalSlack <= 7 ? '🟠' : '🟢'}</span>
+              <span>Battement :</span>
+              <span className={`font-bold ${slackAnalysis.globalSlack < 0 ? 'text-red-700 dark:text-red-400' : ''}`}>
+                {slackAnalysis.globalSlack >= 0 ? `+${slackAnalysis.globalSlack}` : slackAnalysis.globalSlack} jour{Math.abs(slackAnalysis.globalSlack) > 1 ? 's' : ''}
+              </span>
+              <span className="font-normal text-[11px] opacity-70">
+                (bloqué par « {slackAnalysis.bottleneck.nom} »)
+              </span>
+            </div>
+
+            {/* Separator */}
+            {slackAnalysis.groups.length > 1 && (
+              <span className="opacity-30">·</span>
+            )}
+
+            {/* Per-deadline-period breakdown */}
+            {slackAnalysis.groups.map(g => {
+              const label = format(new Date(g.precoFin + 'T00:00:00'), 'MMM yyyy', { locale: fr });
+              const icon = g.slack < 0 ? '🔴' : g.slack <= 7 ? '🟠' : '🟢';
+              return (
+                <div key={g.precoFin} className="flex items-center gap-1 opacity-80 flex-shrink-0">
+                  <span>{icon}</span>
+                  <span>Avant {label} :</span>
+                  <span className="font-semibold">
+                    {g.slack >= 0 ? `+${g.slack}j` : `${g.slack}j`}
+                  </span>
+                  <span className="opacity-60">({g.chantiers.length} ch.)</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Bannière auto-réorg ── */}
       {autoReorgBanner && (
