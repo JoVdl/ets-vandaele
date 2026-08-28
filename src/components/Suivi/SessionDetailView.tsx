@@ -295,8 +295,15 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
     ? Math.min(100, Math.round((displaySurface / surface) * 100)) : null;
   const cumulPct      = surface > 0 && cumul
     ? Math.min(100, Math.round((cumul.totalCoveredM2 / surface) * 100)) : null;
-  const rendMoyen     = cumul && cumul.rendementCount > 0
-    ? Math.round(cumul.rendementSum / cumul.rendementCount) : null;
+  // If correctedRendement is available, swap this session's stored value out of the cumul average
+  const rendMoyen = (() => {
+    if (!cumul || cumul.rendementCount <= 0) return null;
+    if (correctedRendement != null && session.rendementM2h > 0) {
+      const adjustedSum = cumul.rendementSum - session.rendementM2h + correctedRendement;
+      return Math.round(adjustedSum / cumul.rendementCount);
+    }
+    return Math.round(cumul.rendementSum / cumul.rendementCount);
+  })();
   const dateFin       = session.dateFin ? new Date(session.dateFin) : null;
   const gpsCount      = session.gpsPoints.length;
 
