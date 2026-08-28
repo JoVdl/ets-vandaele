@@ -5,10 +5,10 @@ import 'leaflet/dist/leaflet.css';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import type { SuiviSession } from '../../types/suivi';
+import type { SuiviSession, GpsPoint } from '../../types/suivi';
 import type { Chantier } from '../../types';
 import type { ChantierZone } from './SuiviMap';
-import { formatArea, formatDistance, formatDuration, centroid, distanceM } from '../../lib/geo';
+import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM } from '../../lib/geo';
 import { CHANTIER_TYPES } from '../../lib/constants';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -50,17 +50,18 @@ interface Props {
   chantier?:     Chantier;
   chantierCumul?: Record<string, { totalCoveredM2: number; sessionCount: number; totalMinutes: number; rendementSum: number; rendementCount: number }>;
   chantierZones: ChantierZone[];
+  machineParams?: { largeurTravailM: number; vitesseMaxKmh: number; recouvrementPct: number };
   workColor:     string;
   onClose:       () => void;
 }
 
 // Keep only GPS points with inter-point speed below maxSpeedKmh — removes transit driving
-function filterBySpeed(points: { lat: number; lng: number; ts?: number }[], maxSpeedKmh = 25) {
+function filterBySpeed(points: GpsPoint[], maxSpeedKmh = 25): GpsPoint[] {
   if (points.length < 2) return points;
-  const kept: typeof points = [points[0]];
+  const kept: GpsPoint[] = [points[0]];
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1], b = points[i];
-    if (a.ts && b.ts && b.ts > a.ts) {
+    if (b.ts > a.ts) {
       const dtH = (b.ts - a.ts) / 3_600_000;
       const dKm = distanceM(a.lat, a.lng, b.lat, b.lng) / 1000;
       if (dKm / dtH <= maxSpeedKmh) kept.push(b);
@@ -82,7 +83,7 @@ function downsample<T>(arr: T[], maxPts: number): T[] {
 }
 
 function buildGpsSvg(
-  rawPoints: { lat: number; lng: number }[],
+  rawPoints: GpsPoint[],
   color: string,
   zonePolygons: { lat: number; lng: number }[][],
   W = 560, H = 320,
@@ -140,6 +141,12 @@ function buildGpsSvg(
 const BRAND_GREEN = '#56B57A';
 const BRAND_TEAL  = '#266E7B';
 
+interface RecapExtras {
+  workSpeedKmh:      number | null;
+  correctedSurfaceM2: number | null;
+  correctedRendement: number | null;
+}
+
 function openPrintRecap(
   session: SuiviSession,
   chantier: Chantier | undefined,
@@ -148,23 +155,30 @@ function openPrintRecap(
   rendMoyen: number | null,
   workColor: string,
   zonePolygons: { lat: number; lng: number }[][],
+  extras: RecapExtras,
 ) {
   const svgStr    = buildGpsSvg(session.gpsPoints, workColor, zonePolygons);
   const dateStr   = format(new Date(session.dateDebut), 'EEEE dd MMMM yyyy', { locale: fr });
   const dateFin   = session.dateFin ? new Date(session.dateFin) : null;
   const typeLabel = chantier ? (CHANTIER_TYPES[chantier.type]?.label ?? chantier.type) : '—';
-  // Build absolute logo URL using the app's base path (configured in vite.config.ts)
-  const logoUrl = `${window.location.origin}${import.meta.env.BASE_URL}logo-vandaele.svg`;
+  const logoUrl   = `${window.location.origin}${import.meta.env.BASE_URL}logo-vandaele.svg`;
+
+  // Use corrected metrics when available (speed × width formula), else fall back to stored values
+  const displaySurface  = extras.correctedSurfaceM2 ?? session.surfaceCoveredM2;
+  const displayRendement = extras.correctedRendement ?? session.rendementM2h;
 
   const rows: [string, string][] = [
-    ['Durée de la session',    formatDuration(session.dureeMinutes)],
-    ['Surface traitée',        formatArea(session.surfaceCoveredM2)],
-    ['Distance parcourue',     formatDistance(session.distanceM)],
-    ['Rendement',              `${Math.round(session.rendementM2h).toLocaleString('fr-FR')} m²/h`],
+    ['Durée de la session',   formatDuration(session.dureeMinutes)],
+    ['Surface traitée',       formatArea(displaySurface)],
+    ['Distance de travail',   formatDistance(totalDistanceM(filterBySpeed(session.gpsPoints, 25)))],
+    ['Rendement',             `${Math.round(displayRendement).toLocaleString('fr-FR')} m²/h`],
   ];
-  if (rendMoyen != null) rows.push(['Rendement moyen (toutes sessions)', `${rendMoyen.toLocaleString('fr-FR')} m²/h`]);
-  if (thisPct   != null) rows.push(['Avancement cette session',         `${thisPct} %`]);
-  if (cumulPct  != null) rows.push(['Avancement total chantier',        `${cumulPct} %`]);
+  if (extras.workSpeedKmh != null)
+    rows.push(['Vitesse moyenne de travail', `${extras.workSpeedKmh.toFixed(1)} km/h`]);
+  if (rendMoyen != null)
+    rows.push(['Rendement moyen (toutes sessions)', `${Math.round(rendMoyen).toLocaleString('fr-FR')} m²/h`]);
+  if (thisPct   != null) rows.push(['Avancement cette session',    `${thisPct} %`]);
+  if (cumulPct  != null) rows.push(['Avancement total chantier',   `${cumulPct} %`]);
 
   const tableRows = rows.map(([l, v], i) =>
     `<tr style="${i % 2 === 1 ? 'background:#f8fafc' : ''}"><td>${l}</td><td style="font-weight:700;text-align:right;color:${BRAND_TEAL};font-variant-numeric:tabular-nums">${v}</td></tr>`
@@ -253,17 +267,32 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, workColor, onClose }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, workColor, onClose }: Props) {
   const trail = session.gpsPoints.map(p => [p.lat, p.lng] as [number, number]);
   const center: [number, number] = trail.length > 0
     ? trail[Math.floor(trail.length / 2)]
     : [50.4, 2.8];
 
-  // Compute session-specific stats
+  // Corrected metrics: recompute from filtered GPS (speed × width) using machine params
+  const { workSpeedKmh, correctedSurfaceM2, correctedRendement } = (() => {
+    if (!machineParams || machineParams.largeurTravailM <= 0 || session.dureeMinutes <= 0)
+      return { workSpeedKmh: null, correctedSurfaceM2: null, correctedRendement: null };
+    const workPts    = filterBySpeed(session.gpsPoints, machineParams.vitesseMaxKmh);
+    const workDistM  = totalDistanceM(workPts);
+    const durationH  = session.dureeMinutes / 60;
+    const speedKmh   = workDistM / 1000 / durationH;
+    const effWidth   = machineParams.largeurTravailM * (1 - machineParams.recouvrementPct / 100);
+    const surfaceM2  = workDistM * effWidth;
+    const rendt      = surfaceM2 / durationH;
+    return { workSpeedKmh: speedKmh, correctedSurfaceM2: surfaceM2, correctedRendement: rendt };
+  })();
+
+  // Use corrected surface for progress % when available
   const surface       = chantier?.surface ?? 0;
   const cumul         = chantierCumul?.[session.chantierId];
-  const thisPct       = surface > 0 && session.surfaceCoveredM2 > 0
-    ? Math.min(100, Math.round((session.surfaceCoveredM2 / surface) * 100)) : null;
+  const displaySurface = correctedSurfaceM2 ?? session.surfaceCoveredM2;
+  const thisPct       = surface > 0 && displaySurface > 0
+    ? Math.min(100, Math.round((displaySurface / surface) * 100)) : null;
   const cumulPct      = surface > 0 && cumul
     ? Math.min(100, Math.round((cumul.totalCoveredM2 / surface) * 100)) : null;
   const rendMoyen     = cumul && cumul.rendementCount > 0
@@ -310,6 +339,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
           onClick={() => openPrintRecap(
             session, chantier, thisPct, cumulPct, rendMoyen, workColor,
             chantierZones.flatMap(z => z.polygons.filter(p => p.length >= 3)),
+            { workSpeedKmh, correctedSurfaceM2, correctedRendement },
           )}
           title="Récap client (PDF)"
           className="flex-shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white"
@@ -377,14 +407,17 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
         {/* Primary metrics */}
         <div className="grid grid-cols-4 gap-1 mb-2">
           <StatCard label="Durée"     value={formatDuration(session.dureeMinutes)} />
-          <StatCard label="Surface"   value={formatArea(session.surfaceCoveredM2)} />
+          <StatCard label="Surface"   value={formatArea(correctedSurfaceM2 ?? session.surfaceCoveredM2)} />
           <StatCard label="Distance"  value={formatDistance(session.distanceM)} />
-          <StatCard label="Rendement" value={`${Math.round(session.rendementM2h).toLocaleString('fr-FR')} m²/h`} />
+          <StatCard label="Rendement" value={`${Math.round(correctedRendement ?? session.rendementM2h).toLocaleString('fr-FR')} m²/h`} />
         </div>
 
         {/* Secondary metrics */}
         <div className="grid grid-cols-4 gap-1 mb-2">
-          {session.vitesseMoyenneKmh > 0 && (
+          {workSpeedKmh != null && (
+            <StatCard label="Vit. travail" value={`${workSpeedKmh.toFixed(1)} km/h`} />
+          )}
+          {workSpeedKmh == null && session.vitesseMoyenneKmh > 0 && (
             <StatCard label="Vit. moy." value={`${session.vitesseMoyenneKmh.toFixed(1)} km/h`} />
           )}
           {thisPct != null && (
