@@ -105,13 +105,16 @@ function buildGpsSvg(
   const x0 = toX(points[0].lng),           y0 = toY(points[0].lat);
   const xN = toX(points[points.length-1].lng), yN = toY(points[points.length-1].lat);
 
+  // Use a dark, high-contrast trail regardless of workColor (avoids light-on-light)
+  const trailColor = '#1e3a5f';
+
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">` +
-    `<rect width="${W}" height="${H}" fill="#f0fdf4" rx="6"/>` +
-    `<rect x="1" y="1" width="${W-2}" height="${H-2}" fill="none" stroke="#bbf7d0" stroke-width="1" rx="5"/>` +
+    `<rect width="${W}" height="${H}" fill="#ffffff"/>` +
+    `<rect x="0.5" y="0.5" width="${W-1}" height="${H-1}" fill="none" stroke="#e2e8f0" stroke-width="1"/>` +
     zonePaths +
-    `<path d="${trailD}" stroke="${color}" stroke-width="2.5" fill="none" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>` +
-    `<circle cx="${x0.toFixed(1)}" cy="${y0.toFixed(1)}" r="6" fill="#22c55e" stroke="white" stroke-width="2"/>` +
-    `<circle cx="${xN.toFixed(1)}" cy="${yN.toFixed(1)}" r="6" fill="#ef4444" stroke="white" stroke-width="2"/>` +
+    `<path d="${trailD}" stroke="${trailColor}" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>` +
+    `<circle cx="${x0.toFixed(1)}" cy="${y0.toFixed(1)}" r="5" fill="#16a34a" stroke="white" stroke-width="2"/>` +
+    `<circle cx="${xN.toFixed(1)}" cy="${yN.toFixed(1)}" r="5" fill="#dc2626" stroke="white" stroke-width="2"/>` +
     `</svg>`;
 }
 
@@ -127,11 +130,13 @@ function openPrintRecap(
   workColor: string,
   zonePolygons: { lat: number; lng: number }[][],
 ) {
-  const svgStr   = buildGpsSvg(session.gpsPoints, workColor, zonePolygons);
-  const dateStr  = format(new Date(session.dateDebut), 'EEEE dd MMMM yyyy', { locale: fr });
-  const dateFin  = session.dateFin ? new Date(session.dateFin) : null;
+  const svgStr    = buildGpsSvg(session.gpsPoints, workColor, zonePolygons);
+  const dateStr   = format(new Date(session.dateDebut), 'EEEE dd MMMM yyyy', { locale: fr });
+  const dateFin   = session.dateFin ? new Date(session.dateFin) : null;
   const typeLabel = chantier ? (CHANTIER_TYPES[chantier.type]?.label ?? chantier.type) : '—';
-  const logoUrl  = `${window.location.origin}/logo-vandaele.svg`;
+  // Capture the real https:// origin NOW (before the blob URL is opened, where origin = 'null')
+  const appOrigin = window.location.origin.startsWith('http') ? window.location.origin : '';
+  const logoUrl   = appOrigin ? `${appOrigin}/logo-vandaele.svg` : '';
 
   const rows: [string, string][] = [
     ['Durée de la session',    formatDuration(session.dureeMinutes)],
@@ -144,14 +149,19 @@ function openPrintRecap(
   if (cumulPct  != null) rows.push(['Avancement total chantier',        `${cumulPct} %`]);
 
   const tableRows = rows.map(([l, v], i) =>
-    `<tr style="${i % 2 === 1 ? 'background:#f8fafc' : ''}"><td>${l}</td><td class="val">${v}</td></tr>`
+    `<tr style="${i % 2 === 1 ? 'background:#f8fafc' : ''}"><td>${l}</td><td style="font-weight:700;text-align:right;color:${BRAND_TEAL};font-variant-numeric:tabular-nums">${v}</td></tr>`
   ).join('');
 
   const mapSection = svgStr
-    ? `<h2 class="section-title">Tracé GPS</h2>
-       <div class="map-wrap">${svgStr}</div>
-       <p class="map-note">&#9679; Début &nbsp;&nbsp; &#9679; Fin &nbsp;&mdash;&nbsp; Tracé schématique (sans fond de carte)</p>`
-    : `<p style="color:#94a3b8;font-size:12px;margin-top:16px;">Aucun tracé GPS disponible pour cette session.</p>`;
+    ? `<p style="font-size:11px;font-weight:700;color:${BRAND_TEAL};text-transform:uppercase;letter-spacing:.08em;margin:20px 0 8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px">Tracé GPS</p>` +
+      `<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-top:4px">${svgStr}</div>` +
+      `<p style="font-size:10px;color:#94a3b8;margin-top:6px">● Début &nbsp; ● Fin — Tracé schématique (sans fond de carte)</p>`
+    : `<p style="color:#94a3b8;font-size:12px;margin-top:16px">Aucun tracé GPS disponible.</p>`;
+
+  // Header: logo on left (abs URL), text label always shown. All colors via inline styles for blob-URL robustness.
+  const logoHtml = logoUrl
+    ? `<img src="${logoUrl}" alt="" style="height:52px;display:block" onerror="this.style.display='none'">`
+    : '';
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -162,60 +172,52 @@ function openPrintRecap(
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, Arial, sans-serif; color: #1e293b; background: #fff; }
-  .page { max-width: 680px; margin: auto; padding: 0 24px 32px; }
-  .header { background: ${BRAND_GREEN}; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; margin: 0 -24px 24px; }
-  .header img { height: 52px; }
-  .header .meta { text-align: right; color: rgba(255,255,255,.9); font-size: 12px; line-height: 1.6; }
-  .header .doc-title { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: .04em; text-transform: uppercase; }
-  .section-title { font-size: 11px; font-weight: 700; color: ${BRAND_TEAL}; text-transform: uppercase; letter-spacing: .08em; margin: 20px 0 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
-  .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 5px 16px; font-size: 13px; }
-  .info-grid .lbl { color: #64748b; white-space: nowrap; }
-  .info-grid .val { font-weight: 600; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
-  td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; }
-  td:last-child { border-bottom: none; }
-  td.val { font-weight: 700; text-align: right; color: ${BRAND_TEAL}; font-variant-numeric: tabular-nums; }
-  .map-wrap { border: 1px solid #d1fae5; border-radius: 8px; overflow: hidden; background: #f0fdf4; margin-top: 4px; }
-  .map-wrap svg { display: block; width: 100%; height: auto; }
-  .map-note { font-size: 10px; color: #94a3b8; margin-top: 6px; }
-  .print-btn { display: block; margin: 24px auto 0; padding: 10px 28px; background: ${BRAND_GREEN}; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
-  footer { margin-top: 28px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8; text-align: center; }
-  @media print {
-    .print-btn { display: none; }
-    .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body { font-size: 12px; }
-  }
+  td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+  @media print { .no-print { display: none !important; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
 </head>
 <body>
-<div class="page">
-  <div class="header">
-    <img src="${logoUrl}" alt="ETS Vandaele" onerror="this.style.display='none';this.nextSibling.style.display='block'">
-    <span style="display:none;color:#fff;font-size:18px;font-weight:800;letter-spacing:.04em">ETS VANDAELE</span>
-    <div class="meta">
-      <div class="doc-title">Rapport d'intervention</div>
-      <div>${dateStr}</div>
-      <div>${format(new Date(session.dateDebut), 'HH:mm', { locale: fr })}${dateFin ? ' → ' + format(dateFin, 'HH:mm', { locale: fr }) : ''}</div>
-      <div>${session.operateur === 'patron' ? 'Patron' : 'Salarié'}</div>
+<!-- HEADER — inline styles only, no class dependency -->
+<div style="background:${BRAND_GREEN};padding:16px 24px;display:flex;justify-content:space-between;align-items:center">
+  <div style="display:flex;align-items:center;gap:12px">
+    ${logoHtml}
+    <div>
+      <div style="color:#fff;font-size:17px;font-weight:800;letter-spacing:.04em;line-height:1.1">ETS VANDAELE</div>
+      <div style="color:rgba(255,255,255,.8);font-size:11px;margin-top:2px">Marcel &amp; Fils</div>
     </div>
   </div>
+  <div style="text-align:right;color:rgba(255,255,255,.9);font-size:12px;line-height:1.7">
+    <div style="font-weight:700;color:#fff;letter-spacing:.04em;text-transform:uppercase;font-size:11px">Rapport d'intervention</div>
+    <div>${dateStr}</div>
+    <div>${format(new Date(session.dateDebut), 'HH:mm', { locale: fr })}${dateFin ? ' → ' + format(dateFin, 'HH:mm', { locale: fr }) : ''}</div>
+    <div>${session.operateur === 'patron' ? 'Patron' : 'Salarié'}</div>
+  </div>
+</div>
 
-  <h2 class="section-title">Chantier</h2>
-  <div class="info-grid">
-    <span class="lbl">Intitulé</span><span class="val">${session.chantierNom}</span>
-    ${chantier?.client ? `<span class="lbl">Client</span><span class="val">${chantier.client}</span>` : ''}
-    ${chantier?.lieu   ? `<span class="lbl">Lieu</span><span class="val">${chantier.lieu}</span>` : ''}
-    <span class="lbl">Type de prestation</span><span class="val">${typeLabel}</span>
+<div style="max-width:680px;margin:auto;padding:20px 24px 40px">
+  <p style="font-size:11px;font-weight:700;color:${BRAND_TEAL};text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px">Chantier</p>
+  <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 16px;font-size:13px">
+    <span style="color:#64748b">Intitulé</span><span style="font-weight:600">${session.chantierNom}</span>
+    ${chantier?.client ? `<span style="color:#64748b">Client</span><span style="font-weight:600">${chantier.client}</span>` : ''}
+    ${chantier?.lieu   ? `<span style="color:#64748b">Lieu</span><span style="font-weight:600">${chantier.lieu}</span>` : ''}
+    <span style="color:#64748b">Type de prestation</span><span style="font-weight:600">${typeLabel}</span>
   </div>
 
-  <h2 class="section-title">Métriques</h2>
+  <p style="font-size:11px;font-weight:700;color:${BRAND_TEAL};text-transform:uppercase;letter-spacing:.08em;margin:20px 0 8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px">Métriques de la session</p>
   <table>${tableRows}</table>
 
   ${mapSection}
 
-  <button class="print-btn" onclick="window.print()">Imprimer / Enregistrer en PDF</button>
+  <div class="no-print" style="margin-top:24px;text-align:center">
+    <button onclick="window.print()" style="padding:10px 32px;background:${BRAND_GREEN};color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">
+      Imprimer / Enregistrer en PDF
+    </button>
+  </div>
 
-  <footer>Document généré le ${format(new Date(), 'dd/MM/yyyy à HH:mm', { locale: fr })} · ETS Vandaele Marcel &amp; Fils</footer>
+  <p style="margin-top:28px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center">
+    Document généré le ${format(new Date(), 'dd/MM/yyyy à HH:mm', { locale: fr })} · ETS Vandaele Marcel &amp; Fils
+  </p>
 </div>
 </body></html>`;
 
