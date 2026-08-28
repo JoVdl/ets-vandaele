@@ -1226,6 +1226,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           chantier={chantiers.find(c => c.id === selectedSession.chantierId)}
           chantierCumul={chantierCumul}
           chantierZones={chantierZones}
+          machineParams={machineParams}
           workColor={selectedSession.chantierId === selectedChantierId
             ? workColor
             : '#22c55e'}
