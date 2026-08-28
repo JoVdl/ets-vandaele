@@ -82,61 +82,6 @@ function downsample<T>(arr: T[], maxPts: number): T[] {
   return result;
 }
 
-function buildGpsSvg(
-  rawPoints: GpsPoint[],
-  color: string,
-  zonePolygons: { lat: number; lng: number }[][],
-  W = 560, H = 320,
-): string {
-  if (rawPoints.length < 2) return '';
-  // Filter out high-speed transit segments (driving to/from worksite) before projecting
-  const workPoints = filterBySpeed(rawPoints, 25);
-  const points = downsample(workPoints.length >= 2 ? workPoints : rawPoints, 400);
-  const pad = 28;
-  const allPts = [...points, ...zonePolygons.flat()];
-  const lats = allPts.map(p => p.lat);
-  const lngs = allPts.map(p => p.lng);
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-  // Ensure non-zero span (single point or all same location)
-  const latSpan = Math.max(maxLat - minLat, 0.0001);
-  const lngSpan = Math.max(maxLng - minLng, 0.0001);
-  const midLat  = (minLat + maxLat) / 2;
-  const cosLat  = Math.cos((midLat * Math.PI) / 180);
-  const lngSpanM = lngSpan * cosLat * 111320;
-  const latSpanM = latSpan * 111320;
-  const scaleX  = (W - 2 * pad) / lngSpanM;
-  const scaleY  = (H - 2 * pad) / latSpanM;
-  const scale   = Math.min(scaleX, scaleY);
-  const usedW   = lngSpanM * scale;
-  const usedH   = latSpanM * scale;
-  const offX    = (W - usedW) / 2;
-  const offY    = (H - usedH) / 2;
-
-  const toX = (lng: number) => offX + (lng - minLng) * cosLat * 111320 * scale;
-  const toY = (lat: number) => H - offY - (lat - minLat) * 111320 * scale;
-
-  const zonePaths = zonePolygons.map(poly => {
-    const d = poly.map((p, i) => `${i === 0 ? 'M' : 'L'}${toX(p.lng).toFixed(1)},${toY(p.lat).toFixed(1)}`).join(' ') + ' Z';
-    return `<path d="${d}" fill="${color}" fill-opacity="0.12" stroke="${color}" stroke-width="1.5" stroke-opacity="0.4" stroke-dasharray="5 3"/>`;
-  }).join('');
-
-  const trailD = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${toX(p.lng).toFixed(1)},${toY(p.lat).toFixed(1)}`).join(' ');
-  const x0 = toX(points[0].lng),           y0 = toY(points[0].lat);
-  const xN = toX(points[points.length-1].lng), yN = toY(points[points.length-1].lat);
-
-  // Use a dark, high-contrast trail regardless of workColor (avoids light-on-light)
-  const trailColor = '#1e3a5f';
-
-  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">` +
-    `<rect width="${W}" height="${H}" fill="#ffffff"/>` +
-    `<rect x="0.5" y="0.5" width="${W-1}" height="${H-1}" fill="none" stroke="#e2e8f0" stroke-width="1"/>` +
-    zonePaths +
-    `<path d="${trailD}" stroke="${trailColor}" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>` +
-    `<circle cx="${x0.toFixed(1)}" cy="${y0.toFixed(1)}" r="5" fill="#16a34a" stroke="white" stroke-width="2"/>` +
-    `<circle cx="${xN.toFixed(1)}" cy="${yN.toFixed(1)}" r="5" fill="#dc2626" stroke="white" stroke-width="2"/>` +
-    `</svg>`;
-}
 
 const BRAND_GREEN = '#56B57A';
 const BRAND_TEAL  = '#266E7B';
@@ -157,43 +102,70 @@ function openPrintRecap(
   zonePolygons: { lat: number; lng: number }[][],
   extras: RecapExtras,
 ) {
-  const svgStr    = buildGpsSvg(session.gpsPoints, workColor, zonePolygons);
   const dateStr   = format(new Date(session.dateDebut), 'EEEE dd MMMM yyyy', { locale: fr });
   const dateFin   = session.dateFin ? new Date(session.dateFin) : null;
   const typeLabel = chantier ? (CHANTIER_TYPES[chantier.type]?.label ?? chantier.type) : '—';
   const logoUrl   = `${window.location.origin}${import.meta.env.BASE_URL}logo-vandaele.svg`;
 
+  // Filter transit GPS points; downsample for payload size
+  const workPts   = filterBySpeed(session.gpsPoints, 25);
+  const mapPts    = downsample(workPts.length >= 2 ? workPts : session.gpsPoints, 800);
+  const ptsJson   = JSON.stringify(mapPts.map(p => [p.lat, p.lng]));
+  const zonesJson = JSON.stringify(zonePolygons.map(z => z.map(p => [p.lat, p.lng])));
+
   // Use corrected metrics when available (speed × width formula), else fall back to stored values
-  const displaySurface  = extras.correctedSurfaceM2 ?? session.surfaceCoveredM2;
-  const displayRendement = extras.correctedRendement ?? session.rendementM2h;
+  const displaySurface   = extras.correctedSurfaceM2 ?? session.surfaceCoveredM2;
+  const displayRendement = extras.correctedRendement  ?? session.rendementM2h;
 
   const rows: [string, string][] = [
-    ['Durée de la session',   formatDuration(session.dureeMinutes)],
-    ['Surface traitée',       formatArea(displaySurface)],
-    ['Distance de travail',   formatDistance(totalDistanceM(filterBySpeed(session.gpsPoints, 25)))],
-    ['Rendement',             `${Math.round(displayRendement).toLocaleString('fr-FR')} m²/h`],
+    ['Durée de la session',  formatDuration(session.dureeMinutes)],
+    ['Surface traitée',      formatArea(displaySurface)],
+    ['Distance de travail',  formatDistance(totalDistanceM(workPts))],
+    ['Rendement',            `${Math.round(displayRendement).toLocaleString('fr-FR')} m²/h`],
   ];
   if (extras.workSpeedKmh != null)
     rows.push(['Vitesse moyenne de travail', `${extras.workSpeedKmh.toFixed(1)} km/h`]);
   if (rendMoyen != null)
     rows.push(['Rendement moyen (toutes sessions)', `${Math.round(rendMoyen).toLocaleString('fr-FR')} m²/h`]);
-  if (thisPct   != null) rows.push(['Avancement cette session',    `${thisPct} %`]);
-  if (cumulPct  != null) rows.push(['Avancement total chantier',   `${cumulPct} %`]);
+  if (thisPct  != null) rows.push(['Avancement cette session',  `${thisPct} %`]);
+  if (cumulPct != null) rows.push(['Avancement total chantier', `${cumulPct} %`]);
 
   const tableRows = rows.map(([l, v], i) =>
     `<tr style="${i % 2 === 1 ? 'background:#f8fafc' : ''}"><td>${l}</td><td style="font-weight:700;text-align:right;color:${BRAND_TEAL};font-variant-numeric:tabular-nums">${v}</td></tr>`
   ).join('');
 
-  const mapSection = svgStr
-    ? `<p style="font-size:11px;font-weight:700;color:${BRAND_TEAL};text-transform:uppercase;letter-spacing:.08em;margin:20px 0 8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px">Tracé GPS</p>` +
-      `<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-top:4px">${svgStr}</div>` +
-      `<p style="font-size:10px;color:#94a3b8;margin-top:6px">● Début &nbsp; ● Fin — Tracé schématique (sans fond de carte)</p>`
-    : `<p style="color:#94a3b8;font-size:12px;margin-top:16px">Aucun tracé GPS disponible.</p>`;
+  const hasMap = mapPts.length >= 2;
+  const mapSection = hasMap ? `
+<p style="font-size:11px;font-weight:700;color:${BRAND_TEAL};text-transform:uppercase;letter-spacing:.08em;margin:20px 0 8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px">Tracé GPS</p>
+<div id="recap-map" style="height:360px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-top:4px"></div>
+<p style="font-size:10px;color:#94a3b8;margin-top:6px">● Début &nbsp;● Fin — Photo aérienne IGN</p>
+<script>
+(function() {
+  var pts   = ${ptsJson};
+  var zones = ${zonesJson};
+  var wc    = '${workColor}';
+  var map = L.map('recap-map', { zoomControl: true, attributionControl: true });
+  L.tileLayer(
+    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
+    '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg' +
+    '&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+    { maxZoom: 20, attribution: '© IGN' }
+  ).addTo(map);
+  zones.forEach(function(z) {
+    L.polygon(z, { color: wc, weight: 1.5, fillOpacity: 0.12 }).addTo(map);
+  });
+  var line = L.polyline(pts, { color: '#1e3a5f', weight: 3, opacity: 0.9 }).addTo(map);
+  function dot(latlng, fill) {
+    return L.circleMarker(latlng, { radius: 6, color: '#fff', weight: 2, fillColor: fill, fillOpacity: 1 });
+  }
+  dot(pts[0],           '#16a34a').addTo(map);
+  dot(pts[pts.length-1],'#dc2626').addTo(map);
+  map.fitBounds(line.getBounds(), { padding: [28, 28] });
+  window.recapMap = map;
+})();
+</script>` : `<p style="color:#94a3b8;font-size:12px;margin-top:16px">Aucun tracé GPS disponible.</p>`;
 
-  // Header: logo on left (abs URL), text label always shown. All colors via inline styles for blob-URL robustness.
-  const logoHtml = logoUrl
-    ? `<img src="${logoUrl}" alt="" style="height:52px;display:block" onerror="this.style.display='none'">`
-    : '';
+  const logoHtml = `<img src="${logoUrl}" alt="" style="height:52px;display:block" onerror="this.style.display='none'">`;
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -201,16 +173,22 @@ function openPrintRecap(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Récap · ${session.chantierNom}</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, Arial, sans-serif; color: #1e293b; background: #fff; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
   td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-  @media print { .no-print { display: none !important; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  @media print {
+    .no-print { display: none !important; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    #recap-map { break-inside: avoid; }
+    .leaflet-control-container { display: none; }
+  }
 </style>
 </head>
 <body>
-<!-- HEADER — inline styles only, no class dependency -->
 <div style="background:${BRAND_GREEN};padding:16px 24px;display:flex;justify-content:space-between;align-items:center">
   <div style="display:flex;align-items:center;gap:12px">
     ${logoHtml}
@@ -242,7 +220,8 @@ function openPrintRecap(
   ${mapSection}
 
   <div class="no-print" style="margin-top:24px;text-align:center">
-    <button onclick="window.print()" style="padding:10px 32px;background:${BRAND_GREEN};color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">
+    <button onclick="if(window.recapMap){window.recapMap.invalidateSize();}window.print();"
+      style="padding:10px 32px;background:${BRAND_GREEN};color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">
       Imprimer / Enregistrer en PDF
     </button>
   </div>
