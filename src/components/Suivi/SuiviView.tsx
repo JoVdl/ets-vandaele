@@ -475,19 +475,23 @@ export default function SuiviView({ role, onLogout }: Props) {
     clearActiveSession();
     clearLiveSession(sessionIdRef.current);
     await saveSession({
-      chantierId:   selectedChantier.id,
-      chantierNom:  selectedChantier.nom,
-      operateur:    role,
-      dateDebut:    sessionStart?.toISOString() ?? new Date().toISOString(),
-      dateFin:      new Date().toISOString(),
-      dureeMinutes: Math.round(elapsed / 60),
+      chantierId:        selectedChantier.id,
+      chantierNom:       selectedChantier.nom,
+      operateur:         role,
+      dateDebut:         sessionStart?.toISOString() ?? new Date().toISOString(),
+      dateFin:           new Date().toISOString(),
+      dureeMinutes:      Math.round(elapsed / 60),
       gpsPoints,
-      notes: '',
+      notes:             '',
+      // Pass pre-computed values so the save uses the same formula as the live display
+      // (stripAreaM2 on filtered points, not shoelace on raw gpsPoints)
+      surfaceCoveredM2:  areaM > 0 ? areaM : undefined,
+      rendementM2h:      rendement > 0 ? rendement : undefined,
     });
     resetPoints();
     setElapsed(0);
     setSessionStart(null);
-  }, [selectedChantier, saveSession, role, sessionStart, elapsed, gpsPoints, resetPoints]);
+  }, [selectedChantier, saveSession, role, sessionStart, elapsed, gpsPoints, resetPoints, areaM, rendement]);
 
   // ── Draw mode ──────────────────────────────────────────────────────────
   const handleDrawPoint = useCallback((lat: number, lng: number) => {

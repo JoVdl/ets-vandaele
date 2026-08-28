@@ -65,12 +65,14 @@ export function useSuiviSessions() {
 
   // ── Save a completed session ────────────────────────────────────────────
   const saveSession = useCallback(async (
-    s: Omit<SuiviSession, 'id' | 'pendingSync' | 'surfaceCoveredM2' | 'distanceM' | 'vitesseMoyenneKmh' | 'rendementM2h'> & { gpsPoints: import('../types/suivi').GpsPoint[] }
+    s: Omit<SuiviSession, 'id' | 'pendingSync' | 'surfaceCoveredM2' | 'distanceM' | 'vitesseMoyenneKmh' | 'rendementM2h'>
+      & { gpsPoints: import('../types/suivi').GpsPoint[] }
+      & { surfaceCoveredM2?: number; rendementM2h?: number }
   ) => {
-    const dist   = totalDistanceM(s.gpsPoints);
-    const area   = areaM2(s.gpsPoints);
-    const speed  = avgSpeedKmh(s.gpsPoints);
-    const rendt  = s.dureeMinutes > 0 ? (area / s.dureeMinutes) * 60 : 0;
+    const dist  = totalDistanceM(s.gpsPoints);
+    const area  = s.surfaceCoveredM2 ?? areaM2(s.gpsPoints);
+    const speed = avgSpeedKmh(s.gpsPoints);
+    const rendt = s.rendementM2h ?? (s.dureeMinutes > 0 ? (area / s.dureeMinutes) * 60 : 0);
 
     const full: Omit<SuiviSession, 'id' | 'pendingSync'> = {
       ...s,
