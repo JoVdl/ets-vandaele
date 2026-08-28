@@ -165,7 +165,10 @@ function openPrintRecap(
 })();
 </script>` : `<p style="color:#94a3b8;font-size:12px;margin-top:16px">Aucun tracé GPS disponible.</p>`;
 
-  const logoHtml = `<img src="${logoUrl}" alt="" style="height:52px;display:block" onerror="this.style.display='none'">`;
+  // Logo on white pill so the green V icon is visible (logo designed for white/dark bg, not green bg)
+  const logoHtml = `<div style="background:#fff;border-radius:8px;padding:6px 14px;display:inline-flex;align-items:center">
+    <img src="${logoUrl}" alt="ETS Vandaele" style="height:48px;display:block" onerror="this.parentElement.innerHTML='<span style=\\'color:${BRAND_TEAL};font-weight:800;font-size:16px\\'>ETS VANDAELE</span>'">
+  </div>`;
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -190,12 +193,8 @@ function openPrintRecap(
 </head>
 <body>
 <div style="background:${BRAND_GREEN};padding:16px 24px;display:flex;justify-content:space-between;align-items:center">
-  <div style="display:flex;align-items:center;gap:12px">
+  <div style="display:flex;align-items:center">
     ${logoHtml}
-    <div>
-      <div style="color:#fff;font-size:17px;font-weight:800;letter-spacing:.04em;line-height:1.1">ETS VANDAELE</div>
-      <div style="color:rgba(255,255,255,.8);font-size:11px;margin-top:2px">Marcel &amp; Fils</div>
-    </div>
   </div>
   <div style="text-align:right;color:rgba(255,255,255,.9);font-size:12px;line-height:1.7">
     <div style="font-weight:700;color:#fff;letter-spacing:.04em;text-transform:uppercase;font-size:11px">Rapport d'intervention</div>
