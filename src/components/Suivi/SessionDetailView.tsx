@@ -165,10 +165,7 @@ function openPrintRecap(
 })();
 </script>` : `<p style="color:#94a3b8;font-size:12px;margin-top:16px">Aucun tracé GPS disponible.</p>`;
 
-  // Logo on teal pill: green V visible on dark bg, white text visible on dark bg
-  const logoHtml = `<div style="background:${BRAND_TEAL};border-radius:8px;padding:8px 16px;display:inline-flex;align-items:center">
-    <img src="${logoUrl}" alt="ETS Vandaele" style="height:48px;display:block" onerror="this.parentElement.innerHTML='<span style=\\'color:#fff;font-weight:800;font-size:16px\\'>ETS VANDAELE</span>'">
-  </div>`;
+  const logoHtml = `<img src="${logoUrl}" alt="ETS Vandaele" style="height:52px;display:block" onerror="this.style.display='none'">`;
 
   const html = `<!DOCTYPE html>
 <html lang="fr">
@@ -192,7 +189,7 @@ function openPrintRecap(
 </style>
 </head>
 <body>
-<div style="background:${BRAND_GREEN};padding:16px 24px;display:flex;justify-content:space-between;align-items:center">
+<div style="background:${BRAND_TEAL};padding:16px 24px;display:flex;justify-content:space-between;align-items:center">
   <div style="display:flex;align-items:center">
     ${logoHtml}
   </div>
