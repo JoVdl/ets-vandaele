@@ -8,7 +8,7 @@ import { fr } from 'date-fns/locale';
 import type { SuiviSession } from '../../types/suivi';
 import type { Chantier } from '../../types';
 import type { ChantierZone } from './SuiviMap';
-import { formatArea, formatDistance, formatDuration, centroid } from '../../lib/geo';
+import { formatArea, formatDistance, formatDuration, centroid, distanceM } from '../../lib/geo';
 import { CHANTIER_TYPES } from '../../lib/constants';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -54,6 +54,23 @@ interface Props {
   onClose:       () => void;
 }
 
+// Keep only GPS points with inter-point speed below maxSpeedKmh — removes transit driving
+function filterBySpeed(points: { lat: number; lng: number; ts?: number }[], maxSpeedKmh = 25) {
+  if (points.length < 2) return points;
+  const kept: typeof points = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i];
+    if (a.ts && b.ts && b.ts > a.ts) {
+      const dtH = (b.ts - a.ts) / 3_600_000;
+      const dKm = distanceM(a.lat, a.lng, b.lat, b.lng) / 1000;
+      if (dKm / dtH <= maxSpeedKmh) kept.push(b);
+    } else {
+      kept.push(b);
+    }
+  }
+  return kept;
+}
+
 // Downsample a point array to at most maxPts (keeps first, last, evenly spaced between)
 function downsample<T>(arr: T[], maxPts: number): T[] {
   if (arr.length <= maxPts) return arr;
@@ -71,7 +88,9 @@ function buildGpsSvg(
   W = 560, H = 320,
 ): string {
   if (rawPoints.length < 2) return '';
-  const points = downsample(rawPoints, 400);
+  // Filter out high-speed transit segments (driving to/from worksite) before projecting
+  const workPoints = filterBySpeed(rawPoints, 25);
+  const points = downsample(workPoints.length >= 2 ? workPoints : rawPoints, 400);
   const pad = 28;
   const allPts = [...points, ...zonePolygons.flat()];
   const lats = allPts.map(p => p.lat);
@@ -134,9 +153,8 @@ function openPrintRecap(
   const dateStr   = format(new Date(session.dateDebut), 'EEEE dd MMMM yyyy', { locale: fr });
   const dateFin   = session.dateFin ? new Date(session.dateFin) : null;
   const typeLabel = chantier ? (CHANTIER_TYPES[chantier.type]?.label ?? chantier.type) : '—';
-  // Capture the real https:// origin NOW (before the blob URL is opened, where origin = 'null')
-  const appOrigin = window.location.origin.startsWith('http') ? window.location.origin : '';
-  const logoUrl   = appOrigin ? `${appOrigin}/logo-vandaele.svg` : '';
+  // Build absolute logo URL using the app's base path (configured in vite.config.ts)
+  const logoUrl = `${window.location.origin}${import.meta.env.BASE_URL}logo-vandaele.svg`;
 
   const rows: [string, string][] = [
     ['Durée de la session',    formatDuration(session.dureeMinutes)],
