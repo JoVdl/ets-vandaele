@@ -4,7 +4,7 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
-  Plus, ChevronLeft, ChevronRight, Calendar, CalendarDays, BarChart2,
+  Plus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Calendar, CalendarDays, BarChart2,
   TrendingUp, AlertCircle, ZoomIn, ZoomOut, Map, Wand2, Loader2, Moon, Sun, MapPin, MoreVertical,
   List, Users, User, Receipt, Settings2, Home,
 } from 'lucide-react';
@@ -134,6 +134,7 @@ export default function PlanDeCharge() {
   const [showGaps,  setShowGaps]  = useState(false);
   const [showNav,   setShowNav]   = useState(false);
   const [showMenu,   setShowMenu]   = useState(false);
+  const [showSlackDetail, setShowSlackDetail] = useState(false);
   const [showFiscal, setShowFiscal] = useState(false);
   const [customStart, setCustomStart] = useState(() => startOfMonth(new Date()));
   const [customEnd,   setCustomEnd]   = useState(() => endOfMonth(addMonths(new Date(), 2)));
@@ -637,7 +638,7 @@ export default function PlanDeCharge() {
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-full bg-slate-50 dark:bg-slate-900"
+      className="flex flex-col h-full bg-slate-50 dark:bg-slate-900 overflow-x-hidden"
       onPointerDown={onPanDown}
       onPointerMove={onPanMove}
       onPointerUp={e => onPanUp(e)}
@@ -645,9 +646,9 @@ export default function PlanDeCharge() {
       style={{ cursor: isPanning ? 'grabbing' : undefined, touchAction: 'pan-y pinch-zoom' }}
     >
 
-      {/* ── Battement global ── */}
+      {/* ── Battement global — desktop only (mobile badge is in the header row) ── */}
       {slackAnalysis && (
-        <div className={`flex-shrink-0 px-4 py-2 border-b text-xs ${
+        <div className={`hidden sm:flex flex-shrink-0 px-4 py-2 border-b text-xs ${
           slackAnalysis.globalSlack < 0
             ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
             : slackAnalysis.globalSlack <= 7
@@ -655,7 +656,6 @@ export default function PlanDeCharge() {
             : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
         }`}>
           <div className="flex items-center gap-3 flex-wrap">
-            {/* Global slack pill */}
             <div className="flex items-center gap-1.5 font-semibold flex-shrink-0">
               <span>{slackAnalysis.globalSlack < 0 ? '🔴' : slackAnalysis.globalSlack <= 7 ? '🟠' : '🟢'}</span>
               <span>Battement :</span>
@@ -666,13 +666,7 @@ export default function PlanDeCharge() {
                 (bloqué par « {slackAnalysis.bottleneck.nom} »)
               </span>
             </div>
-
-            {/* Separator */}
-            {slackAnalysis.groups.length > 1 && (
-              <span className="opacity-30">·</span>
-            )}
-
-            {/* Per-deadline-period breakdown */}
+            {slackAnalysis.groups.length > 1 && <span className="opacity-30">·</span>}
             {slackAnalysis.groups.map(g => {
               const label = format(new Date(g.precoFin + 'T00:00:00'), 'MMM yyyy', { locale: fr });
               const icon = g.slack < 0 ? '🔴' : g.slack <= 7 ? '🟠' : '🟢';
@@ -680,9 +674,7 @@ export default function PlanDeCharge() {
                 <div key={g.precoFin} className="flex items-center gap-1 opacity-80 flex-shrink-0">
                   <span>{icon}</span>
                   <span>Avant {label} :</span>
-                  <span className="font-semibold">
-                    {g.slack >= 0 ? `+${g.slack}j` : `${g.slack}j`}
-                  </span>
+                  <span className="font-semibold">{g.slack >= 0 ? `+${g.slack}j` : `${g.slack}j`}</span>
                   <span className="opacity-60">({g.chantiers.length} ch.)</span>
                 </div>
               );
@@ -709,15 +701,15 @@ export default function PlanDeCharge() {
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
 
         {/* Row 1 — Title + CA (desktop) + actions */}
-        <div className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 border-b border-slate-100 dark:border-slate-700/50">
+        <div className="flex items-center gap-2 px-3 sm:px-6 py-2 sm:py-3 border-b border-slate-100 dark:border-slate-700/50">
           {/* Logo + title */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <a href="#"
               className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex-shrink-0"
               title="Accueil">
               <Home size={15} />
             </a>
-            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
               <BarChart2 size={14} className="text-white" />
             </div>
             <div>
@@ -725,6 +717,24 @@ export default function PlanDeCharge() {
               <p className="text-[10px] text-slate-400 hidden sm:block">ETS Vandaele</p>
             </div>
           </div>
+          {/* Slack badge — mobile only, tappable to expand detail */}
+          {slackAnalysis && (
+            <button
+              onClick={() => setShowSlackDetail(s => !s)}
+              className={`sm:hidden flex-shrink-0 flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-bold leading-none ${
+                slackAnalysis.globalSlack < 0
+                  ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                  : slackAnalysis.globalSlack <= 7
+                  ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                  : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+              }`}
+              title="Battement — tap pour le détail">
+              {slackAnalysis.globalSlack >= 0 ? '+' : ''}{slackAnalysis.globalSlack}j
+              {showSlackDetail ? <ChevronUp size={9} className="ml-0.5"/> : <ChevronDown size={9} className="ml-0.5"/>}
+            </button>
+          )}
+          {/* Spacer — pushes desktop blocks to right, collapses on mobile */}
+          <div className="flex-1 min-w-0" />
 
           {/* CA summary — desktop only, scoped to current period */}
           <div className="hidden sm:flex items-center gap-4">
@@ -890,44 +900,11 @@ export default function PlanDeCharge() {
             </button>
           </div>
 
-          {/* Mobile: tab switcher + section toggles + actions */}
-          <div className="flex sm:hidden items-center gap-1">
-            {/* Tab switcher — always accessible */}
-            <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden mr-0.5">
-              {([
-                { key: 'gantt',        icon: <BarChart2 size={12}/> },
-                { key: 'carte',        icon: <Map size={12}/> },
-                { key: 'calendrier',   icon: <CalendarDays size={12}/> },
-                { key: 'liste',        icon: <List size={12}/> },
-                { key: 'facturation',  icon: <Receipt size={12}/> },
-              ] as const).map(({ key, icon }) => (
-                <button key={key} onClick={() => setActiveTab(key)}
-                  className={`px-2 py-1.5 transition-colors ${
-                    activeTab === key ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-50'
-                  }`}>
-                  {icon}
-                </button>
-              ))}
-            </div>
-            {/* Section toggle chips */}
-            {([
-              { key: 'CA',  active: showStats,     toggle: () => setShowStats(s => !s) },
-              { key: 'Eng', active: showEquip,     toggle: () => setShowEquip(e => !e) },
-              { key: 'Fis', active: showFiscal,    toggle: () => setShowFiscal(f => !f) },
-              { key: 'Mois',active: showMonthlyCA, toggle: () => setShowMonthlyCA(s => !s) },
-              { key: 'Dsp', active: showGaps,      toggle: () => setShowGaps(g => !g) },
-              { key: 'Nav', active: showNav,       toggle: () => setShowNav(n => !n) },
-            ] as const).map(({ key, active, toggle }) => (
-              <button key={key} onClick={toggle}
-                className={`px-1.5 py-1 rounded-md text-[10px] font-bold transition-colors ${
-                  active ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                }`}>
-                {key}
-              </button>
-            ))}
+          {/* Mobile: + button + menu (tabs are in Row 2 below) */}
+          <div className="flex sm:hidden items-center gap-1 flex-shrink-0">
             <button onClick={() => openNew()}
               className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0">
-              <Plus size={15}/>
+              <Plus size={16}/>
             </button>
             <div ref={menuRef} className="relative">
               <button
@@ -950,6 +927,28 @@ export default function PlanDeCharge() {
                         <button key={key} onClick={() => { setFilterStatus(key); setShowMenu(false); }}
                           className={`px-2 py-1 text-xs rounded-md font-medium transition-colors ${
                             filterStatus === key ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                          }`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" />
+                  {/* Section toggles */}
+                  <div className="px-3 py-1.5">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Sections</p>
+                    <div className="flex flex-wrap gap-1">
+                      {([
+                        { key: 'CA',   label: 'CA',       active: showStats,     toggle: () => setShowStats(s => !s) },
+                        { key: 'Eng',  label: 'Engins',   active: showEquip,     toggle: () => setShowEquip(e => !e) },
+                        { key: 'Fis',  label: 'Fiscal',   active: showFiscal,    toggle: () => setShowFiscal(f => !f) },
+                        { key: 'Mois', label: 'Mensuel',  active: showMonthlyCA, toggle: () => setShowMonthlyCA(s => !s) },
+                        { key: 'Dsp',  label: 'Dispos',   active: showGaps,      toggle: () => setShowGaps(g => !g) },
+                        { key: 'Nav',  label: 'Nav',      active: showNav,       toggle: () => setShowNav(n => !n) },
+                      ] as const).map(({ key, label, active, toggle }) => (
+                        <button key={key} onClick={toggle}
+                          className={`px-2 py-1 text-xs rounded-md font-medium transition-colors ${
+                            active ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                           }`}>
                           {label}
                         </button>
@@ -1058,6 +1057,55 @@ export default function PlanDeCharge() {
             </div>
           </div>
         </div>
+
+        {/* Mobile Row 2 — view tabs, full width */}
+        <div className="flex sm:hidden border-b border-slate-200 dark:border-slate-700">
+          {([
+            { key: 'gantt',       icon: <BarChart2 size={14}/>,    label: 'Gantt' },
+            { key: 'carte',       icon: <Map size={14}/>,          label: 'Carte' },
+            { key: 'calendrier',  icon: <CalendarDays size={14}/>, label: 'Mois' },
+            { key: 'liste',       icon: <List size={14}/>,         label: 'Liste' },
+            { key: 'facturation', icon: <Receipt size={14}/>,      label: 'Fact.' },
+          ] as const).map(({ key, icon, label }) => (
+            <button key={key} onClick={() => setActiveTab(key)}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors border-b-2 ${
+                activeTab === key
+                  ? 'text-blue-600 border-blue-600 bg-blue-50/50 dark:bg-blue-900/20'
+                  : 'text-slate-400 border-transparent hover:bg-slate-50 dark:hover:bg-slate-700/50'
+              }`}>
+              {icon}
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Mobile slack detail — expands below tabs when badge tapped */}
+        {slackAnalysis && showSlackDetail && (
+          <div className={`sm:hidden flex-shrink-0 px-3 py-2 border-b text-xs space-y-1.5 ${
+            slackAnalysis.globalSlack < 0
+              ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
+              : slackAnalysis.globalSlack <= 7
+              ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+          }`}>
+            <div className="flex items-center gap-1.5 font-semibold">
+              <span>{slackAnalysis.globalSlack < 0 ? '🔴' : slackAnalysis.globalSlack <= 7 ? '🟠' : '🟢'}</span>
+              <span>Battement global : <strong>{slackAnalysis.globalSlack >= 0 ? `+${slackAnalysis.globalSlack}` : slackAnalysis.globalSlack}j</strong></span>
+              <span className="font-normal opacity-70 truncate">(bloqué par « {slackAnalysis.bottleneck.nom} »)</span>
+            </div>
+            {slackAnalysis.groups.map(g => {
+              const label = format(new Date(g.precoFin + 'T00:00:00'), 'MMM yyyy', { locale: fr });
+              const icon = g.slack < 0 ? '🔴' : g.slack <= 7 ? '🟠' : '🟢';
+              return (
+                <div key={g.precoFin} className="flex items-center gap-1.5 opacity-80 pl-4">
+                  <span>{icon}</span>
+                  <span>Avant {label} : <strong>{g.slack >= 0 ? `+${g.slack}j` : `${g.slack}j`}</strong></span>
+                  <span className="opacity-60">({g.chantiers.length} ch.)</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Mobile CA stats row — toggled by the CA button */}
         <div className={`sm:hidden divide-x divide-slate-100 dark:divide-slate-700 border-b border-slate-100 dark:border-slate-700/50 ${showStats ? 'flex' : 'hidden'}`}>
