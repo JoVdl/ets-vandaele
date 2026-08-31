@@ -615,9 +615,22 @@ export default function PlanDeCharge() {
     if (!moved) return;
 
     if (origPreset !== 'custom') {
-      // Restore original preset anchored at new position; snap to month start
-      const newStart = addDays(startPeriodStart, lastDayShift);
-      setCurrentMonth(origPreset === 'fiscal' ? newStart : startOfMonth(newStart));
+      // Navigate by direction: a ~40px swipe in either direction advances/rewinds one period.
+      // This fixes the asymmetry where going backward was easy (small day-shift crosses period
+      // start) but going forward required an impossible full-period swipe.
+      const pixelThreshold = 40;
+      const dayThreshold   = Math.ceil(pixelThreshold / Math.max(origDayWidth, 1));
+      const stepMonths = origPreset === 'year' || origPreset === 'fiscal' ? 12
+                       : typeof origPreset === 'number' ? (origPreset as number) : 1;
+
+      if (Math.abs(lastDayShift) >= dayThreshold) {
+        const anchor = origPreset === 'year'
+          ? new Date(startPeriodStart.getFullYear(), 0, 1)   // always from Jan 1 for year view
+          : startPeriodStart;
+        const next = addMonths(anchor, lastDayShift > 0 ? stepMonths : -stepMonths);
+        setCurrentMonth(origPreset === 'fiscal' ? next : startOfMonth(next));
+      }
+      // else: user barely swiped — snap back to the original period (no change to currentMonth)
       setZoomPreset(origPreset);
       setDayWidth(origDayWidth);
     }
