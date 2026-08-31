@@ -100,8 +100,6 @@ function orderByProximity(
   prevChantier: Chantier | null,
   typePriorities: string[] = [],
 ): { ordered: Chantier[]; lastLat: number; lastLon: number; lastChantier: Chantier | null } {
-  const deadline = (c: Chantier) => c.periodePreconiseeFin ?? c.periodePreconiseeDebut ?? c.dateDebut;
-
   // Type priority index: listed types get 0..N-1, unlisted get N (scheduled last)
   const typePrio = (c: Chantier) => {
     const idx = typePriorities.indexOf(c.type);
