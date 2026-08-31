@@ -353,6 +353,23 @@ export default function CalendarView({
   }, []);
   const handleUnhover = useCallback(() => setTooltip(null), []);
 
+  // Find the previous consecutive chantier with transfertTracteur (for chaining)
+  const tooltipFromChantier = useMemo(() => {
+    if (!tooltip?.chantier.transfertTracteur || !tooltip.chantier.latitude || !tooltip.chantier.longitude) return undefined;
+    const c = tooltip.chantier;
+    const start = new Date(c.dateDebut);
+    return chantiers.find(other =>
+      other.id !== c.id &&
+      other.transfertTracteur &&
+      other.latitude && other.longitude &&
+      (() => {
+        const otherEnd = new Date(other.dateFin);
+        const diff = differenceInCalendarDays(start, otherEnd);
+        return diff >= 0 && diff <= 1;
+      })()
+    );
+  }, [tooltip, chantiers]);
+
   // ── Mobile peek card ──────────────────────────────────────────────────────
   const [mobilePeek, setMobilePeek] = useState<Chantier | null>(null);
   const handleChantierClick = useCallback((c: Chantier) => {
@@ -484,7 +501,7 @@ export default function CalendarView({
 
       {/* ── Hover tooltip (desktop) ── */}
       {tooltip && !drag && (
-        <ChantierTooltip chantier={tooltip.chantier} x={tooltip.x} y={tooltip.y} />
+        <ChantierTooltip chantier={tooltip.chantier} x={tooltip.x} y={tooltip.y} fromChantier={tooltipFromChantier} />
       )}
 
       {/* ── Mobile peek card ── */}

@@ -12,12 +12,14 @@ import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
   CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon,
 } from './EquipmentIcons';
-import { formatTransfert } from '../lib/geo';
+import { getTransfertInfo } from '../lib/geo';
 
 interface Props {
   chantier: Chantier;
   x: number; // page X of mouse
   y: number; // page Y of mouse
+  /** Si fourni, le transfert est calculé depuis ce chantier et non depuis le dépôt */
+  fromChantier?: Chantier;
 }
 
 // ── OSM tile math ────────────────────────────────────────────────────────────
@@ -110,7 +112,7 @@ function EquipSummary({ c }: { c: Chantier }) {
 
 // ── Main tooltip ─────────────────────────────────────────────────────────────
 
-export default function ChantierTooltip({ chantier: c, x, y }: Props) {
+export default function ChantierTooltip({ chantier: c, x, y, fromChantier }: Props) {
   const ref  = useRef<HTMLDivElement>(null);
   const meta = CHANTIER_TYPES[c.type];
   const isPotentiel = c.status === 'potentiel';
@@ -266,12 +268,24 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
             )}
 
             {/* Transfert tracteur */}
-            {c.transfertTracteur && c.latitude && c.longitude && (
-              <div className="mt-1 text-[10px] text-orange-600 font-medium flex items-center gap-1">
-                <span>🚜</span>
-                <span>{formatTransfert(c.latitude, c.longitude)}</span>
-              </div>
-            )}
+            {c.transfertTracteur && c.latitude && c.longitude && (() => {
+              const from = fromChantier?.latitude && fromChantier?.longitude
+                ? { lat: fromChantier.latitude, lon: fromChantier.longitude, label: fromChantier.nom }
+                : undefined;
+              const info = getTransfertInfo(c.latitude, c.longitude, from);
+              return (
+                <div className="mt-1.5 border-t border-slate-50 pt-1.5 space-y-0.5">
+                  <div className="text-[10px] text-orange-600 font-medium flex items-center gap-1">
+                    <span>🚜</span>
+                    <span>Depuis {info.fromLabel} — {info.distKm} km</span>
+                  </div>
+                  <div className="text-[10px] text-orange-500 flex items-center gap-2 pl-1">
+                    <span>↗ Aller : {info.aller}</span>
+                    {info.retour && <span>↙ Retour : {info.retour}</span>}
+                  </div>
+                </div>
+              );
+            })()}
             {c.transfertTracteur && (!c.latitude || !c.longitude) && (
               <div className="mt-1 text-[10px] text-orange-400 italic">
                 🚜 Transfert tracteur — localisation manquante pour calculer le temps

@@ -25,19 +25,60 @@ export function transfertMinutes(lat: number, lng: number): number {
   return (distanceDepotKm(lat, lng) / TRACTEUR_VITESSE_KMH) * 60;
 }
 
+/** Distance crow×1.3 entre deux points géographiques quelconques (km). */
+export function distanceBetweenKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) ** 2;
+  const crow = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return crow * 1.3;
+}
+
+function fmtTime(m: number): string {
+  const h = Math.floor(m / 60);
+  const mn = Math.round(m % 60);
+  return h === 0 ? `${mn} min` : mn === 0 ? `${h}h` : `${h}h${String(mn).padStart(2, '0')}`;
+}
+
+export interface TransfertInfo {
+  /** Label d'origine ("Dépôt" ou nom du chantier précédent) */
+  fromLabel: string;
+  /** Temps aller formaté */
+  aller: string;
+  /** Temps retour formaté (null si chantier enchaîné — pas de retour au dépôt) */
+  retour: string | null;
+  /** Distance en km arrondie */
+  distKm: number;
+}
+
 /**
- * Formate un temps de transfert (aller / A-R) en chaîne lisible.
- * Ex: "45 min aller · 1h30 A/R"
+ * Calcule les infos de transfert tracteur.
+ * Si fromLat/fromLon fournis (chantier précédent), le retour n'est pas calculé.
  */
-export function formatTransfert(lat: number, lng: number): string {
-  const distKm = distanceDepotKm(lat, lng);
+export function getTransfertInfo(
+  toLat: number, toLon: number,
+  from?: { lat: number; lon: number; label: string },
+): TransfertInfo {
+  const fromLat = from?.lat ?? DEPOT_LAT;
+  const fromLon = from?.lon ?? DEPOT_LON;
+  const fromLabel = from?.label ?? 'Dépôt';
+  const distKm = distanceBetweenKm(fromLat, fromLon, toLat, toLon);
   const mins   = (distKm / TRACTEUR_VITESSE_KMH) * 60;
-  const fmt = (m: number) => {
-    const h = Math.floor(m / 60);
-    const mn = Math.round(m % 60);
-    return h === 0 ? `${mn} min` : mn === 0 ? `${h}h` : `${h}h${String(mn).padStart(2, '0')}`;
+  return {
+    fromLabel,
+    aller: fmtTime(mins),
+    retour: from ? null : fmtTime(mins), // no return trip when chaining
+    distKm: Math.round(distKm),
   };
-  return `${fmt(mins)} aller · ${fmt(mins * 2)} A/R · ${Math.round(distKm)} km`;
+}
+
+/** Rétro-compat: retourne une chaîne simple (aller · A/R · km) */
+export function formatTransfert(lat: number, lng: number): string {
+  const info = getTransfertInfo(lat, lng);
+  return `${info.aller} aller · ${info.retour} retour · ${info.distKm} km`;
 }
 
 export function distanceM(lat1: number, lng1: number, lat2: number, lng2: number): number {
