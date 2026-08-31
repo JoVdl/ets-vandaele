@@ -131,21 +131,22 @@ function orderByProximity(
     return 3;
   };
 
-  // Sort: type priority > chantier priority > window width (shortest first) > EDF
+  // Sort: window tier (shortest first) > type priority > chantier priority > EDF
+  // Window width is the primary criterion so a tight broyage always beats a wide déboisement.
   const sorted = [...group].sort((a, b) => {
+    const wa = windowTier(a), wb = windowTier(b);
+    if (wa !== wb) return wa - wb;
     const ta = typePrio(a), tb = typePrio(b);
     if (ta !== tb) return ta - tb;
     const pa = chanPrio(a), pb = chanPrio(b);
     if (pa !== pb) return pa - pb;
-    const wa = windowDays(a), wb = windowDays(b);
-    if (Math.abs(wa - wb) > 1) return wa - wb;   // meaningful diff → shortest window first
     return deadline(a).localeCompare(deadline(b));
   });
 
-  // Group key: type-prio + chantier-prio + window-tier + deadline month
+  // Group key: window-tier + type-prio + chantier-prio + deadline month
   const byGroup = new Map<string, Chantier[]>();
   for (const c of sorted) {
-    const key = `${String(typePrio(c)).padStart(4, '0')}_${chanPrio(c)}_${windowTier(c)}_${deadline(c).substring(0, 7)}`;
+    const key = `${windowTier(c)}_${String(typePrio(c)).padStart(4, '0')}_${chanPrio(c)}_${deadline(c).substring(0, 7)}`;
     if (!byGroup.has(key)) byGroup.set(key, []);
     byGroup.get(key)!.push(c);
   }
