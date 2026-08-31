@@ -7,6 +7,7 @@ import { CHANTIER_TYPES } from '../lib/constants';
 import { format, addDays, addYears } from 'date-fns';
 import { geocode, geocodeSearch, extractLocation, type GeoResult } from '../lib/geocoder';
 import { nextWorkingDay, prevWorkingDay, addWorkingDays, countWorkingDays } from '../lib/workingDays';
+import { getTransfertInfo } from '../lib/geo';
 
 interface Props {
   isOpen: boolean;
@@ -657,6 +658,23 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                     className="w-4 h-4 rounded accent-orange-500" />
                   <span className="text-sm text-slate-600">Transfert tracteur</span>
                 </label>
+                {form.transfertTracteur && form.latitude && form.longitude && (() => {
+                  const info = getTransfertInfo(form.latitude!, form.longitude!);
+                  return (
+                    <div className="ml-6 mt-0.5 text-[11px] text-orange-600 space-y-0.5">
+                      <div>📍 {info.distKm} km depuis le dépôt</div>
+                      <div className="flex gap-3">
+                        <span>↗ Aller : <strong>{info.aller}</strong></span>
+                        <span>↙ Retour : <strong>{info.retour}</strong></span>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {form.transfertTracteur && (!form.latitude || !form.longitude) && (
+                  <p className="ml-6 mt-0.5 text-[11px] text-orange-400 italic">
+                    Saisir une adresse pour calculer le temps de transfert
+                  </p>
+                )}
               </div>
 
               {meta.hasPrepBassin && (
