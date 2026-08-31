@@ -51,6 +51,7 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   telesco: false,
   nombrePersonnes: 1,
   surface: undefined,
+  dureeEstimeeH: undefined,
   patronRequis: true,
   factureFaite: false,
   dateFacture: '',
@@ -696,14 +697,24 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
               </div>
             </div>
 
-            {/* Surface */}
-            <label className="block">
-              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Surface (m²)</span>
-              <input type="number" min="0" step="100" value={form.surface ?? ''}
-                onChange={e => set('surface', e.target.value ? Number(e.target.value) : undefined)}
-                placeholder="Surface en m² (optionnel)"
-                className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </label>
+            {/* Surface + Durée estimée — un seul suffit, selon le type de suivi */}
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Surface (m²)</span>
+                <input type="number" min="0" step="100" value={form.surface ?? ''}
+                  onChange={e => set('surface', e.target.value ? Number(e.target.value) : undefined)}
+                  placeholder="ex. 10000"
+                  className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </label>
+              <label className="block">
+                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Durée estimée (h)</span>
+                <input type="number" min="0" step="0.5" value={form.dureeEstimeeH ?? ''}
+                  onChange={e => set('dureeEstimeeH', e.target.value ? Number(e.target.value) : undefined)}
+                  placeholder="ex. 8"
+                  className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </label>
+            </div>
+            <p className="text-[10px] text-slate-400 -mt-1">Renseignez l'un ou l'autre selon le mode de suivi du chantier.</p>
 
             {/* Notes */}
             <label className="block">

@@ -263,13 +263,22 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
   })();
 
   // Use corrected surface for progress % when available
-  const surface       = chantier?.surface ?? 0;
-  const cumul         = chantierCumul?.[session.chantierId];
+  const surface        = chantier?.surface ?? 0;
+  const dureeEstimeeMin = (chantier?.dureeEstimeeH ?? 0) * 60;
+  const cumul          = chantierCumul?.[session.chantierId];
   const displaySurface = correctedSurfaceM2 ?? session.surfaceCoveredM2;
-  const thisPct       = surface > 0 && displaySurface > 0
-    ? Math.min(100, Math.round((displaySurface / surface) * 100)) : null;
-  const cumulPct      = surface > 0 && cumul
-    ? Math.min(100, Math.round((cumul.totalCoveredM2 / surface) * 100)) : null;
+
+  // Durée estimée prioritaire ; sinon surface ; sinon pas de %
+  const thisPct = dureeEstimeeMin > 0
+    ? Math.min(100, Math.round((session.dureeMinutes / dureeEstimeeMin) * 100))
+    : surface > 0 && displaySurface > 0
+      ? Math.min(100, Math.round((displaySurface / surface) * 100))
+      : null;
+  const cumulPct = dureeEstimeeMin > 0 && cumul
+    ? Math.min(100, Math.round((cumul.totalMinutes / dureeEstimeeMin) * 100))
+    : surface > 0 && cumul
+      ? Math.min(100, Math.round((cumul.totalCoveredM2 / surface) * 100))
+      : null;
   // If correctedRendement is available, swap this session's stored value out of the cumul average
   const rendMoyen = (() => {
     if (!cumul || cumul.rendementCount <= 0) return null;
@@ -432,7 +441,10 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
             </div>
             <p className="text-slate-500 text-[10px] mt-1 text-center">
               {cumulPct}% du chantier effectué au total
-              {surface > 0 && cumul && cumul.totalCoveredM2 < surface && (
+              {dureeEstimeeMin > 0 && cumul && cumul.totalMinutes < dureeEstimeeMin && (
+                <span> · {formatDuration(Math.max(0, dureeEstimeeMin - cumul.totalMinutes))} restantes</span>
+              )}
+              {dureeEstimeeMin === 0 && surface > 0 && cumul && cumul.totalCoveredM2 < surface && (
                 <span> · {formatArea(Math.max(0, surface - cumul.totalCoveredM2))} restants</span>
               )}
             </p>

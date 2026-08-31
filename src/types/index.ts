@@ -45,6 +45,9 @@ export interface Chantier {
   // Surface de travail (m²) — mesurée sur la carte ou saisie manuellement
   surface?: number;
 
+  // Durée estimée totale du chantier (h) — pour les chantiers facturés au temps plutôt qu'à la surface
+  dureeEstimeeH?: number;
+
   // Polygones délimitant les zones de travail (plusieurs zones possibles par chantier)
   polygon?: { lat: number; lng: number }[][];
 
