@@ -131,22 +131,27 @@ function orderByProximity(
     return 3;
   };
 
-  // Sort: window tier (shortest first) > type priority > chantier priority > EDF
-  // Window width is the primary criterion so a tight broyage always beats a wide déboisement.
+  // Sort: EDF (periodePreconiseeFin, earliest first) > window width > type priority > chanPrio
+  // Chantiers without periodePreconiseeFin go after all constrained ones.
+  // Within the same deadline month, narrower window = more rigid = scheduled first.
   const sorted = [...group].sort((a, b) => {
-    const wa = windowTier(a), wb = windowTier(b);
-    if (wa !== wb) return wa - wb;
+    const da = a.periodePreconiseeFin, db = b.periodePreconiseeFin;
+    if (da && !db) return -1;
+    if (!da && db) return  1;
+    if (da && db && da !== db) return da.localeCompare(db);
+    // Same deadline (or both unconstrained): shorter window first
+    const wa = windowDays(a), wb = windowDays(b);
+    if (Math.abs(wa - wb) > 1) return wa - wb;
     const ta = typePrio(a), tb = typePrio(b);
     if (ta !== tb) return ta - tb;
-    const pa = chanPrio(a), pb = chanPrio(b);
-    if (pa !== pb) return pa - pb;
-    return deadline(a).localeCompare(deadline(b));
+    return chanPrio(a) - chanPrio(b);
   });
 
-  // Group key: window-tier + type-prio + chantier-prio + deadline month
+  // Group key: deadline month + window-tier + type-prio + chanPrio
   const byGroup = new Map<string, Chantier[]>();
   for (const c of sorted) {
-    const key = `${windowTier(c)}_${String(typePrio(c)).padStart(4, '0')}_${chanPrio(c)}_${deadline(c).substring(0, 7)}`;
+    const deadlineMonth = c.periodePreconiseeFin?.substring(0, 7) ?? '9999-99';
+    const key = `${deadlineMonth}_${windowTier(c)}_${String(typePrio(c)).padStart(4, '0')}_${chanPrio(c)}`;
     if (!byGroup.has(key)) byGroup.set(key, []);
     byGroup.get(key)!.push(c);
   }
