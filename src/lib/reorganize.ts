@@ -111,19 +111,41 @@ function orderByProximity(
   // Chantier-level priority: 1 (urgente) → 5 (peut attendre), default 3 (normale)
   const chanPrio = (c: Chantier) => c.priorite ?? 3;
 
-  // Sort: type priority > chantier priority > EDF
+  // Window width: days between periodePreconiseeDebut and periodePreconiseeFin.
+  // Short window = less scheduling flexibility = schedule first.
+  // No preco at all → treated as infinite (scheduled after constrained chantiers).
+  const windowDays = (c: Chantier): number => {
+    if (!c.periodePreconiseeDebut && !c.periodePreconiseeFin) return 99999;
+    if (!c.periodePreconiseeDebut || !c.periodePreconiseeFin) return 9999;
+    const ms = new Date(c.periodePreconiseeFin).getTime() - new Date(c.periodePreconiseeDebut).getTime();
+    return Math.max(0, ms / 86_400_000);
+  };
+
+  // Window tier for grouping: 0 = <14d (very tight), 1 = <30d, 2 = <90d, 3 = ≥90d, 4 = no preco
+  const windowTier = (c: Chantier): number => {
+    const d = windowDays(c);
+    if (d >= 9999) return 4;
+    if (d < 14)    return 0;
+    if (d < 30)    return 1;
+    if (d < 90)    return 2;
+    return 3;
+  };
+
+  // Sort: type priority > chantier priority > window width (shortest first) > EDF
   const sorted = [...group].sort((a, b) => {
     const ta = typePrio(a), tb = typePrio(b);
     if (ta !== tb) return ta - tb;
     const pa = chanPrio(a), pb = chanPrio(b);
     if (pa !== pb) return pa - pb;
+    const wa = windowDays(a), wb = windowDays(b);
+    if (Math.abs(wa - wb) > 1) return wa - wb;   // meaningful diff → shortest window first
     return deadline(a).localeCompare(deadline(b));
   });
 
-  // Group key: type-prio + chantier-prio + deadline month
+  // Group key: type-prio + chantier-prio + window-tier + deadline month
   const byGroup = new Map<string, Chantier[]>();
   for (const c of sorted) {
-    const key = `${String(typePrio(c)).padStart(4, '0')}_${chanPrio(c)}_${deadline(c).substring(0, 7)}`;
+    const key = `${String(typePrio(c)).padStart(4, '0')}_${chanPrio(c)}_${windowTier(c)}_${deadline(c).substring(0, 7)}`;
     if (!byGroup.has(key)) byGroup.set(key, []);
     byGroup.get(key)!.push(c);
   }
