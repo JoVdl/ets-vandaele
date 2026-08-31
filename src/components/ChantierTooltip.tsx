@@ -12,6 +12,7 @@ import {
   ExcavatorIcon, DumperIcon, TractoBenneIcon, BullIcon,
   CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon,
 } from './EquipmentIcons';
+import { formatTransfert } from '../lib/geo';
 
 interface Props {
   chantier: Chantier;
@@ -94,6 +95,7 @@ function EquipSummary({ c }: { c: Chantier }) {
   if (c.bateauFaucardeur) items.push({ icon: <BateauFaucardeurIcon size={11}/>, label: 'Bateau fauc.' });
   if (c.drague)         items.push({ icon: <DragueIcon size={11}/>,          label: 'Drague' });
   if (c.telesco)        items.push({ icon: <TelescoIcon size={11}/>,         label: 'Télesco' });
+  if (c.transfertTracteur) items.push({ icon: <span style={{fontSize:11}}>🚜</span>, label: 'Transfert tracteur' });
   if (!items.length) return null;
   return (
     <div className="flex flex-wrap gap-1 mt-1">
@@ -260,6 +262,19 @@ export default function ChantierTooltip({ chantier: c, x, y }: Props) {
             {c.periodePreconiseeDebut && c.periodePreconiseeFin && (
               <div className="mt-1.5 text-[10px] text-slate-400 border-t border-slate-50 pt-1">
                 Préconisée : {format(new Date(c.periodePreconiseeDebut), 'd MMM', { locale: fr })} → {format(new Date(c.periodePreconiseeFin), 'd MMM yyyy', { locale: fr })}
+              </div>
+            )}
+
+            {/* Transfert tracteur */}
+            {c.transfertTracteur && c.latitude && c.longitude && (
+              <div className="mt-1 text-[10px] text-orange-600 font-medium flex items-center gap-1">
+                <span>🚜</span>
+                <span>{formatTransfert(c.latitude, c.longitude)}</span>
+              </div>
+            )}
+            {c.transfertTracteur && (!c.latitude || !c.longitude) && (
+              <div className="mt-1 text-[10px] text-orange-400 italic">
+                🚜 Transfert tracteur — localisation manquante pour calculer le temps
               </div>
             )}
           </div>

@@ -47,6 +47,7 @@ const emptyForm = (): Omit<Chantier, 'id' | 'createdAt' | 'updatedAt'> => ({
   rouleaux: 0,
   chenillette: false,
   bateauFaucardeur: false,
+  transfertTracteur: false,
   drague: false,
   telesco: false,
   nombrePersonnes: 1,
@@ -650,6 +651,12 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                     <span className="text-sm text-slate-600">Télesco</span>
                   </label>
                 )}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.transfertTracteur ?? false}
+                    onChange={e => set('transfertTracteur', e.target.checked)}
+                    className="w-4 h-4 rounded accent-orange-500" />
+                  <span className="text-sm text-slate-600">Transfert tracteur</span>
+                </label>
               </div>
 
               {meta.hasPrepBassin && (

@@ -1,6 +1,44 @@
 import type { GpsPoint } from '../types/suivi';
+import { DEPOT_LAT, DEPOT_LON, TRACTEUR_VITESSE_KMH } from './constants';
 
 const R = 6371000; // Earth radius in metres
+
+/**
+ * Distance à vol d'oiseau entre le dépôt et un point (km).
+ * Multiplie par 1.3 (facteur route standard) pour estimer la distance réelle.
+ */
+export function distanceDepotKm(lat: number, lng: number): number {
+  const dLat = ((lat - DEPOT_LAT) * Math.PI) / 180;
+  const dLng = ((lng - DEPOT_LON) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((DEPOT_LAT * Math.PI) / 180) * Math.cos((lat * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  const crow = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return crow * 1.3; // facteur de sinuosité routière
+}
+
+/**
+ * Temps de transfert aller en minutes depuis le dépôt.
+ */
+export function transfertMinutes(lat: number, lng: number): number {
+  return (distanceDepotKm(lat, lng) / TRACTEUR_VITESSE_KMH) * 60;
+}
+
+/**
+ * Formate un temps de transfert (aller / A-R) en chaîne lisible.
+ * Ex: "45 min aller · 1h30 A/R"
+ */
+export function formatTransfert(lat: number, lng: number): string {
+  const distKm = distanceDepotKm(lat, lng);
+  const mins   = (distKm / TRACTEUR_VITESSE_KMH) * 60;
+  const fmt = (m: number) => {
+    const h = Math.floor(m / 60);
+    const mn = Math.round(m % 60);
+    return h === 0 ? `${mn} min` : mn === 0 ? `${h}h` : `${h}h${String(mn).padStart(2, '0')}`;
+  };
+  return `${fmt(mins)} aller · ${fmt(mins * 2)} A/R · ${Math.round(distKm)} km`;
+}
 
 export function distanceM(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const dLat = ((lat2 - lat1) * Math.PI) / 180;

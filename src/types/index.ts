@@ -65,6 +65,7 @@ export interface Chantier {
   bateauFaucardeur?: boolean;
   drague?: boolean;
   telesco?: boolean;
+  transfertTracteur?: boolean;   // engins acheminés en tracteur depuis le dépôt
 
   // Personnel
   nombrePersonnes?: number;

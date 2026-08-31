@@ -1,5 +1,13 @@
 import type { ChantierType } from '../types';
 
+// ── Dépôt ETS Vandaele ───────────────────────────────────────────────────────
+// 136 rue de Dommartin, 62140 Tortefontaine
+export const DEPOT_LAT = 50.3180;
+export const DEPOT_LON = 1.9170;
+
+// Vitesse moyenne tracteur sur route (km/h) — valeur standard logistique agricole
+export const TRACTEUR_VITESSE_KMH = 25;
+
 export interface ChantierTypeMeta {
   label: string;
   color: string;       // hex for inline styles
