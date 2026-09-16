@@ -443,7 +443,16 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
 
             {/* Période préconisée */}
             <div>
-              <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mb-1">Période préconisée <span className="normal-case font-normal">(optionnel)</span></p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Période préconisée <span className="normal-case font-normal">(optionnel)</span></p>
+                {(form.periodePreconiseeDebut || form.periodePreconiseeFin) && (
+                  <button type="button"
+                    onClick={() => { set('periodePreconiseeDebut', ''); set('periodePreconiseeFin', ''); }}
+                    className="text-[10px] text-red-400 hover:text-red-600 transition-colors flex items-center gap-0.5">
+                    <X size={10}/> Effacer
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="block">
                   <span className="text-[10px] text-slate-400">Du</span>
