@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { MapPin, Users, User, Calendar, Euro, Lock, HardHat, CheckCheck, CircleAlert } from 'lucide-react';
+import { MapPin, Users, User, Calendar, Euro, Lock, HardHat, CheckCheck, CircleAlert, TriangleAlert } from 'lucide-react';
 import cenLogoUrl from '../assets/cen-logo.png';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
@@ -13,6 +13,7 @@ import {
   CheniletteIcon, BateauFaucardeurIcon, DragueIcon, TelescoIcon,
 } from './EquipmentIcons';
 import { getTransfertInfo } from '../lib/geo';
+import type { ConflictEntry } from './GanttChart';
 
 interface Props {
   chantier: Chantier;
@@ -20,6 +21,7 @@ interface Props {
   y: number; // page Y of mouse
   /** Si fourni, le transfert est calculé depuis ce chantier et non depuis le dépôt */
   fromChantier?: Chantier;
+  conflictingWith?: ConflictEntry[];
 }
 
 // ── OSM tile math ────────────────────────────────────────────────────────────
@@ -112,7 +114,7 @@ function EquipSummary({ c }: { c: Chantier }) {
 
 // ── Main tooltip ─────────────────────────────────────────────────────────────
 
-export default function ChantierTooltip({ chantier: c, x, y, fromChantier }: Props) {
+export default function ChantierTooltip({ chantier: c, x, y, fromChantier, conflictingWith = [] }: Props) {
   const ref  = useRef<HTMLDivElement>(null);
   const meta = CHANTIER_TYPES[c.type];
   const isPotentiel = c.status === 'potentiel';
@@ -289,6 +291,28 @@ export default function ChantierTooltip({ chantier: c, x, y, fromChantier }: Pro
             {c.transfertTracteur && (!c.latitude || !c.longitude) && (
               <div className="mt-1 text-[10px] text-orange-400 italic">
                 🚜 Transfert tracteur — localisation manquante pour calculer le temps
+              </div>
+            )}
+
+            {/* Conflict section */}
+            {conflictingWith.length > 0 && (
+              <div className="mt-1.5 border-t border-red-100 pt-1.5 space-y-1">
+                <div className="flex items-center gap-1 text-[10px] text-red-600 font-semibold">
+                  <TriangleAlert size={10}/> Conflit
+                </div>
+                {conflictingWith.map(({ chantier: other, reasons }) => (
+                  <div key={other.id}>
+                    <div className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: CHANTIER_TYPES[other.type].color }} />
+                      <span className="text-[10px] text-slate-600 font-medium truncate">{other.nom}</span>
+                    </div>
+                    <div className="pl-2.5 flex flex-wrap gap-0.5 mt-0.5">
+                      {reasons.map((r, i) => (
+                        <span key={i} className="text-[9px] px-1 py-0.5 bg-red-50 text-red-500 rounded">{r}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

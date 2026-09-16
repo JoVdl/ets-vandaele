@@ -1,19 +1,21 @@
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Calendar, MapPin, Euro, Users, User, Lock, Pencil, CheckCheck, CircleAlert, HardHat } from 'lucide-react';
+import { Calendar, MapPin, Euro, Users, User, Lock, Pencil, CheckCheck, CircleAlert, HardHat, TriangleAlert } from 'lucide-react';
 import cenLogoUrl from '../assets/cen-logo.png';
 import type { Chantier } from '../types';
 import { CHANTIER_TYPES } from '../lib/constants';
 import { countWorkingDays, caAnnuel } from '../lib/workingDays';
 import { getEffectiveEtat, ETAT_LABELS, ETAT_COLORS } from '../lib/etat';
+import type { ConflictEntry } from './GanttChart';
 
 interface Props {
   chantier: Chantier;
+  conflictingWith?: ConflictEntry[];
   onClose: () => void;
   onEdit: () => void;
 }
 
-export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) {
+export default function MobilePeekCard({ chantier: c, conflictingWith = [], onClose, onEdit }: Props) {
   const meta        = CHANTIER_TYPES[c.type];
   const isPotentiel = c.status === 'potentiel';
   const isArchived  = c.status === 'refuse' || c.status === 'annule';
@@ -190,6 +192,28 @@ export default function MobilePeekCard({ chantier: c, onClose, onEdit }: Props) 
           {c.periodePreconiseeDebut && c.periodePreconiseeFin && (
             <div className="text-[10px] text-slate-400 border-t border-slate-50 pt-1 mb-2">
               Préconisée : {format(new Date(c.periodePreconiseeDebut), 'd MMM', { locale: fr })} → {format(new Date(c.periodePreconiseeFin), 'd MMM yyyy', { locale: fr })}
+            </div>
+          )}
+
+          {/* Conflict section */}
+          {conflictingWith.length > 0 && (
+            <div className="mb-3 rounded-xl bg-red-50 border border-red-100 p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-red-600 font-semibold text-[11px]">
+                <TriangleAlert size={13}/> Conflit de ressources
+              </div>
+              {conflictingWith.map(({ chantier: other, reasons }) => (
+                <div key={other.id} className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CHANTIER_TYPES[other.type].color }} />
+                    <span className="text-xs font-medium text-slate-700 truncate">{other.nom}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 pl-3.5">
+                    {reasons.map((r, i) => (
+                      <span key={i} className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full">{r}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

@@ -10,7 +10,30 @@ import ChantierBlock from './ChantierBlock';
 import ChantierTooltip from './ChantierTooltip';
 import MobilePeekCard from './MobilePeekCard';
 import { isWorkingDay, findGaps, nextWorkingDay, prevWorkingDay } from '../lib/workingDays';
-import { resourceConflict } from '../lib/reorganize';
+
+export interface ConflictEntry { chantier: Chantier; reasons: string[] }
+
+function conflictReasons(a: Chantier, b: Chantier): string[] {
+  const r: string[] = [];
+  if ((a.nombrePersonnes ?? 1) + (b.nombrePersonnes ?? 1) > 2)
+    r.push('Effectif total > 2 personnes');
+  if ((a.patronRequis !== false) && (b.patronRequis !== false))
+    r.push('Patron requis sur les deux');
+  if (a.chenillette && b.chenillette) r.push('Chenillette');
+  if (a.bateauFaucardeur && b.bateauFaucardeur) r.push('Bateau faucardeur');
+  if (a.drague && b.drague) r.push('Drague');
+  if (a.telesco && b.telesco) r.push('Télesco');
+  if (a.pelles?.length && b.pelles?.length) {
+    const aSet = new Set(a.pelles);
+    const common = b.pelles.filter(p => aSet.has(p));
+    if (common.length) r.push(`Pelle : ${common.join(', ')}`);
+  }
+  if ((a.bulls ?? 0) > 0 && (b.bulls ?? 0) > 0) r.push('Bull');
+  if ((a.dumpers ?? 0) > 0 && (b.dumpers ?? 0) > 0) r.push('Dumper');
+  if ((a.tractoBennes ?? 0) > 0 && (b.tractoBennes ?? 0) > 0) r.push('Tracto-benne');
+  if ((a.rouleaux ?? 0) > 0 && (b.rouleaux ?? 0) > 0) r.push('Rouleau');
+  return r;
+}
 import { getEffectiveEtat } from '../lib/etat';
 
 interface Props {
@@ -139,21 +162,26 @@ export default function GanttChart({
   );
 
   // ── Conflict detection ────────────────────────────────────────────────────
-  const conflictIds = useMemo(() => {
-    const ids = new Set<string>();
+  const conflictMap = useMemo(() => {
+    const map = new Map<string, ConflictEntry[]>();
     const active = chantiers.filter(c =>
       c.status !== 'refuse' && c.status !== 'annule' && getEffectiveEtat(c) !== 'termine'
     );
     for (let i = 0; i < active.length; i++) {
       for (let j = i + 1; j < active.length; j++) {
         const a = active[i], b = active[j];
-        if (a.dateDebut <= b.dateFin && a.dateFin >= b.dateDebut && resourceConflict(a, b)) {
-          ids.add(a.id);
-          ids.add(b.id);
+        if (a.dateDebut <= b.dateFin && a.dateFin >= b.dateDebut) {
+          const reasons = conflictReasons(a, b);
+          if (reasons.length) {
+            if (!map.has(a.id)) map.set(a.id, []);
+            if (!map.has(b.id)) map.set(b.id, []);
+            map.get(a.id)!.push({ chantier: b, reasons });
+            map.get(b.id)!.push({ chantier: a, reasons });
+          }
         }
       }
     }
-    return ids;
+    return map;
   }, [chantiers]);
 
   // ── Availability gaps ─────────────────────────────────────────────────────
@@ -417,7 +445,7 @@ export default function GanttChart({
                       <p className={`text-xs font-semibold truncate ${isPotentiel ? 'text-slate-400' : 'text-slate-700'}`}>
                         {c.nom}
                       </p>
-                      {conflictIds.has(c.id) && (
+                      {conflictMap.has(c.id) && (
                         <span title="Conflit de ressources" className="flex-shrink-0 text-red-500 text-[10px] font-bold">!</span>
                       )}
                       {outOfPrecon && (
@@ -474,7 +502,7 @@ export default function GanttChart({
                       onMoveEnd={handleMoveEnd} onResizeEnd={handleResizeEnd}
                       onClick={handleChantierTap} outOfPreconisee={outOfPrecon}
                       onHover={handleHover} onUnhover={handleUnhover}
-                      isConflicting={conflictIds.has(c.id)}
+                      isConflicting={conflictMap.has(c.id)}
                     />
                   )}
                 </div>
@@ -505,13 +533,14 @@ export default function GanttChart({
 
       {/* Hover tooltip (desktop) */}
       {tooltip && (
-        <ChantierTooltip chantier={tooltip.chantier} x={tooltip.x} y={tooltip.y} fromChantier={tooltipFromChantier} />
+        <ChantierTooltip chantier={tooltip.chantier} x={tooltip.x} y={tooltip.y} fromChantier={tooltipFromChantier} conflictingWith={conflictMap.get(tooltip.chantier.id) ?? []} />
       )}
 
       {/* Mobile peek card */}
       {mobilePeek && (
         <MobilePeekCard
           chantier={mobilePeek}
+          conflictingWith={conflictMap.get(mobilePeek.id) ?? []}
           onClose={() => setMobilePeek(null)}
           onEdit={() => { setMobilePeek(null); onClickChantier(mobilePeek); }}
         />
