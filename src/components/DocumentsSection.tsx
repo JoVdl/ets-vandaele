@@ -4,6 +4,7 @@ import { updateDoc, doc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { uploadChantierDocument, deleteChantierDocument } from '../lib/storage';
 import type { ChantierDocument } from '../types';
+import DocumentViewer from './DocumentViewer';
 
 interface Props {
   chantierId: string;
@@ -37,6 +38,7 @@ export default function DocumentsSection({ chantierId, documents, readOnly = fal
   const [uploadPct, setUploadPct] = useState(0);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<ChantierDocument | null>(null);
 
   useEffect(() => { setDocs(documents); }, [documents]);
 
@@ -118,16 +120,19 @@ export default function DocumentsSection({ chantierId, documents, readOnly = fal
               key={d.id}
               className="group flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
               <DocIcon contentType={d.contentType}/>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-slate-700 truncate">{d.name}</p>
+              <button
+                type="button"
+                onClick={() => setViewing(d)}
+                className="flex-1 min-w-0 text-left">
+                <p className="text-xs font-medium text-slate-700 truncate hover:text-blue-600 transition-colors">{d.name}</p>
                 <p className="text-[10px] text-slate-400">{formatSize(d.sizeBytes)}</p>
-              </div>
+              </button>
               <a
                 href={d.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-500 hover:text-blue-700 flex-shrink-0 p-0.5"
-                title="Ouvrir">
+                className="text-slate-300 hover:text-blue-500 flex-shrink-0 p-0.5 opacity-0 group-hover:opacity-100 transition-all"
+                title="Ouvrir dans un nouvel onglet">
                 <ExternalLink size={13}/>
               </a>
               {!readOnly && (
@@ -146,6 +151,10 @@ export default function DocumentsSection({ chantierId, documents, readOnly = fal
             </div>
           ))}
         </div>
+      )}
+
+      {viewing && (
+        <DocumentViewer doc={viewing} onClose={() => setViewing(null)}/>
       )}
     </div>
   );
