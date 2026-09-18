@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Migration MAREAM</title>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js';
+import { getFirestore, collection, getDocs, updateDoc, doc } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDt4gTL-KqWyBPC2777wH4s-t6cAmGoEwY",
+  authDomain: "ets-vandaele.firebaseapp.com",
+  projectId: "ets-vandaele",
+  storageBucket: "ets-vandaele.firebasestorage.app",
+  messagingSenderId: "1027752944412",
+  appId: "1:1027752944412:web:8242cf5452db79bac810d9",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const DRIVE_VIEW = id => `https://drive.google.com/file/d/${id}/view`;
+const now = new Date().toISOString();
+
+const COMMON_DOCS = [
+  { id: 'drive-cdc', name: 'CDC_GaG_MAREAM_Phase3_2026.pdf', url: DRIVE_VIEW('1VtNAk6ZUIV0R9-pPAHxUw3ykA50xJvJF'), contentType: 'application/pdf', sizeBytes: 25372760, storagePath: '', uploadedAt: now },
+  { id: 'drive-cal', name: 'MAREAM_PHASE_3_CALENDRIER_VISITES.pdf', url: DRIVE_VIEW('13JVNr_V7H6rFgtg_r3ir2Bp1AMpeqzft'), contentType: 'application/pdf', sizeBytes: 422308, storagePath: '', uploadedAt: now },
+];
+
+const PPR_FILES = [
+  { keywords: ['savignies'],             name: 'R26_703-713_Savignies_PPR.docx',              driveId: '1WvqobruMegK453NEQILwfhkSUXPBaMWV', sizeBytes: 359501 },
+  { keywords: ['mortefontaine'],         name: 'R26_714-716_Mortefontaine_PPR.docx',           driveId: '19tfbxiiA-TKWWbbYjqhZYABY3BnmInat', sizeBytes: 186951 },
+  { keywords: ['villers', 'auchy'],      name: 'R26_700-701_Villers-sur-Auchy_PPR.docx',       driveId: '1zgQQQkjGvabxHc0hkztTyWhpyGLcOyt_', sizeBytes: 253979 },
+  { keywords: ['saint', 'germer'],       name: 'R26_721-722_Saint-Germer_PPR.docx',            driveId: '1Q5XeVBvokyh6FvGqiiP7czyPMiSzqZUj', sizeBytes: 359231 },
+  { keywords: ['bonneuil'],              name: 'R26_720-723_Ru-de-Bonneuil_PPR.docx',          driveId: '1TOMv9QRsVlWrVkkCDTLwyDQyx65XoHrf', sizeBytes: 186945 },
+  { keywords: ['chermizy'],              name: 'R26_718_Chermizy-Ailles_PPR.docx',             driveId: '1M1M8E77H8UNTW3Lo-vYrpcsf-PYA7Wx8', sizeBytes: 173211 },
+  { keywords: ['lucy', 'platri'],        name: 'R26_603-604_Lucy-Folie-Platrière_PPR.docx', driveId: '1IjDQbEuvkeQiYTPWzCMUaxOfNa4ugy-_', sizeBytes: 172529 },
+  { keywords: ['lucy', 'bouresches'],    name: 'R26_607-608_Lucy-Bouresches_PPR.docx',         driveId: '1_zCcQd4MXCUa0UCyDoc44_O2hvBaH_FO', sizeBytes: 172779 },
+  { keywords: ['beuvardes'],             name: 'R26_596_Beuvardes_PPR.docx',                   driveId: '1anZSbcxR-JoRBXNjyRXkMHFyqjJ9RS6w', sizeBytes: 172204 },
+  { keywords: ['nouvion'],               name: 'R26_585_Nouvion-le-Vineux_PPR.docx',           driveId: '1nhbUXlKPZxmzgSV7wZbEOTUcBSDesQ9A', sizeBytes: 173047 },
+  { keywords: ['domptin'],               name: 'R26_591_Domptin-Folie-Guillomets_PPR.docx',    driveId: '1svsobY1SG7k8JnBNMXviveaijZn9oRV-', sizeBytes: 172772 },
+];
+
+function norm(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function findPPR(nom, lieu, client) {
+  const text = norm(`${nom} ${lieu||''} ${client||''}`);
+  return PPR_FILES.find(p => p.keywords.every(kw => text.includes(norm(kw))));
+}
+
+function log(msg, cls = '') {
+  const el = document.getElementById('log');
+  el.innerHTML += `<div class="${cls}">${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+window.runMigration = async () => {
+  document.getElementById('btn').disabled = true;
+  log('Lecture des chantiers Firestore...');
+  try {
+    const snap = await getDocs(collection(db, 'chantiers'));
+    const all = snap.docs.map(d => ({ _id: d.id, ...d.data() }));
+    const maream = all.filter(c => norm(`${c.nom} ${c.client||''}`).includes('maream'));
+    log(`${maream.length} chantiers MAREAM trouvés.`);
+
+    let updated = 0;
+    for (const c of maream) {
+      const ppr = findPPR(c.nom, c.lieu, c.client);
+      const driveDocs = [...COMMON_DOCS];
+      if (ppr) {
+        driveDocs.push({ id: `drive-ppr-${ppr.driveId}`, name: ppr.name, url: DRIVE_VIEW(ppr.driveId),
+          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          sizeBytes: ppr.sizeBytes, storagePath: '', uploadedAt: now });
+      }
+      // Keep existing Firebase Storage docs; replace/add drive docs
+      const storageDocs = (c.documents || []).filter(d => d.storagePath);
+      const driveIds = new Set(driveDocs.map(d => d.id));
+      const keptDriveDocs = (c.documents || []).filter(d => !d.storagePath && !driveIds.has(d.id));
+      const finalDocs = [...storageDocs, ...driveDocs, ...keptDriveDocs];
+
+      await updateDoc(doc(db, 'chantiers', c._id), { documents: finalDocs });
+      log(`✓ <b>${c.nom}</b> — PPR: ${ppr ? ppr.name : '<span style="color:#f97316">AUCUN MATCH</span>'} (${finalDocs.length} docs)`, 'ok');
+      updated++;
+    }
+
+    log(`<br><b>Migration terminée — ${updated} chantiers mis à jour.</b>`, 'done');
+  } catch(e) {
+    log(`Erreur : ${e.message}`, 'err');
+    document.getElementById('btn').disabled = false;
+  }
+};
+</script>
+<style>
+  body { font-family: system-ui; padding: 2rem; background: #f8fafc; }
+  h1 { font-size: 1.2rem; margin-bottom: 1rem; }
+  button { padding: .6rem 1.4rem; background: #2563eb; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  #log { margin-top: 1.2rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; min-height: 200px; font-family: monospace; font-size: .85rem; overflow-y: auto; max-height: 60vh; white-space: pre-wrap; }
+  .ok { color: #16a34a; } .err { color: #dc2626; } .done { color: #2563eb; }
+</style>
+</head>
+<body>
+  <h1>Migration MAREAM — Liaison documents Drive → Firestore</h1>
+  <p style="font-size:.9rem;color:#64748b;margin-bottom:1rem">
+    Ce script attache le CDC, le calendrier des visites et le PPR correspondant à chaque chantier MAREAM.
+    Les liens pointent directement vers Google Drive.
+  </p>
+  <button id="btn" onclick="runMigration()">Lancer la migration</button>
+  <div id="log">En attente…</div>
+</body>
+</html>

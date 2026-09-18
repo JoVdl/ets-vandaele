@@ -34,6 +34,7 @@ export async function uploadChantierDocument(
 }
 
 export async function deleteChantierDocument(d: ChantierDocument): Promise<void> {
+  if (!d.storagePath) return; // External link (e.g. Google Drive) — nothing in Storage
   try {
     await deleteObject(ref(storage, d.storagePath));
   } catch {
