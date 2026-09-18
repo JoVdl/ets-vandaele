@@ -16,6 +16,16 @@ export type ChantierStatus = 'potentiel' | 'confirme' | 'refuse' | 'annule';
 export type ChantierEtat = 'a_venir' | 'en_cours' | 'termine';
 export type TypePelle = '1.5t' | '3t' | '8t' | '16t';
 
+export interface ChantierDocument {
+  id: string;
+  name: string;
+  storagePath: string;
+  url: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+}
+
 export interface Chantier {
   id: string;
   nom: string;
@@ -92,6 +102,8 @@ export interface Chantier {
   // Curage aspiration
   pellePrepaBassin?: '8t' | '16t';
   nombreJoursPrepa?: number;
+
+  documents?: ChantierDocument[];
 
   createdAt: string;
   updatedAt: string;

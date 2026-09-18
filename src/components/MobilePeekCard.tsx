@@ -7,6 +7,7 @@ import { CHANTIER_TYPES } from '../lib/constants';
 import { countWorkingDays, caAnnuel } from '../lib/workingDays';
 import { getEffectiveEtat, ETAT_LABELS, ETAT_COLORS } from '../lib/etat';
 import type { ConflictEntry } from './GanttChart';
+import DocumentsSection from './DocumentsSection';
 
 interface Props {
   chantier: Chantier;
@@ -192,6 +193,17 @@ export default function MobilePeekCard({ chantier: c, conflictingWith = [], onCl
           {c.periodePreconiseeDebut && c.periodePreconiseeFin && (
             <div className="text-[10px] text-slate-400 border-t border-slate-50 pt-1 mb-2">
               Préconisée : {format(new Date(c.periodePreconiseeDebut), 'd MMM', { locale: fr })} → {format(new Date(c.periodePreconiseeFin), 'd MMM yyyy', { locale: fr })}
+            </div>
+          )}
+
+          {/* Documents */}
+          {(c.documents?.length ?? 0) > 0 && (
+            <div className="mb-3 border-t border-slate-50 pt-3">
+              <DocumentsSection
+                chantierId={c.id}
+                documents={c.documents ?? []}
+                readOnly
+              />
             </div>
           )}
 

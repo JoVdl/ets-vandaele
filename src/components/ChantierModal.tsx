@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
-import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen, HardHat, Copy, Receipt, LocateFixed } from 'lucide-react';
+import { X, Trash2, CheckCircle, MapPin, Loader2, AlertTriangle, Lock, LockOpen, HardHat, Copy, Receipt, LocateFixed, Paperclip } from 'lucide-react';
 import type { Chantier, ChantierType, ChantierStatus, ChantierEtat, TypePelle } from '../types';
 import { ETAT_LABELS } from '../lib/etat';
 import { CHANTIER_TYPES } from '../lib/constants';
@@ -8,6 +8,7 @@ import { format, addDays, addYears } from 'date-fns';
 import { geocode, geocodeSearch, extractLocation, type GeoResult } from '../lib/geocoder';
 import { nextWorkingDay, prevWorkingDay, addWorkingDays, countWorkingDays } from '../lib/workingDays';
 import { getTransfertInfo } from '../lib/geo';
+import DocumentsSection from './DocumentsSection';
 
 interface Props {
   isOpen: boolean;
@@ -757,6 +758,21 @@ export default function ChantierModal({ isOpen, onClose, chantier, defaultDateDe
                 className="mt-0.5 w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </label>
           </form>
+
+          {/* Documents */}
+          <div className="px-4 pb-3 sm:px-6 border-t border-slate-100 pt-4">
+            {chantier ? (
+              <DocumentsSection
+                chantierId={chantier.id}
+                documents={chantier.documents ?? []}
+              />
+            ) : (
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <Paperclip size={11}/>
+                <span>Documents disponibles après la première sauvegarde</span>
+              </div>
+            )}
+          </div>
 
           {/* Bannière pluriannuelle — visible si contrat > 1 an et chantier existant */}
           {chantier && (form.nombreAnnees ?? 1) > 1 && onDuplicate && (
