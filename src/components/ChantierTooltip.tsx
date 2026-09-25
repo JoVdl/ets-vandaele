@@ -294,13 +294,13 @@ export default function ChantierTooltip({ chantier: c, x, y, fromChantier, confl
               </div>
             )}
 
-            {/* Conflict section */}
-            {conflictingWith.length > 0 && (
+            {/* Hard conflicts */}
+            {conflictingWith.some(e => e.reasons.length > 0) && (
               <div className="mt-1.5 border-t border-red-100 pt-1.5 space-y-1">
                 <div className="flex items-center gap-1 text-[10px] text-red-600 font-semibold">
-                  <TriangleAlert size={10}/> Conflit
+                  <TriangleAlert size={10}/> Conflit de ressources
                 </div>
-                {conflictingWith.map(({ chantier: other, reasons }) => (
+                {conflictingWith.filter(e => e.reasons.length > 0).map(({ chantier: other, reasons }) => (
                   <div key={other.id}>
                     <div className="flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: CHANTIER_TYPES[other.type].color }} />
@@ -311,6 +311,21 @@ export default function ChantierTooltip({ chantier: c, x, y, fromChantier, confl
                         <span key={i} className="text-[9px] px-1 py-0.5 bg-red-50 text-red-500 rounded">{r}</span>
                       ))}
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Extra person needed */}
+            {conflictingWith.some(e => e.extraPerson && !e.reasons.length) && (
+              <div className="mt-1.5 border-t border-orange-100 pt-1.5 space-y-1">
+                <div className="flex items-center gap-1 text-[10px] text-orange-600 font-semibold">
+                  <Users size={10}/> Personne supplémentaire nécessaire
+                </div>
+                {conflictingWith.filter(e => e.extraPerson && !e.reasons.length).map(({ chantier: other }) => (
+                  <div key={other.id} className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: CHANTIER_TYPES[other.type].color }} />
+                    <span className="text-[10px] text-slate-500 truncate">En parallèle avec {other.nom}</span>
                   </div>
                 ))}
               </div>

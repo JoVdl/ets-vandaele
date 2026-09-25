@@ -38,8 +38,8 @@ function equipmentSynergy(a: Chantier, b: Chantier): number {
  * drague, telesco, each pelle type, bull, dumper, tractoBenne, rouleau).
  */
 export function resourceConflict(a: Chantier, b: Chantier): boolean {
-  if ((a.nombrePersonnes ?? 1) + (b.nombrePersonnes ?? 1) > 2) return true;
-  // Patron conflict: if both chantiers require the patron (default = true), they can't run simultaneously
+  // People overflow is a soft constraint (handled with "extra person needed" indicator, not scheduling block)
+  // Patron conflict: if both chantiers require the patron, they can't run simultaneously
   if ((a.patronRequis !== false) && (b.patronRequis !== false)) return true;
   if (a.chenillette && b.chenillette) return true;
   if (a.bateauFaucardeur && b.bateauFaucardeur) return true;

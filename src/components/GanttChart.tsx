@@ -11,28 +11,32 @@ import ChantierTooltip from './ChantierTooltip';
 import MobilePeekCard from './MobilePeekCard';
 import { isWorkingDay, findGaps, nextWorkingDay, prevWorkingDay } from '../lib/workingDays';
 
-export interface ConflictEntry { chantier: Chantier; reasons: string[] }
+export interface ConflictEntry {
+  chantier: Chantier;
+  reasons: string[];    // hard conflicts (equipment/patron) — shown in red
+  extraPerson: boolean; // soft: would need an extra person — shown in orange
+}
 
-function conflictReasons(a: Chantier, b: Chantier): string[] {
-  const r: string[] = [];
-  if ((a.nombrePersonnes ?? 1) + (b.nombrePersonnes ?? 1) > 2)
-    r.push('Effectif total > 2 personnes');
+function buildConflictEntry(a: Chantier, b: Chantier): Omit<ConflictEntry, 'chantier'> | null {
+  const reasons: string[] = [];
+  const extraPerson = (a.nombrePersonnes ?? 1) + (b.nombrePersonnes ?? 1) > 2;
   if ((a.patronRequis !== false) && (b.patronRequis !== false))
-    r.push('Patron requis sur les deux');
-  if (a.chenillette && b.chenillette) r.push('Chenillette');
-  if (a.bateauFaucardeur && b.bateauFaucardeur) r.push('Bateau faucardeur');
-  if (a.drague && b.drague) r.push('Drague');
-  if (a.telesco && b.telesco) r.push('Télesco');
+    reasons.push('Patron requis sur les deux');
+  if (a.chenillette && b.chenillette) reasons.push('Chenillette');
+  if (a.bateauFaucardeur && b.bateauFaucardeur) reasons.push('Bateau faucardeur');
+  if (a.drague && b.drague) reasons.push('Drague');
+  if (a.telesco && b.telesco) reasons.push('Télesco');
   if (a.pelles?.length && b.pelles?.length) {
     const aSet = new Set(a.pelles);
     const common = b.pelles.filter(p => aSet.has(p));
-    if (common.length) r.push(`Pelle : ${common.join(', ')}`);
+    if (common.length) reasons.push(`Pelle : ${common.join(', ')}`);
   }
-  if ((a.bulls ?? 0) > 0 && (b.bulls ?? 0) > 0) r.push('Bull');
-  if ((a.dumpers ?? 0) > 0 && (b.dumpers ?? 0) > 0) r.push('Dumper');
-  if ((a.tractoBennes ?? 0) > 0 && (b.tractoBennes ?? 0) > 0) r.push('Tracto-benne');
-  if ((a.rouleaux ?? 0) > 0 && (b.rouleaux ?? 0) > 0) r.push('Rouleau');
-  return r;
+  if ((a.bulls ?? 0) > 0 && (b.bulls ?? 0) > 0) reasons.push('Bull');
+  if ((a.dumpers ?? 0) > 0 && (b.dumpers ?? 0) > 0) reasons.push('Dumper');
+  if ((a.tractoBennes ?? 0) > 0 && (b.tractoBennes ?? 0) > 0) reasons.push('Tracto-benne');
+  if ((a.rouleaux ?? 0) > 0 && (b.rouleaux ?? 0) > 0) reasons.push('Rouleau');
+  if (!reasons.length && !extraPerson) return null;
+  return { reasons, extraPerson };
 }
 import { getEffectiveEtat } from '../lib/etat';
 
@@ -171,18 +175,22 @@ export default function GanttChart({
       for (let j = i + 1; j < active.length; j++) {
         const a = active[i], b = active[j];
         if (a.dateDebut <= b.dateFin && a.dateFin >= b.dateDebut) {
-          const reasons = conflictReasons(a, b);
-          if (reasons.length) {
+          const entry = buildConflictEntry(a, b);
+          if (entry) {
             if (!map.has(a.id)) map.set(a.id, []);
             if (!map.has(b.id)) map.set(b.id, []);
-            map.get(a.id)!.push({ chantier: b, reasons });
-            map.get(b.id)!.push({ chantier: a, reasons });
+            map.get(a.id)!.push({ chantier: b, ...entry });
+            map.get(b.id)!.push({ chantier: a, ...entry });
           }
         }
       }
     }
     return map;
   }, [chantiers]);
+
+  // Hard conflict = at least one entry with equipment/patron reasons (not just extra person)
+  const hasHardConflict = (id: string) =>
+    (conflictMap.get(id) ?? []).some(e => e.reasons.length > 0);
 
   // ── Availability gaps ─────────────────────────────────────────────────────
   const gaps = useMemo(() => {
@@ -445,8 +453,11 @@ export default function GanttChart({
                       <p className={`text-xs font-semibold truncate ${isPotentiel ? 'text-slate-400' : 'text-slate-700'}`}>
                         {c.nom}
                       </p>
-                      {conflictMap.has(c.id) && (
+                      {hasHardConflict(c.id) && (
                         <span title="Conflit de ressources" className="flex-shrink-0 text-red-500 text-[10px] font-bold">!</span>
+                      )}
+                      {!hasHardConflict(c.id) && (conflictMap.get(c.id) ?? []).some(e => e.extraPerson) && (
+                        <span title="Besoin d'une personne supplémentaire" className="flex-shrink-0 text-orange-400 text-[10px] font-bold">👤</span>
                       )}
                       {outOfPrecon && (
                         <span title="Hors période préconisée" className="flex-shrink-0 text-orange-400">⚠</span>
@@ -502,7 +513,8 @@ export default function GanttChart({
                       onMoveEnd={handleMoveEnd} onResizeEnd={handleResizeEnd}
                       onClick={handleChantierTap} outOfPreconisee={outOfPrecon}
                       onHover={handleHover} onUnhover={handleUnhover}
-                      isConflicting={conflictMap.has(c.id)}
+                      isConflicting={hasHardConflict(c.id)}
+                      needsExtraPerson={!hasHardConflict(c.id) && (conflictMap.get(c.id) ?? []).some(e => e.extraPerson)}
                     />
                   )}
                 </div>

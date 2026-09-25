@@ -22,6 +22,7 @@ interface Props {
   onUnhover?: () => void;
   outOfPreconisee?: boolean;
   isConflicting?: boolean;
+  needsExtraPerson?: boolean;
 }
 
 interface EquipChip {
@@ -59,7 +60,7 @@ function buildEquipChips(c: Chantier): EquipChip[] {
 }
 
 export default function ChantierBlock({
-  chantier, left, width, dayWidth, onMoveEnd, onResizeEnd, onClick, onHover, onUnhover, outOfPreconisee, isConflicting,
+  chantier, left, width, dayWidth, onMoveEnd, onResizeEnd, onClick, onHover, onUnhover, outOfPreconisee, isConflicting, needsExtraPerson,
 }: Props) {
   const meta        = CHANTIER_TYPES[chantier.type];
   const isPotentiel = chantier.status === 'potentiel';
@@ -156,9 +157,9 @@ export default function ChantierBlock({
         width: Math.max(width, 4),
         height: 'calc(100% - 8px)',
         backgroundColor: bg,
-        borderColor: isArchived ? '#cbd5e1' : isConflicting ? '#ef4444' : outOfPreconisee ? '#F97316' : meta.color,
+        borderColor: isArchived ? '#cbd5e1' : isConflicting ? '#ef4444' : needsExtraPerson ? '#f97316' : outOfPreconisee ? '#F97316' : meta.color,
         borderStyle: isPotentiel || isArchived ? 'dashed' : 'solid',
-        borderWidth: isConflicting ? 2 : outOfPreconisee ? 2 : 1.5,
+        borderWidth: isConflicting || needsExtraPerson ? 2 : outOfPreconisee ? 2 : 1.5,
         opacity: alpha,
         zIndex: 10,
         boxShadow: isPotentiel || isArchived ? 'none' : '0 1px 3px rgba(0,0,0,0.18)',
@@ -190,10 +191,17 @@ export default function ChantierBlock({
           </div>
         )}
 
-        {/* Conflict warning */}
+        {/* Hard conflict warning (equipment/patron) */}
         {isConflicting && showText && (
           <div className="flex-shrink-0" title="Conflit de ressources (patron ou équipement) avec un autre chantier">
             <ShieldAlert size={10} style={{ color: isPotentiel ? '#ef4444' : '#fca5a5' }} />
+          </div>
+        )}
+
+        {/* Soft conflict: extra person needed */}
+        {needsExtraPerson && showText && (
+          <div className="flex-shrink-0" title="Besoin d'une personne supplémentaire en parallèle">
+            <Users size={10} style={{ color: isPotentiel ? '#f97316' : '#fed7aa' }} />
           </div>
         )}
 

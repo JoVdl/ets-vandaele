@@ -207,13 +207,13 @@ export default function MobilePeekCard({ chantier: c, conflictingWith = [], onCl
             </div>
           )}
 
-          {/* Conflict section */}
-          {conflictingWith.length > 0 && (
+          {/* Hard conflicts (equipment/patron) */}
+          {conflictingWith.some(e => e.reasons.length > 0) && (
             <div className="mb-3 rounded-xl bg-red-50 border border-red-100 p-3 space-y-2">
               <div className="flex items-center gap-1.5 text-red-600 font-semibold text-[11px]">
                 <TriangleAlert size={13}/> Conflit de ressources
               </div>
-              {conflictingWith.map(({ chantier: other, reasons }) => (
+              {conflictingWith.filter(e => e.reasons.length > 0).map(({ chantier: other, reasons }) => (
                 <div key={other.id} className="space-y-1">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CHANTIER_TYPES[other.type].color }} />
@@ -224,6 +224,21 @@ export default function MobilePeekCard({ chantier: c, conflictingWith = [], onCl
                       <span key={i} className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded-full">{r}</span>
                     ))}
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Soft conflicts: extra person needed */}
+          {conflictingWith.some(e => e.extraPerson && !e.reasons.length) && (
+            <div className="mb-3 rounded-xl bg-orange-50 border border-orange-100 p-3 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-orange-600 font-semibold text-[11px]">
+                <Users size={13}/> Besoin d'une personne supplémentaire
+              </div>
+              {conflictingWith.filter(e => e.extraPerson && !e.reasons.length).map(({ chantier: other }) => (
+                <div key={other.id} className="flex items-center gap-1.5 pl-0.5">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: CHANTIER_TYPES[other.type].color }} />
+                  <span className="text-xs text-slate-600 truncate">En parallèle avec <b>{other.nom}</b></span>
                 </div>
               ))}
             </div>
