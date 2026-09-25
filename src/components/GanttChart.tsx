@@ -156,14 +156,8 @@ export default function GanttChart({
   const denseGrid    = dayWidth < 8;
 
   // ── Sorted rows ───────────────────────────────────────────────────────────
-  // Sort by priority first (1 = urgent comes first), then by start date
   const sorted = useMemo(
-    () => [...chantiers].sort((a, b) => {
-      const pa = a.priorite ?? 3;
-      const pb = b.priorite ?? 3;
-      if (pa !== pb) return pa - pb;
-      return a.dateDebut.localeCompare(b.dateDebut);
-    }),
+    () => [...chantiers].sort((a, b) => a.dateDebut.localeCompare(b.dateDebut)),
     [chantiers]
   );
 
