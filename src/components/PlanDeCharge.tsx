@@ -178,7 +178,10 @@ export default function PlanDeCharge() {
       // Default "all" hides archived unless explicitly selected
       if (c.status === 'refuse' || c.status === 'annule') return false;
     }
-    return new Date(c.dateDebut) <= periodEnd && new Date(c.dateFin) >= periodStart;
+    // Include chantiers overlapping the period, or that ended within the last 3 months
+    // so recently-finished chantiers remain visible when navigating forward
+    const lookbackStart = addMonths(periodStart, -3);
+    return new Date(c.dateDebut) <= periodEnd && new Date(c.dateFin) >= lookbackStart;
   });
 
   // ── Stats — scoped to the current view period ─────────────────────────────
