@@ -129,28 +129,27 @@ function orderByProximity(
     return 3;
   };
 
-  // Sort: EDF (periodePreconiseeFin, earliest first) > chanPrio > window width > type priority
-  // Chantiers without periodePreconiseeFin go after all constrained ones.
-  // Within the same deadline, explicit user priority (1=urgent) beats scheduling heuristics.
+  // Sort: chanPrio (1=urgent first) > EDF (earliest deadline first) > window width > type priority
+  // User-set priority is the primary driver; deadlines break ties within same priority.
   const sorted = [...group].sort((a, b) => {
+    const pa = chanPrio(a), pb = chanPrio(b);
+    if (pa !== pb) return pa - pb;
+    // Same priority: earliest deadline first; no deadline goes last
     const da = a.periodePreconiseeFin, db = b.periodePreconiseeFin;
     if (da && !db) return -1;
     if (!da && db) return  1;
     if (da && db && da !== db) return da.localeCompare(db);
-    // Same deadline (or both unconstrained): user priority first
-    const pa = chanPrio(a), pb = chanPrio(b);
-    if (pa !== pb) return pa - pb;
-    // Same priority: shorter window first (more rigid scheduling constraint)
+    // Same deadline: shorter window (more constrained) first
     const wa = windowDays(a), wb = windowDays(b);
     if (Math.abs(wa - wb) > 1) return wa - wb;
     return typePrio(a) - typePrio(b);
   });
 
-  // Group key: deadline month + chanPrio + window-tier + type-prio
+  // Group key: chanPrio + deadline month + window-tier + type-prio
   const byGroup = new Map<string, Chantier[]>();
   for (const c of sorted) {
     const deadlineMonth = c.periodePreconiseeFin?.substring(0, 7) ?? '9999-99';
-    const key = `${deadlineMonth}_${chanPrio(c)}_${windowTier(c)}_${String(typePrio(c)).padStart(4, '0')}`;
+    const key = `${chanPrio(c)}_${deadlineMonth}_${windowTier(c)}_${String(typePrio(c)).padStart(4, '0')}`;
     if (!byGroup.has(key)) byGroup.set(key, []);
     byGroup.get(key)!.push(c);
   }
