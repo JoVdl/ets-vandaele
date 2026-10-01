@@ -19,6 +19,10 @@ export interface SuiviSession {
   distanceM: number;
   vitesseMoyenneKmh: number;
   rendementM2h: number;        // m²/h
+  // Dragage aspiratrice
+  volumeM3?: number;           // volume dragué (surfaceCoveredM2 × profondeur)
+  debitM3h?: number;           // débit de dragage en m³/h
+  profondeurDragageM?: number; // profondeur cible utilisée pour le calcul
   notes?: string;
   pendingSync?: boolean;       // stored offline, not yet in Firestore
 }

@@ -300,6 +300,11 @@ export default function SuiviView({ role, onLogout }: Props) {
   const elapsedH  = elapsed / 3600;
   const rendement = elapsedH > 0 && areaM > 0 ? areaM / elapsedH : 0;
 
+  // ── Dragage: volume and débit ────────────────────────────────────────────
+  const profondeur = machineParams.profondeurDragageM;
+  const volumeM3   = isDragage && profondeur > 0 ? areaM * profondeur : 0;
+  const debitM3h   = elapsedH > 0 && volumeM3 > 0 ? volumeM3 / elapsedH : 0;
+
   const selectedChantier = chantiers.find(c => c.id === selectedChantierId);
   const progress = selectedChantier?.surface && areaM > 0
     ? Math.min(100, (areaM / selectedChantier.surface) * 100)
@@ -362,14 +367,17 @@ export default function SuiviView({ role, onLogout }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionActive, sessionPaused, currentPos]);
 
-  // ── Reset machine params when chantier type changes
+  // ── Dragage mode (drague aspiratrice) ────────────────────────────────────
+  const isDragage = !!selectedChantier?.drague;
+
+  // ── Reset machine params when chantier type or dragage mode changes ──────
   useEffect(() => {
     if (!selectedChantier) return;
-    const p = defaultParams(selectedChantier.type);
+    const p = defaultParams(selectedChantier.type, selectedChantier.drague ?? false);
     setMachineParamsState(p);
     saveMachineParams(p);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedChantier?.type]);
+  }, [selectedChantier?.type, selectedChantier?.drague]);
 
   // ── Work trail color (from chantier type) ─────────────────────────────
   const workColor = selectedChantier
@@ -475,18 +483,24 @@ export default function SuiviView({ role, onLogout }: Props) {
     clearActiveSession();
     clearLiveSession(sessionIdRef.current);
     await saveSession({
-      chantierId:        selectedChantier.id,
-      chantierNom:       selectedChantier.nom,
-      operateur:         role,
-      dateDebut:         sessionStart?.toISOString() ?? new Date().toISOString(),
-      dateFin:           new Date().toISOString(),
-      dureeMinutes:      Math.round(elapsed / 60),
+      chantierId:           selectedChantier.id,
+      chantierNom:          selectedChantier.nom,
+      operateur:            role,
+      dateDebut:            sessionStart?.toISOString() ?? new Date().toISOString(),
+      dateFin:              new Date().toISOString(),
+      dureeMinutes:         Math.round(elapsed / 60),
       gpsPoints,
-      notes:             '',
+      notes:                '',
       // Pass pre-computed values so the save uses the same formula as the live display
       // (stripAreaM2 on filtered points, not shoelace on raw gpsPoints)
-      surfaceCoveredM2:  areaM > 0 ? areaM : undefined,
-      rendementM2h:      rendement > 0 ? rendement : undefined,
+      surfaceCoveredM2:     areaM > 0 ? areaM : undefined,
+      rendementM2h:         rendement > 0 ? rendement : undefined,
+      // Dragage fields
+      ...(isDragage && volumeM3 > 0 && {
+        volumeM3,
+        debitM3h:           debitM3h > 0 ? debitM3h : undefined,
+        profondeurDragageM: profondeur > 0 ? profondeur : undefined,
+      }),
     });
     resetPoints();
     setElapsed(0);
@@ -789,9 +803,16 @@ export default function SuiviView({ role, onLogout }: Props) {
                 {/* Chantier stats panel — visible when a chantier is selected but not in session */}
                 {!sessionActive && selectedChantier && (
                   <div className="border-b border-slate-800 px-2 pb-3 pt-1">
-                    <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2 px-1">
-                      {selectedChantier.nom}
-                      {selectedChantier.type ? ` · ${TYPE_LABELS[selectedChantier.type] ?? selectedChantier.type}` : ''}
+                    <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2 px-1 flex items-center gap-1.5">
+                      <span className="truncate">
+                        {selectedChantier.nom}
+                        {selectedChantier.type ? ` · ${TYPE_LABELS[selectedChantier.type] ?? selectedChantier.type}` : ''}
+                      </span>
+                      {isDragage && (
+                        <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-cyan-900 text-cyan-300 text-[9px] font-semibold uppercase tracking-wide">
+                          Drague
+                        </span>
+                      )}
                     </p>
 
                     {selectedChantierStats ? (
@@ -846,7 +867,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                   </div>
                 )}
 
-                {sessionActive && (
+                {sessionActive && !isDragage && (
                   <div className="grid grid-cols-4 gap-0 border-b border-slate-800 px-2 pb-3">
                     <Metric label="Durée" value={formatTime(elapsed)} />
                     <Metric label="Vitesse" value={`${speedNow.toFixed(1)} km/h`}
@@ -857,12 +878,30 @@ export default function SuiviView({ role, onLogout }: Props) {
                   </div>
                 )}
 
+                {sessionActive && isDragage && (
+                  <div className="grid grid-cols-4 gap-0 border-b border-slate-800 px-2 pb-3">
+                    <Metric label="Durée" value={formatTime(elapsed)} />
+                    <Metric label="Vitesse" value={`${speedNow.toFixed(1)} km/h`}
+                      sub={`moy ${speedAvg.toFixed(1)}`} />
+                    <Metric label="Volume" value={volumeM3 > 0 ? `${volumeM3.toFixed(1)} m³` : profondeur > 0 ? '0 m³' : '—'}
+                      sub={profondeur > 0 ? `× ${profondeur} m` : 'prof. non définie'} />
+                    <Metric label="Débit" value={debitM3h > 0 ? `${debitM3h.toFixed(1)}` : '—'}
+                      sub="m³/h" />
+                  </div>
+                )}
+
                 {sessionActive && (
                   <div className="grid grid-cols-3 gap-0 px-2 py-2 border-b border-slate-800">
                     <Metric label="Distance" value={formatDistance(distM)} small />
-                    {progress != null && <Metric label="Avancement" value={`${Math.round(progress)} %`} small />}
-                    {selectedChantier?.surface && (
+                    {!isDragage && progress != null && <Metric label="Avancement" value={`${Math.round(progress)} %`} small />}
+                    {!isDragage && selectedChantier?.surface && (
                       <Metric label="Surface tot." value={formatArea(selectedChantier.surface)} small />
+                    )}
+                    {isDragage && (
+                      <Metric label="Surface draguée" value={formatArea(areaM)} small />
+                    )}
+                    {isDragage && profondeur > 0 && (
+                      <Metric label="Profondeur" value={`${profondeur.toFixed(2)} m`} small />
                     )}
                     {tempsRestantMin != null && tempsRestantMin > 0 && (
                       <Metric label="Temps restant" value={formatDuration(tempsRestantMin)} small />
@@ -977,8 +1016,17 @@ export default function SuiviView({ role, onLogout }: Props) {
                       {/* Primary session metrics */}
                       <div className="grid grid-cols-4 gap-1 mb-1.5">
                         <SmallStat label="Durée"    value={formatDuration(s.dureeMinutes)} />
-                        <SmallStat label="Surface"  value={formatArea(s.surfaceCoveredM2)} />
-                        <SmallStat label="Rend."    value={`${Math.round(s.rendementM2h)}`} sub="m²/h" />
+                        {s.volumeM3 != null && s.volumeM3 > 0 ? (
+                          <>
+                            <SmallStat label="Volume"   value={`${s.volumeM3.toFixed(1)} m³`} />
+                            <SmallStat label="Débit"    value={s.debitM3h != null && s.debitM3h > 0 ? `${s.debitM3h.toFixed(1)}` : '—'} sub="m³/h" />
+                          </>
+                        ) : (
+                          <>
+                            <SmallStat label="Surface"  value={formatArea(s.surfaceCoveredM2)} />
+                            <SmallStat label="Rend."    value={`${Math.round(s.rendementM2h)}`} sub="m²/h" />
+                          </>
+                        )}
                         <SmallStat label="Vit. moy" value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)}` : '—'} sub="km/h" />
                       </div>
 
@@ -1214,6 +1262,7 @@ export default function SuiviView({ role, onLogout }: Props) {
         <MachineParamsPanel
           params={machineParams}
           chantierType={selectedChantier?.type}
+          isDragage={isDragage}
           onClose={() => setShowMachinePanel(false)}
           onChange={p => { setMachineParamsState(p); saveMachineParams(p); }}
         />
@@ -1385,10 +1434,11 @@ function OperatorBar({ label, hours, total, color }: { label: string; hours: num
 }
 
 function MachineParamsPanel({
-  params, chantierType, onClose, onChange,
+  params, chantierType, isDragage, onClose, onChange,
 }: {
   params: MachineParams;
   chantierType?: string;
+  isDragage?: boolean;
   onClose: () => void;
   onChange: (p: MachineParams) => void;
 }) {
@@ -1400,7 +1450,9 @@ function MachineParamsPanel({
     <div className="fixed inset-0 z-[9999] bg-black/60 flex items-end">
       <div className="w-full bg-slate-900 rounded-t-3xl max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 flex-shrink-0">
-          <h3 className="text-white font-bold">Paramètres machine</h3>
+          <h3 className="text-white font-bold">
+            {isDragage ? 'Paramètres drague aspiratrice' : 'Paramètres machine'}
+          </h3>
           <button onClick={onClose} className="text-slate-400 p-1"><X size={20} /></button>
         </div>
         <div className="overflow-y-auto flex-1 px-4 py-4 space-y-5">
@@ -1410,7 +1462,7 @@ function MachineParamsPanel({
               <span className="text-slate-400 text-xs">Type de chantier</span>
               <button
                 onClick={() => {
-                  const d = defaultParams(chantierType);
+                  const d = defaultParams(chantierType, isDragage);
                   setLocal(d);
                 }}
                 className="text-xs text-green-400 hover:text-green-300">
@@ -1419,9 +1471,32 @@ function MachineParamsPanel({
             </div>
           )}
 
+          {/* Profondeur de dragage — shown only in dragage mode */}
+          {isDragage && (
+            <div>
+              <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
+                Profondeur de dragage (m)
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range" min="0" max="3" step="0.05"
+                  value={local.profondeurDragageM}
+                  onChange={e => set('profondeurDragageM', parseFloat(e.target.value))}
+                  className="flex-1 accent-cyan-500"
+                />
+                <span className="text-white font-bold tabular-nums w-14 text-right">
+                  {local.profondeurDragageM === 0 ? '—' : `${local.profondeurDragageM.toFixed(2)} m`}
+                </span>
+              </div>
+              <p className="text-slate-500 text-[10px] mt-1">
+                Utilisée pour calculer le volume dragué (m² × profondeur)
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
-              Largeur de travail (m)
+              {isDragage ? 'Largeur tête d'aspiration (m)' : 'Largeur de travail (m)'}
             </label>
             <div className="flex items-center gap-3">
               <input
@@ -1435,7 +1510,9 @@ function MachineParamsPanel({
               </span>
             </div>
             <p className="text-slate-500 text-[10px] mt-1">
-              0 = pas de suivi de surface par bandes
+              {isDragage
+                ? 'Largeur de la tête d'aspiration (0 = surface non calculée)'
+                : '0 = pas de suivi de surface par bandes'}
             </p>
           </div>
 

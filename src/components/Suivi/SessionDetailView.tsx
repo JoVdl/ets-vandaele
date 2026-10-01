@@ -117,15 +117,23 @@ function openPrintRecap(
   const displaySurface   = extras.correctedSurfaceM2 ?? session.surfaceCoveredM2;
   const displayRendement = extras.correctedRendement  ?? session.rendementM2h;
 
+  const isDragageSession = (session.volumeM3 ?? 0) > 0;
   const rows: [string, string][] = [
     ['Durée de la session',  formatDuration(session.dureeMinutes)],
-    ['Surface traitée',      formatArea(displaySurface)],
+    ...(isDragageSession ? [
+      ['Volume dragué',        `${session.volumeM3!.toFixed(1)} m³`] as [string, string],
+      ['Surface draguée',      formatArea(displaySurface)] as [string, string],
+      ['Débit de dragage',     session.debitM3h != null && session.debitM3h > 0 ? `${session.debitM3h.toFixed(1)} m³/h` : '—'] as [string, string],
+      ...(session.profondeurDragageM != null ? [['Profondeur de dragage', `${session.profondeurDragageM.toFixed(2)} m`] as [string, string]] : []),
+    ] : [
+      ['Surface traitée',      formatArea(displaySurface)] as [string, string],
+      ['Rendement',            `${Math.round(displayRendement).toLocaleString('fr-FR')} m²/h`] as [string, string],
+    ]),
     ['Distance de travail',  formatDistance(totalDistanceM(workPts))],
-    ['Rendement',            `${Math.round(displayRendement).toLocaleString('fr-FR')} m²/h`],
   ];
   if (extras.workSpeedKmh != null)
     rows.push(['Vitesse moyenne de travail', `${extras.workSpeedKmh.toFixed(1)} km/h`]);
-  if (rendMoyen != null)
+  if (!isDragageSession && rendMoyen != null)
     rows.push(['Rendement moyen (toutes sessions)', `${Math.round(rendMoyen).toLocaleString('fr-FR')} m²/h`]);
   if (thisPct  != null) rows.push(['Avancement cette session',  `${thisPct} %`]);
   if (cumulPct != null) rows.push(['Avancement total chantier', `${cumulPct} %`]);
@@ -398,9 +406,19 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
         {/* Primary metrics */}
         <div className="grid grid-cols-4 gap-1 mb-2">
           <StatCard label="Durée"     value={formatDuration(session.dureeMinutes)} />
-          <StatCard label="Surface"   value={formatArea(correctedSurfaceM2 ?? session.surfaceCoveredM2)} />
-          <StatCard label="Distance"  value={formatDistance(session.distanceM)} />
-          <StatCard label="Rendement" value={`${Math.round(correctedRendement ?? session.rendementM2h).toLocaleString('fr-FR')} m²/h`} />
+          {session.volumeM3 != null && session.volumeM3 > 0 ? (
+            <>
+              <StatCard label="Volume dragué" value={`${session.volumeM3.toFixed(1)} m³`} />
+              <StatCard label="Distance"      value={formatDistance(session.distanceM)} />
+              <StatCard label="Débit"         value={session.debitM3h != null && session.debitM3h > 0 ? `${session.debitM3h.toFixed(1)} m³/h` : '—'} />
+            </>
+          ) : (
+            <>
+              <StatCard label="Surface"   value={formatArea(correctedSurfaceM2 ?? session.surfaceCoveredM2)} />
+              <StatCard label="Distance"  value={formatDistance(session.distanceM)} />
+              <StatCard label="Rendement" value={`${Math.round(correctedRendement ?? session.rendementM2h).toLocaleString('fr-FR')} m²/h`} />
+            </>
+          )}
         </div>
 
         {/* Secondary metrics */}
