@@ -88,6 +88,75 @@ function bodyH_fromWidth(w: number): number {
   return Math.round(w * 1.5);
 }
 
+/**
+ * Drague aspiratrice icon for papillonnage dredging.
+ *
+ * Shape (unrotated, bow pointing North):
+ *
+ *   [•MÉLANGEUR•]   ← suction head (wide, rounded, cyan)
+ *        ║           ← dredge arm / ladder
+ *   [══BARGE══]     ← main pontoon (rectangle, color-coded)
+ *        ▪           ← stern spud marker
+ *
+ * The GPS anchor is at the centre of the barge body.
+ * The entire shape rotates around that point.
+ */
+function dragueIcon(bearing: number, color: string) {
+  // --- dimensions (px) ---
+  const bargeW  = 38;
+  const bargeH  = 18;
+  const armW    = 10;
+  const armH    = 16;
+  const headW   = 28;
+  const headH   = 10;
+  const spudW   = 6;
+  const spudH   = 7;
+
+  // The SVG height is chosen so the BARGE CENTRE lands at SVG centre Y.
+  // Barge centre from the top: headH + armH + bargeH/2
+  const bargeCentreFromTop = headH + armH + bargeH / 2; // = 35
+  const svgH = bargeCentreFromTop * 2;                   // = 70 (spud gets clipped slightly, that's fine)
+  const svgW = Math.max(bargeW, headW) + 2;              // = 40
+
+  const cx = svgW / 2;
+
+  // Y coordinates
+  const headY  = 0;
+  const armY   = headH;
+  const bargeY = headH + armH;
+  const spudY  = bargeY + bargeH;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}">
+    <!-- Tête d'aspiration / mélangeur -->
+    <rect x="${cx - headW/2}" y="${headY}" width="${headW}" height="${headH}" rx="5" ry="5"
+      fill="#22d3ee" stroke="white" stroke-width="1.5"/>
+    <circle cx="${cx}" cy="${headY + 1}" r="4" fill="white" opacity=".6"/>
+    <!-- Bras / échelle -->
+    <rect x="${cx - armW/2}" y="${armY}" width="${armW}" height="${armH}"
+      fill="#0891b2" stroke="white" stroke-width="1"/>
+    <!-- Coque de la barge -->
+    <rect x="${cx - bargeW/2}" y="${bargeY}" width="${bargeW}" height="${bargeH}" rx="4" ry="4"
+      fill="${color}" stroke="white" stroke-width="2.5"/>
+    <!-- Piquet arrière (spud) -->
+    <rect x="${cx - spudW/2}" y="${spudY + 1}" width="${spudW}" height="${spudH}" rx="1.5" ry="1.5"
+      fill="#164e63" stroke="rgba(255,255,255,.5)" stroke-width="1"/>
+  </svg>`;
+
+  // The bounding square must fit the shape after rotation
+  const diag = Math.ceil(Math.sqrt(svgW * svgW + svgH * svgH)) + 8;
+
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:${diag}px;height:${diag}px;display:flex;align-items:center;justify-content:center;">
+      <div style="transform:rotate(${bearing}deg);filter:drop-shadow(0 2px 6px rgba(0,0,0,.75));">
+        ${svg}
+      </div>
+    </div>`,
+    iconSize:   [diag, diag],
+    iconAnchor: [diag / 2, diag / 2],
+  });
+}
+
 function AutoCenter({ pos, follow }: { pos: [number, number] | null; follow: boolean }) {
   const map = useMap();
   useEffect(() => {
@@ -145,6 +214,7 @@ interface Props {
   liveSessions:     LiveSession[];
   mySessionId:      string;
   historicalTrails: { points: GpsPoint[]; color: string }[];
+  isDragage?:       boolean;
 }
 
 function liveIcon(label: string) {
@@ -163,6 +233,7 @@ export default function SuiviMap({
   followGps, onDisableFollow, chantierZones, selectedZoneId, onZoneClick,
   showZones, satellite, workColor, largeurM, smoothAlpha,
   sessionActive, jumpToPos, liveSessions, mySessionId, historicalTrails,
+  isDragage,
 }: Props) {
 
   const center: [number, number] = currentPos
@@ -331,7 +402,9 @@ export default function SuiviMap({
           sessionActive && smoothed.length >= 2
             ? <Marker
                 position={[currentPos.lat, currentPos.lng]}
-                icon={machineIcon(machineBearing, largeurM, workColor)}
+                icon={isDragage
+                  ? dragueIcon(machineBearing, workColor)
+                  : machineIcon(machineBearing, largeurM, workColor)}
               />
             : <Marker
                 position={[currentPos.lat, currentPos.lng]}

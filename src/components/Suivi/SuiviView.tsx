@@ -661,6 +661,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               liveSessions={liveSessions}
               mySessionId={sessionIdRef.current}
               historicalTrails={historicalTrails}
+              isDragage={isDragage}
             />
 
             {/* Map control buttons */}
