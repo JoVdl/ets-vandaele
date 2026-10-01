@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Play, Pause, Square, MapPin, Wifi, WifiOff, LocateFixed,
   ChevronUp, ChevronDown, History, Settings, Ruler, Trash2, Check, X, LogOut,
-  BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers, SlidersHorizontal, Radio,
+  BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers, SlidersHorizontal, Radio, Wrench,
 } from 'lucide-react';
 import SuiviMap, { type ChantierZone } from './SuiviMap';
 import SessionDetailView from './SessionDetailView';
@@ -73,6 +73,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   });
   const [panelOpen, setPanelOpen]           = useState(true);
   const [followGps, setFollowGps]           = useState(true);
+  const [showMachineEdit, setShowMachineEdit] = useState(false);
 
   // ── Draw mode ──────────────────────────────────────────────────────────
   const [drawMode, setDrawMode]     = useState(false);
@@ -806,8 +807,8 @@ export default function SuiviView({ role, onLogout }: Props) {
                 {/* Chantier stats panel — visible when a chantier is selected but not in session */}
                 {!sessionActive && selectedChantier && (
                   <div className="border-b border-slate-800 px-2 pb-3 pt-1">
-                    <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2 px-1 flex items-center gap-1.5">
-                      <span className="truncate">
+                    <div className="flex items-center gap-1.5 mb-2 px-1">
+                      <span className="text-slate-500 text-[10px] uppercase tracking-wide truncate flex-1">
                         {selectedChantier.nom}
                         {selectedChantier.type ? ` · ${TYPE_LABELS[selectedChantier.type] ?? selectedChantier.type}` : ''}
                       </span>
@@ -816,7 +817,14 @@ export default function SuiviView({ role, onLogout }: Props) {
                           Drague
                         </span>
                       )}
-                    </p>
+                      <button
+                        onClick={() => setShowMachineEdit(true)}
+                        className="flex-shrink-0 p-1 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-700 transition-colors"
+                        title="Changer le type de machine"
+                      >
+                        <Wrench size={12} />
+                      </button>
+                    </div>
 
                     {selectedChantierStats ? (
                       <>
@@ -1289,6 +1297,18 @@ export default function SuiviView({ role, onLogout }: Props) {
         />
       )}
 
+      {/* ── Machine type edit modal ─────────────────────────────────────── */}
+      {showMachineEdit && selectedChantier && (
+        <MachineTypeEdit
+          chantier={selectedChantier}
+          onClose={() => setShowMachineEdit(false)}
+          onSave={async (type, drague) => {
+            await updateChantier(selectedChantier.id, { type, drague }).catch(() => {});
+            setShowMachineEdit(false);
+          }}
+        />
+      )}
+
       {/* ── Chantier picker modal ────────────────────────────────────────── */}
       {showChantierPicker && (
         <div className="fixed inset-0 z-[9999] bg-black/60 flex items-end">
@@ -1682,6 +1702,95 @@ function SettingsPanel() {
           Le code patron donne accès au Plan de Charge, à l'historique complet et aux analytiques.
           Le code salarié donne accès au suivi uniquement.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ── MachineTypeEdit ───────────────────────────────────────────────────────────
+
+const MACHINE_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'broyage_chenillette_sans',  label: 'Broyage chenillette' },
+  { value: 'broyage_chenillette_avec',  label: 'Broyage chenillette + ramassage' },
+  { value: 'broyage_forestier',         label: 'Broyage forestier' },
+  { value: 'faucardage',                label: 'Faucardage' },
+  { value: 'deboisement',               label: 'Déboisement' },
+  { value: 'curage_mecanique',          label: 'Curage mécanique' },
+  { value: 'curage_aspiration',         label: 'Curage aspiration' },
+  { value: 'terrassement',              label: 'Terrassement' },
+  { value: 'defenses_berges',           label: 'Défenses de berges' },
+  { value: 'location',                  label: 'Location' },
+];
+
+function MachineTypeEdit({
+  chantier,
+  onClose,
+  onSave,
+}: {
+  chantier: Chantier;
+  onClose: () => void;
+  onSave: (type: import('../../types').ChantierType, drague: boolean) => Promise<void>;
+}) {
+  const [type, setType] = useState<string>(chantier.type ?? 'broyage_chenillette_sans');
+  const [drague, setDrague] = useState(!!chantier.drague);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(type as import('../../types').ChantierType, drague);
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/70 flex items-end">
+      <div className="w-full bg-slate-900 rounded-t-3xl p-5 pb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-bold flex items-center gap-2">
+            <Wrench size={16} className="text-slate-400" />
+            Type de machine
+          </h3>
+          <button onClick={onClose} className="text-slate-400 p-1"><X size={20} /></button>
+        </div>
+
+        <p className="text-slate-400 text-xs mb-3 truncate">{chantier.nom}</p>
+
+        {/* Type select */}
+        <label className="block text-slate-400 text-xs uppercase tracking-wide mb-1.5">Activité</label>
+        <select
+          value={type}
+          onChange={e => setType(e.target.value)}
+          className="w-full bg-slate-800 text-white text-sm rounded-xl px-3 py-2.5 mb-4 outline-none focus:ring-2 focus:ring-green-500"
+        >
+          {MACHINE_TYPE_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+
+        {/* Drague toggle */}
+        <button
+          onClick={() => setDrague(d => !d)}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl mb-5 transition-colors border ${
+            drague
+              ? 'bg-cyan-900/50 border-cyan-700 text-cyan-300'
+              : 'bg-slate-800 border-slate-700 text-slate-300'
+          }`}
+        >
+          <div className="text-left">
+            <p className="font-semibold text-sm">Drague aspiratrice</p>
+            <p className="text-[11px] opacity-70 mt-0.5">Papillonnage — suivi de volume dragué</p>
+          </div>
+          <div className={`w-11 h-6 rounded-full relative transition-colors ${drague ? 'bg-cyan-500' : 'bg-slate-600'}`}>
+            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${drague ? 'translate-x-5' : 'translate-x-0.5'}`} />
+          </div>
+        </button>
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full h-12 rounded-xl bg-green-600 text-white font-bold disabled:opacity-40 hover:bg-green-500 transition-colors"
+        >
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
       </div>
     </div>
   );
