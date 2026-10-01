@@ -300,12 +300,6 @@ export default function SuiviView({ role, onLogout }: Props) {
   const elapsedH  = elapsed / 3600;
   const rendement = elapsedH > 0 && areaM > 0 ? areaM / elapsedH : 0;
 
-  // ── Dragage: volume and débit (papillonnage: area × profondeur × nb passes) ─
-  const profondeur = machineParams.profondeurDragageM;
-  const nbPasses   = Math.max(1, machineParams.nbPassesParPosition ?? 1);
-  const volumeM3   = isDragage && profondeur > 0 ? areaM * profondeur * nbPasses : 0;
-  const debitM3h   = elapsedH > 0 && volumeM3 > 0 ? volumeM3 / elapsedH : 0;
-
   const selectedChantier = chantiers.find(c => c.id === selectedChantierId);
   const progress = selectedChantier?.surface && areaM > 0
     ? Math.min(100, (areaM / selectedChantier.surface) * 100)
@@ -370,6 +364,12 @@ export default function SuiviView({ role, onLogout }: Props) {
 
   // ── Dragage mode (drague aspiratrice) ────────────────────────────────────
   const isDragage = !!selectedChantier?.drague;
+
+  // ── Dragage: volume and débit (papillonnage: area × profondeur × nb passes) ─
+  const profondeur = machineParams.profondeurDragageM;
+  const nbPasses   = Math.max(1, machineParams.nbPassesParPosition ?? 1);
+  const volumeM3   = isDragage && profondeur > 0 ? areaM * profondeur * nbPasses : 0;
+  const debitM3h   = elapsedH > 0 && volumeM3 > 0 ? volumeM3 / elapsedH : 0;
 
   // ── Reset machine params when chantier type or dragage mode changes ──────
   useEffect(() => {
@@ -1548,7 +1548,9 @@ function MachineParamsPanel({
             </div>
             <p className="text-slate-500 text-[10px] mt-1">
               {isDragage
-                ? `Portée du bras × 2 (ex: bras 3 m → 6 m). 0 = surface non calculée.${local.largeurTravailM > 0 ? ` Rayon : ${(local.largeurTravailM / 2).toFixed(1)} m chaque côté.` : ''}`
+                ? (local.largeurTravailM > 0
+                    ? `Portée du bras × 2. Rayon : ${(local.largeurTravailM / 2).toFixed(1)} m chaque côté.`
+                    : 'Portée du bras × 2. 0 = surface non calculée.')
                 : '0 = pas de suivi de surface par bandes'}
             </p>
           </div>
