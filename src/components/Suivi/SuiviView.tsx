@@ -300,9 +300,10 @@ export default function SuiviView({ role, onLogout }: Props) {
   const elapsedH  = elapsed / 3600;
   const rendement = elapsedH > 0 && areaM > 0 ? areaM / elapsedH : 0;
 
-  // ── Dragage: volume and débit ────────────────────────────────────────────
+  // ── Dragage: volume and débit (papillonnage: area × profondeur × nb passes) ─
   const profondeur = machineParams.profondeurDragageM;
-  const volumeM3   = isDragage && profondeur > 0 ? areaM * profondeur : 0;
+  const nbPasses   = Math.max(1, machineParams.nbPassesParPosition ?? 1);
+  const volumeM3   = isDragage && profondeur > 0 ? areaM * profondeur * nbPasses : 0;
   const debitM3h   = elapsedH > 0 && volumeM3 > 0 ? volumeM3 / elapsedH : 0;
 
   const selectedChantier = chantiers.find(c => c.id === selectedChantierId);
@@ -498,8 +499,9 @@ export default function SuiviView({ role, onLogout }: Props) {
       // Dragage fields
       ...(isDragage && volumeM3 > 0 && {
         volumeM3,
-        debitM3h:           debitM3h > 0 ? debitM3h : undefined,
-        profondeurDragageM: profondeur > 0 ? profondeur : undefined,
+        debitM3h:            debitM3h > 0 ? debitM3h : undefined,
+        profondeurDragageM:  profondeur > 0 ? profondeur : undefined,
+        ...(nbPasses > 1 && { nbPassesParPosition: nbPasses }),
       }),
     });
     resetPoints();
@@ -884,7 +886,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                     <Metric label="Vitesse" value={`${speedNow.toFixed(1)} km/h`}
                       sub={`moy ${speedAvg.toFixed(1)}`} />
                     <Metric label="Volume" value={volumeM3 > 0 ? `${volumeM3.toFixed(1)} m³` : profondeur > 0 ? '0 m³' : '—'}
-                      sub={profondeur > 0 ? `× ${profondeur} m` : 'prof. non définie'} />
+                      sub={profondeur > 0 ? `${profondeur} m × ${nbPasses}p` : 'prof. non définie'} />
                     <Metric label="Débit" value={debitM3h > 0 ? `${debitM3h.toFixed(1)}` : '—'}
                       sub="m³/h" />
                   </div>
@@ -1030,9 +1032,12 @@ export default function SuiviView({ role, onLogout }: Props) {
                         <SmallStat label="Vit. moy" value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)}` : '—'} sub="km/h" />
                       </div>
 
-                      {/* Secondary: distance */}
+                      {/* Secondary: distance + dragage depth info */}
                       <p className="text-slate-500 text-[10px] mb-2">
                         Distance parcourue : {formatDistance(s.distanceM)}
+                        {s.profondeurDragageM != null && (
+                          <> · Profondeur {s.profondeurDragageM.toFixed(2)} m{(s.nbPassesParPosition ?? 1) > 1 ? ` × ${s.nbPassesParPosition} passes` : ''}</>
+                        )}
                         {cumul && cumul.sessionCount > 1 && ` · ${cumul.sessionCount} sessions sur ce chantier`}
                       </p>
 
@@ -1471,36 +1476,68 @@ function MachineParamsPanel({
             </div>
           )}
 
-          {/* Profondeur de dragage — shown only in dragage mode */}
+          {/* Dragage params — shown only in dragage mode */}
           {isDragage && (
-            <div>
-              <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
-                Profondeur de dragage (m)
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range" min="0" max="3" step="0.05"
-                  value={local.profondeurDragageM}
-                  onChange={e => set('profondeurDragageM', parseFloat(e.target.value))}
-                  className="flex-1 accent-cyan-500"
-                />
-                <span className="text-white font-bold tabular-nums w-14 text-right">
-                  {local.profondeurDragageM === 0 ? '—' : `${local.profondeurDragageM.toFixed(2)} m`}
-                </span>
+            <>
+              <div className="bg-slate-800 rounded-xl px-3 py-2 text-[11px] text-cyan-400">
+                Dragage par papillonnage — la drague balaie en arc de gauche à droite,
+                avance ~40 cm, puis recommence. Volume = surface × profondeur/passe × nb passes.
               </div>
-              <p className="text-slate-500 text-[10px] mt-1">
-                Utilisée pour calculer le volume dragué (m² × profondeur)
-              </p>
-            </div>
+
+              <div>
+                <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
+                  Profondeur de vase par passe (m)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range" min="0.1" max="2" step="0.05"
+                    value={local.profondeurDragageM}
+                    onChange={e => set('profondeurDragageM', parseFloat(e.target.value))}
+                    className="flex-1 accent-cyan-500"
+                  />
+                  <span className="text-white font-bold tabular-nums w-14 text-right">
+                    {local.profondeurDragageM.toFixed(2)} m
+                  </span>
+                </div>
+                <p className="text-slate-500 text-[10px] mt-1">
+                  Épaisseur de vase enlevée à chaque passage (~0,5 m par défaut)
+                </p>
+              </div>
+
+              <div>
+                <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
+                  Passes par position (papillonnage)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range" min="1" max="6" step="1"
+                    value={local.nbPassesParPosition ?? 1}
+                    onChange={e => set('nbPassesParPosition', parseInt(e.target.value))}
+                    className="flex-1 accent-cyan-500"
+                  />
+                  <span className="text-white font-bold tabular-nums w-10 text-right">
+                    {local.nbPassesParPosition ?? 1}×
+                  </span>
+                </div>
+                <p className="text-slate-500 text-[10px] mt-1">
+                  Nb de balayages G↔D avant d'avancer de 40 cm
+                  {(local.nbPassesParPosition ?? 1) > 1 && (
+                    <span className="text-cyan-500">
+                      {' '}— profondeur totale {((local.profondeurDragageM ?? 0) * (local.nbPassesParPosition ?? 1)).toFixed(2)} m
+                    </span>
+                  )}
+                </p>
+              </div>
+            </>
           )}
 
           <div>
             <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
-              {isDragage ? 'Largeur tête d'aspiration (m)' : 'Largeur de travail (m)'}
+              {isDragage ? 'Largeur de balayage (m) — rayon arc × 2' : 'Largeur de travail (m)'}
             </label>
             <div className="flex items-center gap-3">
               <input
-                type="range" min="0" max="8" step="0.1"
+                type="range" min="0" max="20" step="0.5"
                 value={local.largeurTravailM}
                 onChange={e => set('largeurTravailM', parseFloat(e.target.value))}
                 className="flex-1 accent-green-500"
@@ -1511,7 +1548,7 @@ function MachineParamsPanel({
             </div>
             <p className="text-slate-500 text-[10px] mt-1">
               {isDragage
-                ? 'Largeur de la tête d'aspiration (0 = surface non calculée)'
+                ? `Portée du bras × 2 (ex: bras 3 m → 6 m). 0 = surface non calculée.${local.largeurTravailM > 0 ? ` Rayon : ${(local.largeurTravailM / 2).toFixed(1)} m chaque côté.` : ''}`
                 : '0 = pas de suivi de surface par bandes'}
             </p>
           </div>

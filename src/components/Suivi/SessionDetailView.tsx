@@ -124,7 +124,12 @@ function openPrintRecap(
       ['Volume dragué',        `${session.volumeM3!.toFixed(1)} m³`] as [string, string],
       ['Surface draguée',      formatArea(displaySurface)] as [string, string],
       ['Débit de dragage',     session.debitM3h != null && session.debitM3h > 0 ? `${session.debitM3h.toFixed(1)} m³/h` : '—'] as [string, string],
-      ...(session.profondeurDragageM != null ? [['Profondeur de dragage', `${session.profondeurDragageM.toFixed(2)} m`] as [string, string]] : []),
+      ...(session.profondeurDragageM != null ? [[
+        'Profondeur par passe',
+        session.nbPassesParPosition != null && session.nbPassesParPosition > 1
+          ? `${session.profondeurDragageM.toFixed(2)} m × ${session.nbPassesParPosition} passes = ${(session.profondeurDragageM * session.nbPassesParPosition).toFixed(2)} m total`
+          : `${session.profondeurDragageM.toFixed(2)} m`,
+      ] as [string, string]] : []),
     ] : [
       ['Surface traitée',      formatArea(displaySurface)] as [string, string],
       ['Rendement',            `${Math.round(displayRendement).toLocaleString('fr-FR')} m²/h`] as [string, string],

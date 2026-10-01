@@ -19,10 +19,11 @@ export interface SuiviSession {
   distanceM: number;
   vitesseMoyenneKmh: number;
   rendementM2h: number;        // m²/h
-  // Dragage aspiratrice
-  volumeM3?: number;           // volume dragué (surfaceCoveredM2 × profondeur)
-  debitM3h?: number;           // débit de dragage en m³/h
-  profondeurDragageM?: number; // profondeur cible utilisée pour le calcul
+  // Dragage aspiratrice (papillonnage)
+  volumeM3?: number;              // volume dragué (surface × profondeur × passes)
+  debitM3h?: number;              // débit de dragage en m³/h
+  profondeurDragageM?: number;    // épaisseur de vase par passe
+  nbPassesParPosition?: number;   // nb balayages G-D avant avancement de 40 cm
   notes?: string;
   pendingSync?: boolean;       // stored offline, not yet in Firestore
 }
