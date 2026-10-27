@@ -573,7 +573,7 @@ export default function SuiviView({ role, onLogout }: Props) {
     <div className="fixed inset-0 bg-slate-900 flex flex-col" style={{ fontFamily: 'system-ui, sans-serif' }}>
 
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 flex-shrink-0 z-10">
+      <div className="flex items-center gap-2 px-3 py-2 bg-slate-900/75 backdrop-blur-xl border-b border-white/[0.07] flex-shrink-0 z-10">
 
         {/* Home */}
         <a href="#" onClick={() => { clearSession(); onLogout(); }}
@@ -669,14 +669,14 @@ export default function SuiviView({ role, onLogout }: Props) {
             <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-2">
               <button onClick={() => setFollowGps(true)}
                 className={`p-2.5 rounded-xl shadow-lg transition-colors ${
-                  followGps ? 'bg-green-600 text-white' : 'bg-slate-800/90 text-slate-400'
+                  followGps ? 'bg-green-600 text-white shadow-lg shadow-green-600/30' : 'bg-black/50 backdrop-blur-md border border-white/[0.12] text-slate-400'
                 }`}
                 title="Centrer sur ma position">
                 <LocateFixed size={18} />
               </button>
               <button
                 onClick={() => setTileMode(m => TILE_CYCLE[(TILE_CYCLE.indexOf(m) + 1) % TILE_CYCLE.length])}
-                className="p-2.5 rounded-xl shadow-lg bg-slate-800/90 transition-colors"
+                className="p-2.5 rounded-xl shadow-lg bg-black/50 backdrop-blur-md border border-white/[0.12] transition-colors"
                 title={tileMode === 'ign' ? 'IGN France' : tileMode === 'esri' ? 'ESRI Global' : 'OSM'}>
                 {tileMode === 'osm'
                   ? <MapIcon size={18} className="text-slate-400" />
@@ -685,7 +685,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               </button>
               <button onClick={() => setShowZones(z => !z)}
                 className={`p-2.5 rounded-xl shadow-lg transition-colors ${
-                  showZones ? 'bg-slate-800/90 text-amber-400' : 'bg-slate-800/90 text-slate-500'
+                  showZones ? 'bg-black/50 backdrop-blur-md border border-white/[0.12] text-amber-400' : 'bg-black/50 backdrop-blur-md border border-white/[0.12] text-slate-500'
                 }`}
                 title={showZones ? 'Masquer les zones' : 'Afficher les zones'}>
                 <Layers size={18} />
@@ -694,7 +694,7 @@ export default function SuiviView({ role, onLogout }: Props) {
 
             {/* Nearby chantier suggestion */}
             {nearbyChantier && (
-              <div className="absolute top-3 left-3 right-16 z-[1000] bg-slate-900/95 border border-green-500/40 rounded-xl px-3 py-2 flex items-center gap-2">
+              <div className="absolute top-3 left-3 right-16 z-[1000] bg-black/60 backdrop-blur-xl border border-green-500/30 rounded-xl px-3 py-2 flex items-center gap-2">
                 <Navigation size={13} className="text-green-400 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-xs font-semibold truncate">{nearbyChantier.c.nom}</p>
@@ -713,7 +713,7 @@ export default function SuiviView({ role, onLogout }: Props) {
 
             {/* Draw mode toolbar */}
             {drawMode && (
-              <div className={`absolute z-[1000] flex items-center gap-2 bg-slate-900/90 rounded-xl px-3 py-2 ${nearbyChantier ? 'top-14' : 'top-3'} left-3 right-20`}>
+              <div className={`absolute z-[1000] flex items-center gap-2 bg-black/60 backdrop-blur-xl border border-blue-500/20 rounded-xl px-3 py-2 ${nearbyChantier ? 'top-14' : 'top-3'} left-3 right-20`}>
                 <Ruler size={14} className="text-blue-400 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <span className="text-white text-xs">
@@ -748,14 +748,14 @@ export default function SuiviView({ role, onLogout }: Props) {
             )}
 
             {gpsError && (
-              <div className="absolute top-3 left-3 right-3 z-[1000] bg-red-900/90 text-red-300 text-xs px-3 py-2 rounded-xl">
+              <div className="absolute top-3 left-3 right-3 z-[1000] bg-red-950/75 backdrop-blur-xl border border-red-400/25 text-red-300 text-xs px-3 py-2 rounded-xl">
                 {gpsError}
               </div>
             )}
 
             {/* Auto-paused due to leaving work zone */}
             {autoPausedByZone && (
-              <div className="absolute bottom-4 left-3 right-3 z-[1000] bg-red-900/95 border border-red-500/40 rounded-xl px-3 py-2 flex items-center gap-2">
+              <div className="absolute bottom-4 left-3 right-3 z-[1000] bg-red-950/80 backdrop-blur-xl border border-red-400/30 rounded-xl px-3 py-2 flex items-center gap-2">
                 <span className="text-red-300 text-xs flex-1">
                   ⏸ Session auto-pausée — vous avez quitté la zone de travail (+ 500 m)
                 </span>
@@ -772,7 +772,7 @@ export default function SuiviView({ role, onLogout }: Props) {
 
             {/* Restored session banner */}
             {!autoPausedByZone && restoredBanner && (
-              <div className="absolute bottom-4 left-3 right-3 z-[1000] bg-amber-900/95 border border-amber-500/40 rounded-xl px-3 py-2 flex items-center gap-2">
+              <div className="absolute bottom-4 left-3 right-3 z-[1000] bg-amber-950/80 backdrop-blur-xl border border-amber-400/30 rounded-xl px-3 py-2 flex items-center gap-2">
                 <span className="text-amber-300 text-xs flex-1">
                   ↩ Session restaurée : <strong>{restoredBanner}</strong>
                 </span>
@@ -796,7 +796,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           </div>
 
           {/* ── Bottom panel ──────────────────────────────────────────── */}
-          <div className="flex-shrink-0 bg-slate-900 border-t border-slate-800">
+          <div className="flex-shrink-0 bg-slate-900/80 backdrop-blur-xl border-t border-white/[0.07]">
             <button onClick={() => setPanelOpen(p => !p)}
               className="w-full flex justify-center py-1.5 text-slate-600 hover:text-slate-400">
               {panelOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
@@ -806,7 +806,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               <>
                 {/* Chantier stats panel — visible when a chantier is selected but not in session */}
                 {!sessionActive && selectedChantier && (
-                  <div className="border-b border-slate-800 px-2 pb-3 pt-1">
+                  <div className="border-b border-white/[0.07] px-2 pb-3 pt-1">
                     <div className="flex items-center gap-1.5 mb-2 px-1">
                       <span className="text-slate-500 text-[10px] uppercase tracking-wide truncate flex-1">
                         {selectedChantier.nom}
@@ -840,7 +840,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                         </div>
 
                         {selectedChantierStats.pct != null && (
-                          <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden mb-2 mx-1">
+                          <div className="h-1.5 bg-white/[0.08] rounded-full overflow-hidden mb-2 mx-1">
                             <div
                               className={`h-full rounded-full transition-all ${
                                 selectedChantierStats.pct >= 80 ? 'bg-green-500'
@@ -879,7 +879,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                 )}
 
                 {sessionActive && !isDragage && (
-                  <div className="grid grid-cols-4 gap-0 border-b border-slate-800 px-2 pb-3">
+                  <div className="grid grid-cols-4 gap-0 border-b border-white/[0.07] px-2 pb-3">
                     <Metric label="Durée" value={formatTime(elapsed)} />
                     <Metric label="Vitesse" value={`${speedNow.toFixed(1)} km/h`}
                       sub={`moy ${speedAvg.toFixed(1)}`} />
@@ -890,7 +890,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                 )}
 
                 {sessionActive && isDragage && (
-                  <div className="grid grid-cols-4 gap-0 border-b border-slate-800 px-2 pb-3">
+                  <div className="grid grid-cols-4 gap-0 border-b border-white/[0.07] px-2 pb-3">
                     <Metric label="Durée" value={formatTime(elapsed)} />
                     <Metric label="Vitesse" value={`${speedNow.toFixed(1)} km/h`}
                       sub={`moy ${speedAvg.toFixed(1)}`} />
@@ -902,7 +902,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                 )}
 
                 {sessionActive && (
-                  <div className="grid grid-cols-3 gap-0 px-2 py-2 border-b border-slate-800">
+                  <div className="grid grid-cols-3 gap-0 px-2 py-2 border-b border-white/[0.07]">
                     <Metric label="Distance" value={formatDistance(distM)} small />
                     {!isDragage && progress != null && <Metric label="Avancement" value={`${Math.round(progress)} %`} small />}
                     {!isDragage && selectedChantier?.surface && (
@@ -926,8 +926,8 @@ export default function SuiviView({ role, onLogout }: Props) {
 
                 {progress != null && sessionActive && (
                   <div className="px-3 pb-2">
-                    <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                      <div className="h-full bg-green-500 rounded-full transition-all duration-1000"
+                    <div className="h-2 bg-white/[0.08] rounded-full overflow-hidden">
+                      <div className="h-full bg-green-500 rounded-full transition-all duration-1000 shadow-sm shadow-green-400/60"
                         style={{ width: `${progress}%` }} />
                     </div>
                   </div>
@@ -937,13 +937,13 @@ export default function SuiviView({ role, onLogout }: Props) {
                   <button
                     onClick={() => { setDrawMode(d => !d); if (!drawMode) handleDrawClear(); }}
                     className={`p-3 rounded-xl transition-colors ${
-                      drawMode ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      drawMode ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-white/[0.08] border border-white/[0.10] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200'
                     }`}>
                     <Ruler size={18} />
                   </button>
                   <button
                     onClick={() => setShowMachinePanel(true)}
-                    className="p-3 rounded-xl bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                    className="p-3 rounded-xl bg-white/[0.08] border border-white/[0.10] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200 transition-colors"
                     title="Paramètres machine">
                     <SlidersHorizontal size={18} />
                   </button>
@@ -951,7 +951,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                   <div className="flex-1 flex items-center gap-2 justify-center">
                     {!sessionActive ? (
                       <button onClick={handleStart}
-                        className="flex-1 flex items-center justify-center gap-2 h-14 rounded-2xl bg-green-600 text-white text-base font-bold hover:bg-green-500 active:scale-95 transition-all">
+                        className="flex-1 flex items-center justify-center gap-2 h-14 rounded-2xl bg-green-600 text-white text-base font-bold hover:bg-green-500 active:scale-95 transition-all shadow-lg shadow-green-600/30">
                         <Play size={20} fill="currentColor" />
                         Démarrer
                       </button>
@@ -959,13 +959,13 @@ export default function SuiviView({ role, onLogout }: Props) {
                       <>
                         <button onClick={handlePause}
                           className={`flex-1 h-14 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm transition-all active:scale-95 ${
-                            sessionPaused ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-slate-700 text-white hover:bg-slate-600'
+                            sessionPaused ? 'bg-green-600 text-white hover:bg-green-500 shadow-lg shadow-green-600/30' : 'bg-white/[0.10] border border-white/[0.10] text-white hover:bg-white/[0.16]'
                           }`}>
                           {sessionPaused ? <Play size={18} fill="currentColor" /> : <Pause size={18} />}
                           {sessionPaused ? 'Reprendre' : 'Pause'}
                         </button>
                         <button onClick={handleStop}
-                          className="w-14 h-14 rounded-2xl bg-red-600 text-white flex items-center justify-center hover:bg-red-500 active:scale-95 transition-all">
+                          className="w-14 h-14 rounded-2xl bg-red-600 text-white flex items-center justify-center hover:bg-red-500 active:scale-95 transition-all shadow-lg shadow-red-600/30">
                           <Square size={20} fill="currentColor" />
                         </button>
                       </>
@@ -1005,7 +1005,7 @@ export default function SuiviView({ role, onLogout }: Props) {
 
                   return (
                     <button key={s.id} onClick={() => setSelectedSession(s)}
-                      className="w-full text-left bg-slate-800 rounded-2xl p-3 hover:bg-slate-700 transition-colors active:scale-[0.99]">
+                      className="w-full text-left bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 hover:bg-white/[0.10] transition-colors active:scale-[0.99]">
 
                       {/* Header */}
                       <div className="flex items-start justify-between gap-2 mb-2">
@@ -1053,7 +1053,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                       {/* Chantier cumulative progress */}
                       {pct != null && (
                         <>
-                          <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden mb-1.5">
+                          <div className="h-1.5 bg-white/[0.08] rounded-full overflow-hidden mb-1.5">
                             <div
                               className={`h-full rounded-full transition-all ${
                                 pct >= 80 ? 'bg-green-500' : pct >= 40 ? 'bg-amber-400' : 'bg-orange-500'
@@ -1102,7 +1102,7 @@ export default function SuiviView({ role, onLogout }: Props) {
 
             {liveSessions.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-slate-800 flex items-center justify-center mb-3">
+                <div className="w-14 h-14 rounded-2xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-3">
                   <Radio size={24} className="text-slate-600" />
                 </div>
                 <p className="text-slate-400 text-sm font-medium">Aucune session active</p>
@@ -1115,7 +1115,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                   .map(s => {
                     const minsAgo = Math.round((Date.now() - new Date(s.lastUpdate).getTime()) / 60000);
                     return (
-                      <div key={s.sessionId} className="bg-slate-800 rounded-2xl overflow-hidden">
+                      <div key={s.sessionId} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden">
                         {/* Header */}
                         <div className="flex items-center gap-3 px-3 pt-3 pb-2">
                           <div className="w-3 h-3 rounded-full bg-orange-500 animate-pulse flex-shrink-0" />
@@ -1136,7 +1136,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                         {/* Progress bar */}
                         {s.progressPct != null && (
                           <div className="px-3 pb-2">
-                            <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                            <div className="h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-orange-500 rounded-full transition-all"
                                 style={{ width: `${Math.min(100, s.progressPct)}%` }}
@@ -1217,7 +1217,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                 {(analytics.patronH > 0 || analytics.salarieH > 0) && (
                   <div>
                     <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2">Répartition opérateur</p>
-                    <div className="bg-slate-800 rounded-2xl p-3 space-y-2">
+                    <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 space-y-2">
                       {analytics.patronH > 0 && (
                         <OperatorBar
                           label="Patron"
@@ -1244,7 +1244,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                     <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2">Par chantier</p>
                     <div className="space-y-1.5">
                       {analytics.topChantiers.map(c => (
-                        <div key={c.nom} className="bg-slate-800 rounded-xl px-3 py-2.5 flex items-center gap-3">
+                        <div key={c.nom} className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-3 py-2.5 flex items-center gap-3">
                           <div className="flex-1 min-w-0">
                             <p className="text-white text-sm font-medium truncate">{c.nom}</p>
                             <p className="text-slate-500 text-[10px]">{c.count} session{c.count > 1 ? 's' : ''}</p>
@@ -1311,9 +1311,9 @@ export default function SuiviView({ role, onLogout }: Props) {
 
       {/* ── Chantier picker modal ────────────────────────────────────────── */}
       {showChantierPicker && (
-        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-end">
-          <div className="w-full bg-slate-900 rounded-t-3xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 flex-shrink-0">
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-end">
+          <div className="w-full bg-slate-900/90 backdrop-blur-2xl rounded-t-3xl max-h-[80vh] flex flex-col border-t border-white/[0.08]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07] flex-shrink-0">
               <h3 className="text-white font-bold">Choisir un chantier</h3>
               <button onClick={() => { setShowChantierPicker(false); setPickerSearch(''); }}
                 className="text-slate-400 p-1">
@@ -1321,13 +1321,13 @@ export default function SuiviView({ role, onLogout }: Props) {
               </button>
             </div>
             {/* Search */}
-            <div className="px-4 py-2 border-b border-slate-800 flex-shrink-0">
+            <div className="px-4 py-2 border-b border-white/[0.07] flex-shrink-0">
               <input
                 type="text"
                 placeholder="Rechercher…"
                 value={pickerSearch}
                 onChange={e => setPickerSearch(e.target.value)}
-                className="w-full bg-slate-800 text-white text-sm rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-green-500 placeholder-slate-500"
+                className="w-full bg-white/[0.08] border border-white/[0.10] text-white text-sm rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-green-500/60 placeholder-slate-500"
               />
             </div>
             <div className="overflow-y-auto flex-1 p-2">
@@ -1354,7 +1354,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                           });
                         }}
                         className={`w-full text-left px-4 py-2.5 rounded-xl mb-1 transition-colors flex items-center gap-2 ${
-                          c.id === selectedChantierId ? 'bg-green-800 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                          c.id === selectedChantierId ? 'bg-green-700/80 text-white border border-green-500/30' : 'bg-white/[0.06] border border-white/[0.08] text-slate-200 hover:bg-white/[0.12]'
                         }`}
                       >
                         <span className="text-slate-400 text-xs">↩</span>
@@ -1367,7 +1367,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                         )}
                       </button>
                     ))}
-                    <div className="border-t border-slate-800 mt-2 mb-2" />
+                    <div className="border-t border-white/[0.07] mt-2 mb-2" />
                     <p className="text-slate-500 text-[10px] uppercase tracking-wide px-1 mb-1.5">Tous les chantiers</p>
                   </div>
                 );
@@ -1390,7 +1390,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                       });
                     }}
                     className={`w-full text-left px-4 py-3 rounded-xl mb-1 transition-colors ${
-                      c.id === selectedChantierId ? 'bg-green-800 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                      c.id === selectedChantierId ? 'bg-green-700/80 text-white border border-green-500/30' : 'bg-white/[0.05] border border-white/[0.07] text-slate-200 hover:bg-white/[0.10]'
                     }`}
                   >
                     <p className="font-medium text-sm">{c.nom}</p>
@@ -1427,7 +1427,7 @@ function Metric({ label, value, sub, small }: { label: string; value: string; su
 
 function SmallStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-slate-700/50 rounded-lg px-2 py-1.5 text-center">
+    <div className="bg-white/[0.06] border border-white/[0.08] rounded-lg px-2 py-1.5 text-center">
       <p className="text-white text-xs font-semibold tabular-nums leading-tight">{value}</p>
       {sub && <p className="text-slate-500 text-[9px] leading-none">{sub}</p>}
       <p className="text-slate-500 text-[10px] mt-0.5">{label}</p>
@@ -1437,7 +1437,7 @@ function SmallStat({ label, value, sub }: { label: string; value: string; sub?: 
 
 function AnalyticCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-slate-800 rounded-2xl px-4 py-3">
+    <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl px-4 py-3">
       <p className="text-white text-xl font-bold tabular-nums">{value}</p>
       <p className="text-slate-400 text-xs mt-0.5">{label}</p>
     </div>
@@ -1473,9 +1473,9 @@ function MachineParamsPanel({
     setLocal(p => ({ ...p, [k]: v }));
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/60 flex items-end">
-      <div className="w-full bg-slate-900 rounded-t-3xl max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 flex-shrink-0">
+    <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-end">
+      <div className="w-full bg-slate-900/90 backdrop-blur-2xl rounded-t-3xl max-h-[80vh] flex flex-col border-t border-white/[0.08]">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07] flex-shrink-0">
           <h3 className="text-white font-bold">
             {isDragage ? 'Paramètres drague aspiratrice' : 'Paramètres machine'}
           </h3>
@@ -1500,7 +1500,7 @@ function MachineParamsPanel({
           {/* Dragage params — shown only in dragage mode */}
           {isDragage && (
             <>
-              <div className="bg-slate-800 rounded-xl px-3 py-2 text-[11px] text-cyan-400">
+              <div className="bg-cyan-950/60 border border-cyan-700/30 rounded-xl px-3 py-2 text-[11px] text-cyan-400">
                 Dragage par papillonnage — la drague balaie en arc de gauche à droite,
                 avance ~40 cm, puis recommence. Volume = surface × profondeur/passe × nb passes.
               </div>
@@ -1641,10 +1641,10 @@ function MachineParamsPanel({
           </div>
 
         </div>
-        <div className="px-4 pb-6 pt-2 flex-shrink-0 border-t border-slate-800">
+        <div className="px-4 pb-6 pt-2 flex-shrink-0 border-t border-white/[0.07]">
           <button
             onClick={() => { onChange(local); onClose(); }}
-            className="w-full h-12 rounded-xl bg-green-600 text-white font-bold hover:bg-green-500 transition-colors">
+            className="w-full h-12 rounded-xl bg-green-600 text-white font-bold hover:bg-green-500 transition-colors shadow-lg shadow-green-600/25">
             Appliquer
           </button>
         </div>
@@ -1675,14 +1675,14 @@ function SettingsPanel() {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
       <h2 className="text-white font-bold text-base">Paramètres accès</h2>
-      <div className="bg-slate-800 rounded-2xl p-4 space-y-4">
+      <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 space-y-4">
         <div>
           <label className="text-slate-400 text-xs uppercase tracking-wide block mb-1">
             Code salarié
           </label>
           <input type="number" placeholder="ex: 1234" value={salaryPin}
             onChange={e => setSalaryPin(e.target.value.slice(0, 6))}
-            className="w-full bg-slate-700 text-white rounded-xl px-3 py-2.5 text-base tracking-widest outline-none focus:ring-2 focus:ring-green-500" />
+            className="w-full bg-white/[0.08] border border-white/[0.10] text-white rounded-xl px-3 py-2.5 text-base tracking-widest outline-none focus:ring-2 focus:ring-green-500/60" />
         </div>
         <div>
           <label className="text-slate-400 text-xs uppercase tracking-wide block mb-1">
@@ -1690,14 +1690,14 @@ function SettingsPanel() {
           </label>
           <input type="number" placeholder="ex: 0000" value={patronPin}
             onChange={e => setPatronPin(e.target.value.slice(0, 6))}
-            className="w-full bg-slate-700 text-white rounded-xl px-3 py-2.5 text-base tracking-widest outline-none focus:ring-2 focus:ring-green-500" />
+            className="w-full bg-white/[0.08] border border-white/[0.10] text-white rounded-xl px-3 py-2.5 text-base tracking-widest outline-none focus:ring-2 focus:ring-green-500/60" />
         </div>
         <button onClick={handleSave} disabled={saving || salaryPin.length < 4 || patronPin.length < 4}
           className="w-full h-12 rounded-xl bg-green-600 text-white font-bold disabled:opacity-40 hover:bg-green-500 transition-colors">
           {saved ? '✓ Enregistré' : saving ? 'Enregistrement…' : 'Enregistrer les codes'}
         </button>
       </div>
-      <div className="bg-slate-800 rounded-2xl p-4">
+      <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-4">
         <p className="text-slate-400 text-xs">
           Le code patron donne accès au Plan de Charge, à l'historique complet et aux analytiques.
           Le code salarié donne accès au suivi uniquement.
@@ -1742,8 +1742,8 @@ function MachineTypeEdit({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/70 flex items-end">
-      <div className="w-full bg-slate-900 rounded-t-3xl p-5 pb-8">
+    <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-end">
+      <div className="w-full bg-slate-900/90 backdrop-blur-2xl rounded-t-3xl p-5 pb-8 border-t border-white/[0.08]">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-white font-bold flex items-center gap-2">
             <Wrench size={16} className="text-slate-400" />
@@ -1759,7 +1759,7 @@ function MachineTypeEdit({
         <select
           value={type}
           onChange={e => setType(e.target.value)}
-          className="w-full bg-slate-800 text-white text-sm rounded-xl px-3 py-2.5 mb-4 outline-none focus:ring-2 focus:ring-green-500"
+          className="w-full bg-white/[0.08] border border-white/[0.10] text-white text-sm rounded-xl px-3 py-2.5 mb-4 outline-none focus:ring-2 focus:ring-green-500/60"
         >
           {MACHINE_TYPE_OPTIONS.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
