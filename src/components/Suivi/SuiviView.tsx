@@ -74,6 +74,9 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [panelOpen, setPanelOpen]           = useState(true);
   const [followGps, setFollowGps]           = useState(true);
   const [showMachineEdit, setShowMachineEdit] = useState(false);
+  const [clientFilter, setClientFilter]     = useState<string | null>(() => {
+    try { return localStorage.getItem('suiviClientFilter') ?? null; } catch { return null; }
+  });
 
   // ── Draw mode ──────────────────────────────────────────────────────────
   const [drawMode, setDrawMode]     = useState(false);
@@ -555,15 +558,22 @@ export default function SuiviView({ role, onLogout }: Props) {
   };
 
   // ── Chantier picker list ───────────────────────────────────────────────
+  const clientList = useMemo(() => {
+    const set = new Set<string>();
+    chantiers.forEach(c => { if (c.client) set.add(c.client); });
+    return [...set].sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [chantiers]);
+
   const pickerList = useMemo(() => {
-    const active = chantiers.filter(c => c.status !== 'refuse' && c.status !== 'annule');
+    let active = chantiers.filter(c => c.status !== 'refuse' && c.status !== 'annule');
+    if (clientFilter) active = active.filter(c => c.client === clientFilter);
     const q = pickerSearch.toLowerCase().trim();
     return q ? active.filter(c =>
       c.nom.toLowerCase().includes(q) ||
       (c.lieu ?? '').toLowerCase().includes(q) ||
       (c.client ?? '').toLowerCase().includes(q)
     ) : active;
-  }, [chantiers, pickerSearch]);
+  }, [chantiers, pickerSearch, clientFilter]);
 
   // ────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -588,6 +598,11 @@ export default function SuiviView({ role, onLogout }: Props) {
           <span className="text-white text-sm font-semibold truncate">
             {selectedChantier ? selectedChantier.nom : 'Sélectionner un chantier'}
           </span>
+          {clientFilter && !selectedChantier && (
+            <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-indigo-700/80 text-indigo-200 text-[9px] font-bold uppercase tracking-wide">
+              {clientFilter}
+            </span>
+          )}
           <ChevronDown size={13} className="text-slate-500 flex-shrink-0" />
         </button>
 
@@ -1314,12 +1329,48 @@ export default function SuiviView({ role, onLogout }: Props) {
         <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-end">
           <div className="w-full bg-slate-900/90 backdrop-blur-2xl rounded-t-3xl max-h-[80vh] flex flex-col border-t border-white/[0.08]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07] flex-shrink-0">
-              <h3 className="text-white font-bold">Choisir un chantier</h3>
+              <div className="flex items-center gap-2 min-w-0">
+                <h3 className="text-white font-bold">Choisir un chantier</h3>
+                {clientFilter && (
+                  <button
+                    onClick={() => { setClientFilter(null); try { localStorage.removeItem('suiviClientFilter'); } catch { /* */ } }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-600/80 border border-indigo-400/40 text-white text-[11px] font-semibold max-w-[140px] truncate"
+                  >
+                    <span className="truncate">{clientFilter}</span>
+                    <X size={10} className="flex-shrink-0" />
+                  </button>
+                )}
+              </div>
               <button onClick={() => { setShowChantierPicker(false); setPickerSearch(''); }}
-                className="text-slate-400 p-1">
+                className="text-slate-400 p-1 flex-shrink-0">
                 <X size={20} />
               </button>
             </div>
+            {/* Client filter chips */}
+            {clientList.length > 0 && (
+              <div className="px-3 py-2 border-b border-white/[0.07] flex-shrink-0 flex gap-2 overflow-x-auto scrollbar-none">
+                {clientList.map(cl => (
+                  <button
+                    key={cl}
+                    onClick={() => {
+                      const next = clientFilter === cl ? null : cl;
+                      setClientFilter(next);
+                      try {
+                        if (next) localStorage.setItem('suiviClientFilter', next);
+                        else localStorage.removeItem('suiviClientFilter');
+                      } catch { /* */ }
+                    }}
+                    className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      clientFilter === cl
+                        ? 'bg-indigo-600 border-indigo-400/50 text-white'
+                        : 'bg-white/[0.07] border-white/[0.10] text-slate-300 hover:bg-white/[0.14]'
+                    }`}
+                  >
+                    {cl}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* Search */}
             <div className="px-4 py-2 border-b border-white/[0.07] flex-shrink-0">
               <input
@@ -1335,7 +1386,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               {!pickerSearch && recentChantierIds.length > 0 && (() => {
                 const recents = recentChantierIds
                   .map(id => chantiers.find(c => c.id === id))
-                  .filter((c): c is Chantier => !!c && c.status !== 'refuse' && c.status !== 'annule');
+                  .filter((c): c is Chantier => !!c && c.status !== 'refuse' && c.status !== 'annule' && (!clientFilter || c.client === clientFilter));
                 if (recents.length === 0) return null;
                 return (
                   <div className="mb-3">
