@@ -122,6 +122,9 @@ export default function PlanDeCharge() {
     open: false, chantier: null,
   });
   const [filterStatus, setFilterStatus] = useState<'all' | 'confirme' | 'potentiel' | 'archive'>('confirme');
+  const [clientFilter, setClientFilter] = useState<string>(() => {
+    try { return localStorage.getItem('pdcClientFilter') ?? ''; } catch { return ''; }
+  });
   const [geocoding, setGeocoding] = useState<{ done: number; total: number } | null>(null);
   const [autoReorgBanner, setAutoReorgBanner] = useState<{ moved: number; warnings: string[] } | null>(null);
   const autoReorgDone = useRef(false);
@@ -168,6 +171,21 @@ export default function PlanDeCharge() {
     zoomPreset === 'custom' ? customEnd :
     endOfMonth(addMonths(currentMonth, (zoomPreset as number) - 1));
 
+  // ── Client list for filter dropdown ──────────────────────────────────────
+  const clientList = useMemo(() => {
+    const set = new Set<string>();
+    chantiers.forEach(c => { if (c.client) set.add(c.client); });
+    return [...set].sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [chantiers]);
+
+  const setClient = (val: string) => {
+    setClientFilter(val);
+    try {
+      if (val) localStorage.setItem('pdcClientFilter', val);
+      else localStorage.removeItem('pdcClientFilter');
+    } catch { /* */ }
+  };
+
   // ── Filtered chantiers ─────────────────────────────────────────────────────
   const filtered = chantiers.filter(c => {
     if (filterStatus === 'archive') {
@@ -178,6 +196,7 @@ export default function PlanDeCharge() {
       // Default "all" hides archived unless explicitly selected
       if (c.status === 'refuse' || c.status === 'annule') return false;
     }
+    if (clientFilter && c.client !== clientFilter) return false;
     return new Date(c.dateDebut) <= periodEnd && new Date(c.dateFin) >= periodStart;
   });
 
@@ -849,6 +868,25 @@ export default function PlanDeCharge() {
 
           {/* Desktop action buttons */}
           <div className="hidden sm:flex items-center gap-2">
+            {/* Client filter */}
+            {clientList.length > 0 && (
+              <div className="flex items-center gap-1">
+                <select
+                  value={clientFilter}
+                  onChange={e => setClient(e.target.value)}
+                  className={`text-xs font-medium rounded-lg border px-2 py-1.5 outline-none cursor-pointer transition-colors ${
+                    clientFilter
+                      ? 'bg-indigo-600 text-white border-indigo-500'
+                      : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600'
+                  }`}
+                >
+                  <option value="">Tous les clients</option>
+                  {clientList.map(cl => (
+                    <option key={cl} value={cl}>{cl}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden text-xs">
               {([
                 { key: 'all',       label: 'Tous' },
@@ -927,7 +965,29 @@ export default function PlanDeCharge() {
               </button>
               {showMenu && (
                 <div className="absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-100 dark:border-slate-700 z-[2000] py-1.5 min-w-[200px]">
-                  {/* Filters */}
+                  {/* Client filter */}
+                  {clientList.length > 0 && (
+                    <div className="px-3 py-1.5">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Client</p>
+                      <div className="flex flex-wrap gap-1">
+                        <button
+                          onClick={() => { setClient(''); setShowMenu(false); }}
+                          className={`px-2 py-1 text-xs rounded-md font-medium transition-colors ${
+                            !clientFilter ? 'bg-slate-800 dark:bg-slate-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >Tous</button>
+                        {clientList.map(cl => (
+                          <button key={cl} onClick={() => { setClient(cl); setShowMenu(false); }}
+                            className={`px-2 py-1 text-xs rounded-md font-medium transition-colors ${
+                              clientFilter === cl ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                            }`}
+                          >{cl}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {clientList.length > 0 && <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" />}
+                  {/* Status Filters */}
                   <div className="px-3 py-1.5">
                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Filtre</p>
                     <div className="flex flex-wrap gap-1">
