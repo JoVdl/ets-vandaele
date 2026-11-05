@@ -65,6 +65,11 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [sessionPaused, setSessionPaused]   = useState(false);
   const [sessionStart, setSessionStart]     = useState<Date | null>(null);
   const [elapsed, setElapsed]               = useState(0);
+
+  // ── Page visibility — GPS pauses in background, timer keeps going ──────
+  const [isHidden, setIsHidden] = useState(() =>
+    typeof document !== 'undefined' ? document.hidden : false
+  );
   const [selectedChantierId, setSelectedChantierId] = useState('');
   const [showChantierPicker, setShowChantierPicker] = useState(false);
   const [pickerSearch, setPickerSearch]     = useState('');
@@ -109,7 +114,7 @@ export default function SuiviView({ role, onLogout }: Props) {
 
   // ── GPS ────────────────────────────────────────────────────────────────
   const { points: gpsPoints, currentPos, error: gpsError, accuracy, resetPoints, addPoints } =
-    useGps(sessionActive && !sessionPaused);
+    useGps(sessionActive && !sessionPaused && !isHidden);
 
   // ── Nearby chantier detection ──────────────────────────────────────────
   const [nearbyChantier, setNearbyChantier] = useState<{ c: Chantier; dist: number } | null>(null);
@@ -145,13 +150,16 @@ export default function SuiviView({ role, onLogout }: Props) {
   // ── Timer ──────────────────────────────────────────────────────────────
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
-    if (sessionActive && !sessionPaused) {
-      timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
+    if (sessionActive && !sessionPaused && !isHidden) {
+      timerRef.current = setInterval(() => {
+        // Always derive elapsed from start timestamp — survives background
+        if (sessionStart) setElapsed(Math.round((Date.now() - sessionStart.getTime()) / 1000));
+      }, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [sessionActive, sessionPaused]);
+  }, [sessionActive, sessionPaused, isHidden, sessionStart]);
 
   // ── Auto-pause / auto-resume when GPS leaves or returns to work zone ───
   const farCountRef  = useRef(0);
@@ -221,16 +229,29 @@ export default function SuiviView({ role, onLogout }: Props) {
     return () => clearInterval(t);
   }, [sessionActive, saveActiveRef]);
 
-  // Immediate save when page is hidden (back button, tab switch, home button)
+  // Visibility tracking + save on hide + timer resync on return
   useEffect(() => {
-    const onHide = () => saveActiveRef();
-    document.addEventListener('visibilitychange', onHide);
-    window.addEventListener('pagehide', onHide);
-    window.addEventListener('beforeunload', onHide);
+    const onVisibility = () => {
+      const hidden = document.hidden;
+      setIsHidden(hidden);
+      if (hidden) {
+        // Going to background — save immediately
+        saveActiveRef();
+      } else {
+        // Returning to foreground — resync elapsed from start timestamp
+        setSessionStart(prev => {
+          if (prev) setElapsed(Math.round((Date.now() - prev.getTime()) / 1000));
+          return prev;
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', saveActiveRef);
+    window.addEventListener('beforeunload', saveActiveRef);
     return () => {
-      document.removeEventListener('visibilitychange', onHide);
-      window.removeEventListener('pagehide', onHide);
-      window.removeEventListener('beforeunload', onHide);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', saveActiveRef);
+      window.removeEventListener('beforeunload', saveActiveRef);
     };
   }, [saveActiveRef]);
 
@@ -357,7 +378,7 @@ export default function SuiviView({ role, onLogout }: Props) {
         distM,
         rendementM2h: rendement,
         progressPct:  progress,
-        dureeMinutes: Math.round(elapsed / 60),
+        dureeMinutes: sessionStart ? Math.round((Date.now() - sessionStart.getTime()) / 60_000) : Math.round(elapsed / 60),
       });
     };
     push(); // push immediately
@@ -493,7 +514,8 @@ export default function SuiviView({ role, onLogout }: Props) {
       operateur:            role,
       dateDebut:            sessionStart?.toISOString() ?? new Date().toISOString(),
       dateFin:              new Date().toISOString(),
-      dureeMinutes:         Math.round(elapsed / 60),
+      // Use real timestamp diff — accurate even when app was in background
+      dureeMinutes:         sessionStart ? Math.round((Date.now() - sessionStart.getTime()) / 60_000) : Math.round(elapsed / 60),
       gpsPoints,
       notes:                '',
       // Pass pre-computed values so the save uses the same formula as the live display
@@ -765,6 +787,15 @@ export default function SuiviView({ role, onLogout }: Props) {
             {gpsError && (
               <div className="absolute top-3 left-3 right-3 z-[1000] bg-red-950/75 backdrop-blur-xl border border-red-400/25 text-red-300 text-xs px-3 py-2 rounded-xl">
                 {gpsError}
+              </div>
+            )}
+
+            {/* Session active but GPS paused (app was in background) */}
+            {sessionActive && !sessionPaused && isHidden === false && gpsPoints.length === 0 && sessionStart && elapsed > 10 && (
+              <div className="absolute top-3 left-3 right-3 z-[1000] bg-black/60 backdrop-blur-xl border border-amber-400/30 rounded-xl px-3 py-2 flex items-center gap-2">
+                <span className="text-amber-300 text-xs flex-1">
+                  📍 GPS reprend — {formatTime(elapsed)} de session en cours
+                </span>
               </div>
             )}
 
