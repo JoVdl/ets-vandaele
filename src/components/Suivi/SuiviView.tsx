@@ -84,7 +84,10 @@ export default function SuiviView({ role, onLogout }: Props) {
     try { return JSON.parse(localStorage.getItem('recentChantierIds') ?? '[]'); } catch { return []; }
   });
   const [panelOpen, setPanelOpen]           = useState(true);
-  const [followGps, setFollowGps]           = useState(true);
+  // Don't auto-follow GPS when a chantier is already selected — let JumpTo center on it instead
+  const [followGps, setFollowGps] = useState(() => {
+    try { return !localStorage.getItem('lastSelectedChantierId'); } catch { return true; }
+  });
   const [showMachineEdit, setShowMachineEdit] = useState(false);
   const [clientFilter, setClientFilter]     = useState<string | null>(() => {
     try { return localStorage.getItem('suiviClientFilter') ?? null; } catch { return null; }
