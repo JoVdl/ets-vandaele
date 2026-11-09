@@ -39,9 +39,13 @@ function zoneLabel(nom: string, color: string) {
 function FitBounds({ positions }: { positions: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
-    if (positions.length < 2) return;
-    map.invalidateSize();
-    map.fitBounds(L.latLngBounds(positions), { padding: [32, 32], animate: false });
+    const tid = setTimeout(() => {
+      map.invalidateSize();
+      if (positions.length >= 2) {
+        map.fitBounds(L.latLngBounds(positions), { padding: [32, 32], animate: false });
+      }
+    }, 80);
+    return () => clearTimeout(tid);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
   return null;

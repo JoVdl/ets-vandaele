@@ -20,11 +20,15 @@ L.Icon.Default.mergeOptions({
 function FitAll({ positions }: { positions: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
-    if (positions.length < 2) return;
-    // invalidateSize ensures the map knows its real pixel dimensions
-    // (needed when MapContainer mounts inside a flex/overflow container)
-    map.invalidateSize();
-    map.fitBounds(L.latLngBounds(positions), { padding: [28, 28], animate: false });
+    // Defer fitBounds so the browser has fully painted the container
+    // before Leaflet computes its pixel dimensions.
+    const tid = setTimeout(() => {
+      map.invalidateSize();
+      if (positions.length >= 2) {
+        map.fitBounds(L.latLngBounds(positions), { padding: [28, 28], animate: false });
+      }
+    }, 80);
+    return () => clearTimeout(tid);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
   return null;
