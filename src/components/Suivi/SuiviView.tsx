@@ -74,7 +74,9 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [isHidden, setIsHidden] = useState(() =>
     typeof document !== 'undefined' ? document.hidden : false
   );
-  const [selectedChantierId, setSelectedChantierId] = useState('');
+  const [selectedChantierId, setSelectedChantierId] = useState(() => {
+    try { return localStorage.getItem('lastSelectedChantierId') ?? ''; } catch { return ''; }
+  });
   const [showChantierPicker, setShowChantierPicker] = useState(false);
   const [pickerSearch, setPickerSearch]     = useState('');
   const [recentChantierIds, setRecentChantierIds] = useState<string[]>(() => {
@@ -400,6 +402,16 @@ export default function SuiviView({ role, onLogout }: Props) {
   const volumeM3   = isDragage && profondeur > 0 ? areaM * profondeur * nbPasses : 0;
   const debitM3h   = elapsedH > 0 && volumeM3 > 0 ? volumeM3 / elapsedH : 0;
 
+  // Temps perdu sur incidents (session en cours)
+  const tempsPerduMinLive = sessionIncidents.reduce((a, i) => a + i.dureeMinutes, 0);
+
+  // Persist last selected chantier for auto-restore on next launch
+  useEffect(() => {
+    if (selectedChantierId) {
+      try { localStorage.setItem('lastSelectedChantierId', selectedChantierId); } catch {}
+    }
+  }, [selectedChantierId]);
+
   // ── Reset machine params when chantier type or dragage mode changes ──────
   useEffect(() => {
     if (!selectedChantier) return;
@@ -470,6 +482,22 @@ export default function SuiviView({ role, onLogout }: Props) {
       })),
     [chantiers, chantierProgress],
   );
+
+  // ── Chantier dashboard stats (filtered to selectedChantierId) ────────────
+  const chantierDashStats = useMemo(() => {
+    if (!selectedChantierId) return null;
+    const ss = sessions.filter(s => s.chantierId === selectedChantierId);
+    if (ss.length === 0) return { sessions: ss, totalVolumeM3: 0, totalMinutes: 0, avgDebitM3h: 0, totalIncidentMin: 0, totalIncidentCount: 0 };
+
+    const totalVolumeM3    = ss.reduce((a, s) => a + (s.volumeM3 ?? 0), 0);
+    const totalMinutes     = ss.reduce((a, s) => a + s.dureeMinutes, 0);
+    const totalIncidentMin = ss.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
+    const totalIncidentCount = ss.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
+    const debits = ss.filter(s => (s.debitM3h ?? 0) > 0).map(s => s.debitM3h!);
+    const avgDebitM3h = debits.length > 0 ? debits.reduce((a, b) => a + b, 0) / debits.length : 0;
+
+    return { sessions: ss, totalVolumeM3, totalMinutes, avgDebitM3h, totalIncidentMin, totalIncidentCount };
+  }, [sessions, selectedChantierId]);
 
   // ── Analytics ─────────────────────────────────────────────────────────
   const analytics = useMemo(() => {
@@ -1055,150 +1083,277 @@ export default function SuiviView({ role, onLogout }: Props) {
         </>
       )}
 
-      {/* ── History view ────────────────────────────────────────────────── */}
+      {/* ── History / Chantier dashboard view ───────────────────────────── */}
       {view === 'history' && (
         <div className="flex-1 overflow-y-auto">
-          <div className="px-3 py-3">
-            <h2 className="text-white font-bold text-base mb-3">Historique des sessions</h2>
-            {syncing && (
-              <div className="text-xs text-orange-400 mb-2 flex items-center gap-1">
-                <WifiOff size={12} /> Synchronisation…
+          {selectedChantierId && selectedChantier ? (
+            /* ── Chantier dashboard ── */
+            <div className="px-3 py-3 space-y-3">
+
+              {/* Header */}
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-white font-bold text-base truncate">{selectedChantier.nom}</h2>
+                    {isDragage && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-cyan-900 text-cyan-300 text-[9px] font-semibold uppercase tracking-wide">Drague</span>
+                    )}
+                  </div>
+                  {selectedChantier.lieu && (
+                    <p className="text-slate-500 text-xs mt-0.5">{selectedChantier.lieu}</p>
+                  )}
+                </div>
+                {syncing && <WifiOff size={13} className="text-orange-400 flex-shrink-0 mt-1" />}
               </div>
-            )}
-            {sessions.length === 0 ? (
-              <p className="text-slate-500 text-sm text-center py-8">Aucune session enregistrée</p>
-            ) : (
-              <div className="space-y-2">
-                {sessions.map(s => {
-                  const chan = chantiers.find(c => c.id === s.chantierId);
-                  const cumul = chantierCumul[s.chantierId];
-                  const totalCov = cumul?.totalCoveredM2 ?? 0;
-                  const pct = chan?.surface && chan.surface > 0
-                    ? Math.min(100, Math.round((totalCov / chan.surface) * 100)) : null;
-                  const remaining = chan?.surface && chan.surface > 0
-                    ? Math.max(0, chan.surface - totalCov) : null;
-                  const tempsRestant = remaining != null && remaining > 0 && s.rendementM2h > 0
-                    ? Math.round((remaining / s.rendementM2h) * 60) : null;
 
+              {/* ── Global stats ── */}
+              {chantierDashStats && chantierDashStats.sessions.length > 0 && (
+                <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
+                  <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2">Cumul chantier</p>
+                  {isDragage ? (
+                    <div className="grid grid-cols-4 gap-1 mb-2">
+                      <SmallStat label="Sessions" value={`${chantierDashStats.sessions.length}`} />
+                      <SmallStat label="Volume tot." value={`${chantierDashStats.totalVolumeM3.toFixed(1)} m³`} />
+                      <SmallStat label="Rend. moyen" value={chantierDashStats.avgDebitM3h > 0 ? chantierDashStats.avgDebitM3h.toFixed(1) : '—'} sub="m³/h" />
+                      <SmallStat label="Temps total" value={formatDuration(chantierDashStats.totalMinutes)} />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-1 mb-2">
+                      <SmallStat label="Sessions" value={`${chantierDashStats.sessions.length}`} />
+                      <SmallStat label="Temps total" value={formatDuration(chantierDashStats.totalMinutes)} />
+                      <SmallStat label="Surface tot." value={formatArea(chantierCumul[selectedChantierId]?.totalCoveredM2 ?? 0)} />
+                    </div>
+                  )}
+                  {isDragage && chantierDashStats.totalIncidentCount > 0 && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <AlertTriangle size={11} className="text-amber-400 flex-shrink-0" />
+                      <span className="text-amber-400 text-[10px]">
+                        {chantierDashStats.totalIncidentCount} incident{chantierDashStats.totalIncidentCount > 1 ? 's' : ''} · {chantierDashStats.totalIncidentMin} min perdues
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Session en cours (own active session on this chantier) ── */}
+              {sessionActive && selectedChantierId && (
+                <div className="bg-green-950/40 border border-green-700/40 rounded-2xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                    <p className="text-green-300 text-xs font-semibold uppercase tracking-wide">Session en cours</p>
+                    {sessionPaused && <span className="text-amber-400 text-[10px]">(en pause)</span>}
+                    {isHidden && <span className="text-slate-500 text-[10px]">(en arrière-plan)</span>}
+                  </div>
+                  {isDragage ? (
+                    <div className="grid grid-cols-4 gap-1">
+                      <SmallStat label="Écoulé" value={formatTime(elapsed)} />
+                      <SmallStat label="Perdu" value={tempsPerduMinLive > 0 ? `${tempsPerduMinLive} min` : '—'} />
+                      <SmallStat label="Volume" value={volumeM3 > 0 ? `${volumeM3.toFixed(1)} m³` : '0 m³'} />
+                      <SmallStat label="Rendement" value={debitM3h > 0 ? `${debitM3h.toFixed(1)}` : '—'} sub="m³/h" />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-1">
+                      <SmallStat label="Écoulé" value={formatTime(elapsed)} />
+                      <SmallStat label="Surface" value={formatArea(areaM)} />
+                      <SmallStat label="Vitesse" value={`${speedNow.toFixed(1)} km/h`} />
+                      <SmallStat label="Rendement" value={`${Math.round(rendement)}`} sub="m²/h" />
+                    </div>
+                  )}
+                  {tempsPerduMinLive > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {sessionIncidents.map((inc, i) => (
+                        <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] border border-amber-700/40">
+                          <AlertTriangle size={8} /> {INCIDENT_LABELS[inc.type] ?? inc.type} · {inc.dureeMinutes} min
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Live session d'un autre opérateur (vue patron) ── */}
+              {role === 'patron' && (() => {
+                const liveForThisChantier = liveSessions.filter(
+                  ls => ls.chantierId === selectedChantierId && ls.sessionId !== sessionIdRef.current
+                );
+                if (liveForThisChantier.length === 0) return null;
+                return liveForThisChantier.map(ls => {
+                  const minsAgo = Math.round((Date.now() - new Date(ls.lastUpdate).getTime()) / 60000);
                   return (
-                    <div key={s.id} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden">
-                      <button onClick={() => setSelectedSession(s)}
-                        className="w-full text-left p-3 hover:bg-white/[0.05] transition-colors active:scale-[0.99]">
-
-                      {/* Header */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-white text-sm font-semibold truncate">{s.chantierNom}</p>
-                          <p className="text-slate-400 text-[10px] mt-0.5">
-                            {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
-                            {' · '}{s.operateur === 'patron' ? 'Patron' : 'Salarié'}
-                            {chan?.type ? ` · ${TYPE_LABELS[chan.type] ?? chan.type}` : ''}
-                          </p>
-                        </div>
-                        {s.pendingSync && (
-                          <span className="flex-shrink-0 text-[10px] px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">
-                            Hors-ligne
-                          </span>
-                        )}
+                    <div key={ls.sessionId} className="bg-orange-950/40 border border-orange-700/40 rounded-2xl p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+                        <p className="text-orange-300 text-xs font-semibold uppercase tracking-wide">
+                          {ls.operateur === 'salarie' ? 'Salarié' : 'Patron'} — en cours
+                        </p>
+                        <span className="ml-auto text-slate-500 text-[10px]">
+                          {minsAgo > 0 ? `màj il y a ${minsAgo} min` : 'maintenant'}
+                        </span>
                       </div>
-
-                      {/* Primary session metrics */}
-                      <div className="grid grid-cols-4 gap-1 mb-1.5">
-                        <SmallStat label="Durée"    value={formatDuration(s.dureeMinutes)} />
-                        {s.volumeM3 != null && s.volumeM3 > 0 ? (
-                          <>
-                            <SmallStat label="Volume"   value={`${s.volumeM3.toFixed(1)} m³`} />
-                            <SmallStat label="Débit"    value={s.debitM3h != null && s.debitM3h > 0 ? `${s.debitM3h.toFixed(1)}` : '—'} sub="m³/h" />
-                          </>
-                        ) : (
-                          <>
-                            <SmallStat label="Surface"  value={formatArea(s.surfaceCoveredM2)} />
-                            <SmallStat label="Rend."    value={`${Math.round(s.rendementM2h)}`} sub="m²/h" />
-                          </>
-                        )}
-                        <SmallStat label="Vit. moy" value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)}` : '—'} sub="km/h" />
+                      <div className="grid grid-cols-4 gap-1">
+                        <SmallStat label="Durée" value={formatDuration(ls.dureeMinutes ?? 0)} />
+                        <SmallStat label="Volume" value={ls.areaM != null && ls.areaM > 0 ? `${ls.areaM.toFixed(1)} m²` : '—'} />
+                        <SmallStat label="Rend." value={ls.rendementM2h != null && ls.rendementM2h > 0 ? `${Math.round(ls.rendementM2h)}` : '—'} sub="m²/h" />
+                        <SmallStat label="Vitesse" value={ls.speedKmh != null ? `${ls.speedKmh.toFixed(1)}` : '—'} sub="km/h" />
                       </div>
-
-                      {/* Secondary: distance + dragage depth info */}
-                      <p className="text-slate-500 text-[10px] mb-2">
-                        Distance parcourue : {formatDistance(s.distanceM)}
-                        {s.profondeurDragageM != null && (
-                          <> · Profondeur {s.profondeurDragageM.toFixed(2)} m{(s.nbPassesParPosition ?? 1) > 1 ? ` × ${s.nbPassesParPosition} passes` : ''}</>
-                        )}
-                        {cumul && cumul.sessionCount > 1 && ` · ${cumul.sessionCount} sessions sur ce chantier`}
-                      </p>
-
-                      {/* Incidents */}
-                      {s.incidents && s.incidents.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {s.incidents.map((inc, i) => (
-                            <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] border border-amber-700/40">
-                              <AlertTriangle size={8} />
-                              {INCIDENT_LABELS[inc.type] ?? inc.type} · {inc.dureeMinutes} min
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Chantier cumulative progress */}
-                      {pct != null && (
-                        <>
-                          <div className="h-1.5 bg-white/[0.08] rounded-full overflow-hidden mb-1.5">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                pct >= 80 ? 'bg-green-500' : pct >= 40 ? 'bg-amber-400' : 'bg-orange-500'
-                              }`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="text-slate-400">
-                              Chantier : <span className="text-white font-semibold">{pct}% effectué</span>
-                              {remaining != null && remaining > 0 && (
-                                <span className="text-slate-500"> · {formatArea(remaining)} restants</span>
-                              )}
-                              {pct >= 100 && (
-                                <span className="text-green-400 font-semibold"> · Terminé ✓</span>
-                              )}
-                            </span>
-                            {tempsRestant != null && (
-                              <span className="text-slate-500">~{formatDuration(tempsRestant)} restant</span>
-                            )}
-                          </div>
-                        </>
-                      )}
-                      </button>
-
-                      {/* Delete row */}
-                      {confirmDeleteId === s.id ? (
-                        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-red-950/60 border-t border-red-800/40">
-                          <span className="text-red-400 text-xs">Supprimer cette session ?</span>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setConfirmDeleteId(null)}
-                              className="px-3 py-1 rounded-lg bg-white/[0.08] text-slate-300 text-xs">
-                              Annuler
-                            </button>
-                            <button
-                              onClick={async () => { await deleteSession(s.id); setConfirmDeleteId(null); }}
-                              className="px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold">
-                              Confirmer
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmDeleteId(s.id)}
-                          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-slate-600 hover:text-red-400 text-xs border-t border-white/[0.05] transition-colors">
-                          <Trash2 size={11} /> Supprimer
-                        </button>
-                      )}
                     </div>
                   );
-                })}
-              </div>
-            )}
-          </div>
+                });
+              })()}
+
+              {/* ── Sessions passées ── */}
+              {chantierDashStats && (
+                <>
+                  <p className="text-slate-500 text-[10px] uppercase tracking-wide px-1">
+                    {chantierDashStats.sessions.length === 0 ? 'Aucune session passée' : `${chantierDashStats.sessions.length} session${chantierDashStats.sessions.length > 1 ? 's' : ''} passée${chantierDashStats.sessions.length > 1 ? 's' : ''}`}
+                  </p>
+                  <div className="space-y-2">
+                    {chantierDashStats.sessions.map(s => {
+                      const incMin = s.incidents?.reduce((a, i) => a + i.dureeMinutes, 0) ?? 0;
+                      return (
+                        <div key={s.id} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden">
+                          <button onClick={() => setSelectedSession(s)}
+                            className="w-full text-left p-3 hover:bg-white/[0.05] transition-colors active:scale-[0.99]">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-slate-300 text-xs font-semibold">
+                                  {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
+                                </p>
+                                <p className="text-slate-500 text-[10px] mt-0.5">
+                                  {s.operateur === 'patron' ? 'Patron' : 'Salarié'}
+                                  {s.profondeurDragageM != null ? ` · ${s.profondeurDragageM.toFixed(2)} m prof.` : ''}
+                                </p>
+                              </div>
+                              {s.pendingSync && (
+                                <span className="flex-shrink-0 text-[10px] px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">Hors-ligne</span>
+                              )}
+                            </div>
+
+                            {isDragage ? (
+                              <div className="grid grid-cols-4 gap-1">
+                                <SmallStat label="Durée" value={formatDuration(s.dureeMinutes)} />
+                                <SmallStat label="Perdu" value={incMin > 0 ? `${incMin} min` : '—'} />
+                                <SmallStat label="Volume" value={s.volumeM3 != null && s.volumeM3 > 0 ? `${s.volumeM3.toFixed(1)} m³` : '—'} />
+                                <SmallStat label="Rend." value={s.debitM3h != null && s.debitM3h > 0 ? `${s.debitM3h.toFixed(1)}` : '—'} sub="m³/h" />
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-4 gap-1">
+                                <SmallStat label="Durée" value={formatDuration(s.dureeMinutes)} />
+                                <SmallStat label="Surface" value={formatArea(s.surfaceCoveredM2)} />
+                                <SmallStat label="Rend." value={`${Math.round(s.rendementM2h)}`} sub="m²/h" />
+                                <SmallStat label="Vit. moy" value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)}` : '—'} sub="km/h" />
+                              </div>
+                            )}
+
+                            {s.incidents && s.incidents.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {s.incidents.map((inc, i) => (
+                                  <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] border border-amber-700/40">
+                                    <AlertTriangle size={8} /> {INCIDENT_LABELS[inc.type] ?? inc.type} · {inc.dureeMinutes} min
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </button>
+
+                          {/* Delete row */}
+                          {confirmDeleteId === s.id ? (
+                            <div className="flex items-center justify-between gap-2 px-3 py-2 bg-red-950/60 border-t border-red-800/40">
+                              <span className="text-red-400 text-xs">Supprimer cette session ?</span>
+                              <div className="flex gap-2">
+                                <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-1 rounded-lg bg-white/[0.08] text-slate-300 text-xs">Annuler</button>
+                                <button onClick={async () => { await deleteSession(s.id); setConfirmDeleteId(null); }} className="px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold">Confirmer</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => setConfirmDeleteId(s.id)} className="w-full flex items-center justify-center gap-1.5 py-1.5 text-slate-600 hover:text-red-400 text-xs border-t border-white/[0.05] transition-colors">
+                              <Trash2 size={11} /> Supprimer
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            /* ── All sessions list (no chantier selected) ── */
+            <div className="px-3 py-3">
+              <h2 className="text-white font-bold text-base mb-3">Historique des sessions</h2>
+              {syncing && (
+                <div className="text-xs text-orange-400 mb-2 flex items-center gap-1">
+                  <WifiOff size={12} /> Synchronisation…
+                </div>
+              )}
+              {sessions.length === 0 ? (
+                <p className="text-slate-500 text-sm text-center py-8">Aucune session enregistrée</p>
+              ) : (
+                <div className="space-y-2">
+                  {sessions.map(s => {
+                    const chan = chantiers.find(c => c.id === s.chantierId);
+                    return (
+                      <div key={s.id} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden">
+                        <button onClick={() => setSelectedSession(s)}
+                          className="w-full text-left p-3 hover:bg-white/[0.05] transition-colors active:scale-[0.99]">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-white text-sm font-semibold truncate">{s.chantierNom}</p>
+                              <p className="text-slate-400 text-[10px] mt-0.5">
+                                {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
+                                {' · '}{s.operateur === 'patron' ? 'Patron' : 'Salarié'}
+                                {chan?.type ? ` · ${TYPE_LABELS[chan.type] ?? chan.type}` : ''}
+                              </p>
+                            </div>
+                            {s.pendingSync && (
+                              <span className="flex-shrink-0 text-[10px] px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">Hors-ligne</span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-4 gap-1 mb-1.5">
+                            <SmallStat label="Durée" value={formatDuration(s.dureeMinutes)} />
+                            {s.volumeM3 != null && s.volumeM3 > 0 ? (
+                              <>
+                                <SmallStat label="Volume" value={`${s.volumeM3.toFixed(1)} m³`} />
+                                <SmallStat label="Débit" value={s.debitM3h != null && s.debitM3h > 0 ? `${s.debitM3h.toFixed(1)}` : '—'} sub="m³/h" />
+                              </>
+                            ) : (
+                              <>
+                                <SmallStat label="Surface" value={formatArea(s.surfaceCoveredM2)} />
+                                <SmallStat label="Rend." value={`${Math.round(s.rendementM2h)}`} sub="m²/h" />
+                              </>
+                            )}
+                            <SmallStat label="Vit. moy" value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)}` : '—'} sub="km/h" />
+                          </div>
+                          {s.incidents && s.incidents.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {s.incidents.map((inc, i) => (
+                                <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] border border-amber-700/40">
+                                  <AlertTriangle size={8} /> {INCIDENT_LABELS[inc.type] ?? inc.type} · {inc.dureeMinutes} min
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </button>
+                        {confirmDeleteId === s.id ? (
+                          <div className="flex items-center justify-between gap-2 px-3 py-2 bg-red-950/60 border-t border-red-800/40">
+                            <span className="text-red-400 text-xs">Supprimer cette session ?</span>
+                            <div className="flex gap-2">
+                              <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-1 rounded-lg bg-white/[0.08] text-slate-300 text-xs">Annuler</button>
+                              <button onClick={async () => { await deleteSession(s.id); setConfirmDeleteId(null); }} className="px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold">Confirmer</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button onClick={() => setConfirmDeleteId(s.id)} className="w-full flex items-center justify-center gap-1.5 py-1.5 text-slate-600 hover:text-red-400 text-xs border-t border-white/[0.05] transition-colors">
+                            <Trash2 size={11} /> Supprimer
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

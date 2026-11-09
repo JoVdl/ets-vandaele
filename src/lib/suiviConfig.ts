@@ -6,7 +6,7 @@ export interface SuiviConfig {
   patronPin: string;   // PIN patron (donne accès à l'historique complet)
 }
 
-const DEFAULTS: SuiviConfig = { salaryPin: '1234', patronPin: '0000' };
+const DEFAULTS: SuiviConfig = { salaryPin: '1234', patronPin: '2001' };
 const SESSION_KEY = 'suivi_pin_role';
 
 export async function loadSuiviConfig(): Promise<SuiviConfig> {
