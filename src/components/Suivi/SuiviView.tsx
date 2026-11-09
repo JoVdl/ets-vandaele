@@ -3,7 +3,7 @@ import {
   Play, Pause, Square, MapPin, Wifi, WifiOff, LocateFixed,
   ChevronUp, ChevronDown, History, Settings, Ruler, Trash2, Check, X, LogOut,
   BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers, SlidersHorizontal, Radio, Wrench,
-  AlertTriangle,
+  AlertTriangle, CalendarDays,
 } from 'lucide-react';
 import SuiviMap, { type ChantierZone } from './SuiviMap';
 import SessionDetailView from './SessionDetailView';
@@ -29,13 +29,14 @@ import type { PinRole, SuiviSession, SuiviIncident, IncidentType } from '../../t
 import type { Chantier } from '../../types';
 import { INCIDENT_LABELS, HIST_PALETTE, SessionTimeline, GlobalTimeline } from './incidentUtils';
 import ChantierDetailView from './ChantierDetailView';
+import CalendarView from './CalendarView';
 
 interface Props {
   role: PinRole;
   onLogout: () => void;
 }
 
-type View = 'map' | 'live' | 'history' | 'analytics' | 'settings';
+type View = 'map' | 'live' | 'history' | 'analytics' | 'calendar' | 'settings';
 
 const TYPE_LABELS: Record<string, string> = {
   curage_aspiration:         'Curage aspiration',
@@ -744,6 +745,10 @@ export default function SuiviView({ role, onLogout }: Props) {
         <button onClick={() => setView(v => v === 'history' ? 'map' : 'history')}
           className={`p-1.5 rounded-lg ${view === 'history' ? 'bg-slate-700 text-white' : 'text-slate-400'}`}>
           <History size={16} />
+        </button>
+        <button onClick={() => setView(v => v === 'calendar' ? 'map' : 'calendar')}
+          className={`p-1.5 rounded-lg ${view === 'calendar' ? 'bg-slate-700 text-white' : 'text-slate-400'}`}>
+          <CalendarDays size={16} />
         </button>
         {role === 'patron' && (
           <button onClick={() => setView(v => v === 'live' ? 'map' : 'live')}
@@ -1715,6 +1720,15 @@ export default function SuiviView({ role, onLogout }: Props) {
       )}
 
       {/* ── Settings view (patron only) ──────────────────────────────────── */}
+      {view === 'calendar' && (
+        <CalendarView
+          sessions={sessions}
+          chantiers={chantiers}
+          salarieName={salarieName}
+          onSessionClick={s => setSelectedSession(s)}
+        />
+      )}
+
       {view === 'settings' && role === 'patron' && <SettingsPanel />}
 
       {/* ── Machine params panel ────────────────────────────────────────── */}
