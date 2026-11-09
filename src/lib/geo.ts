@@ -98,6 +98,56 @@ export function totalDistanceM(points: GpsPoint[]): number {
   return d;
 }
 
+/**
+ * Filtre une trace GPS brute pour éliminer les points incohérents.
+ *
+ * Deux filtres combinés :
+ *  1. Vitesse instantanée > vitesseMaxKmh × speedTolerance → rejeté
+ *  2. Dragage (anchorDriftM fini) : point à plus de anchorDriftM m
+ *     du centroïde des 30 derniers points acceptés → rejeté
+ *     (élimine l'opérateur qui s'éloigne de la machine avec son téléphone)
+ *
+ * @param points         Points GPS bruts (ordre chronologique)
+ * @param vitesseMaxKmh  Vitesse max de la machine (paramètre utilisateur)
+ * @param speedTolerance Multiplicateur de tolérance (1.4 dragage, 2.0 surface)
+ * @param anchorDriftM   Distance max tolérée depuis le centroïde glissant.
+ *                       Infinity = filtre désactivé (non-dragage)
+ */
+export function filterGpsTrack(
+  points: GpsPoint[],
+  vitesseMaxKmh: number,
+  speedTolerance = 2.0,
+  anchorDriftM = Infinity,
+): GpsPoint[] {
+  const ANCHOR_WINDOW = 30;
+  const maxSpeedKmh = vitesseMaxKmh * speedTolerance;
+  const accepted: GpsPoint[] = [];
+
+  for (let i = 0; i < points.length; i++) {
+    const pt = points[i];
+    if (accepted.length === 0) { accepted.push(pt); continue; }
+
+    // ── 1. Speed filter ────────────────────────────────────────────────
+    const prev = accepted[accepted.length - 1];
+    const dt   = (pt.ts - prev.ts) / 1000;
+    if (dt <= 0) continue;
+    const speedKmh = (distanceM(prev.lat, prev.lng, pt.lat, pt.lng) / dt) * 3.6;
+    if (speedKmh > maxSpeedKmh) continue;
+
+    // ── 2. Anchor drift filter (dragage only) ──────────────────────────
+    if (anchorDriftM < Infinity && accepted.length >= 5) {
+      const win    = accepted.slice(-ANCHOR_WINDOW);
+      const avgLat = win.reduce((s, p) => s + p.lat, 0) / win.length;
+      const avgLng = win.reduce((s, p) => s + p.lng, 0) / win.length;
+      if (distanceM(avgLat, avgLng, pt.lat, pt.lng) > anchorDriftM) continue;
+    }
+
+    accepted.push(pt);
+  }
+
+  return accepted;
+}
+
 /** Shoelace formula on local flat projection. Accurate for areas < ~100 km². */
 export function areaM2(points: { lat: number; lng: number }[]): number {
   if (points.length < 3) return 0;

@@ -9,7 +9,7 @@ import { fr } from 'date-fns/locale';
 import type { SuiviSession, GpsPoint } from '../../types/suivi';
 import type { Chantier } from '../../types';
 import type { ChantierZone } from './SuiviMap';
-import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM } from '../../lib/geo';
+import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM, filterGpsTrack } from '../../lib/geo';
 import { CHANTIER_TYPES } from '../../lib/constants';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -264,16 +264,24 @@ function openPrintRecap(
 }
 
 export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, workColor, salarieName = 'Hugo', onClose }: Props) {
-  const trail = session.gpsPoints.map(p => [p.lat, p.lng] as [number, number]);
+  const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
+  // Apply the same filter used at capture time (speed + anchor drift for dragage)
+  const filteredGps = filterGpsTrack(
+    session.gpsPoints,
+    machineParams?.vitesseMaxKmh ?? 25,
+    isDragageSession ? 1.4 : 2.0,
+    isDragageSession ? Math.max((machineParams?.largeurTravailM ?? 6) * 4, 80) : Infinity,
+  );
+  const trail = filteredGps.map(p => [p.lat, p.lng] as [number, number]);
   const center: [number, number] = trail.length > 0
     ? trail[Math.floor(trail.length / 2)]
-    : [50.4, 2.8];
+    : [43.7, -0.26];
 
   // Corrected metrics: recompute from filtered GPS (speed × width) using machine params
   const { workSpeedKmh, correctedSurfaceM2, correctedRendement } = (() => {
     if (!machineParams || machineParams.largeurTravailM <= 0 || session.dureeMinutes <= 0)
       return { workSpeedKmh: null, correctedSurfaceM2: null, correctedRendement: null };
-    const workPts    = filterBySpeed(session.gpsPoints, machineParams.vitesseMaxKmh);
+    const workPts    = filteredGps;
     const workDistM  = totalDistanceM(workPts);
     const durationH  = session.dureeMinutes / 60;
     const speedKmh   = workDistM / 1000 / durationH;

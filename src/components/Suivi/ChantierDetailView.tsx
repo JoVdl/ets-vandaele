@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { SuiviSession } from '../../types/suivi';
 import type { Chantier } from '../../types';
-import { formatDuration, formatArea, smoothPoints, centroid } from '../../lib/geo';
+import { formatDuration, formatArea, smoothPoints, centroid, filterGpsTrack } from '../../lib/geo';
 import { INCIDENT_LABELS, INCIDENT_COLORS, HIST_PALETTE, GlobalTimeline, SessionTimeline } from './incidentUtils';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -65,17 +65,26 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
   const budgetPct       = budgetH > 0 ? Math.min(100, (totalH / budgetH) * 100) : null;
   const remainingH      = budgetH > 0 ? Math.max(0, budgetH - totalH) : null;
 
-  // Map data
+  const trails = useMemo(() => ordered.map((s, i) => {
+    const filtered = filterGpsTrack(
+      s.gpsPoints,
+      isDragage ? 3 : 25,
+      isDragage ? 1.4 : 2.0,
+      isDragage ? 80 : Infinity,
+    );
+    return {
+      id:        s.id,
+      color:     HIST_PALETTE[i % HIST_PALETTE.length],
+      positions: smoothPoints(filtered, 0.3).map(p => [p.lat, p.lng] as [number, number]),
+      date:      s.dateDebut,
+    };
+  }), [ordered, isDragage]);
+
+  // Map data — use trails (already filtered) to avoid outliers skewing FitAll bounds
   const allPositions = useMemo(
-    () => ordered.flatMap(s => s.gpsPoints.map(p => [p.lat, p.lng] as [number, number])),
-    [ordered],
+    () => trails.flatMap(t => t.positions),
+    [trails],
   );
-  const trails = useMemo(() => ordered.map((s, i) => ({
-    id:        s.id,
-    color:     HIST_PALETTE[i % HIST_PALETTE.length],
-    positions: smoothPoints(s.gpsPoints, 0.3).map(p => [p.lat, p.lng] as [number, number]),
-    date:      s.dateDebut,
-  })), [ordered]);
 
   const mapCenter = useMemo<[number, number]>(() => {
     if (chantier.polygon && chantier.polygon.length > 0) {

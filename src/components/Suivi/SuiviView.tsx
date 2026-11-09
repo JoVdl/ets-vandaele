@@ -13,7 +13,7 @@ import { useChantiers } from '../../hooks/useChantiers';
 import { CHANTIER_TYPES } from '../../lib/constants';
 import {
   areaM2, formatArea, formatDistance, formatDuration, centroid,
-  avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, stripAreaM2,
+  avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, stripAreaM2, filterGpsTrack,
 } from '../../lib/geo';
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
@@ -320,18 +320,16 @@ export default function SuiviView({ role, onLogout }: Props) {
     return result;
   }, [chantiers, chantierCumul]);
 
-  // ── Speed-outlier filter (GPS glitches above machine max speed) ───────
+  // ── GPS filter: speed outliers + anchor drift (dragage) ─────────────
   const filteredPoints = useMemo(() => {
-    const maxKmh = machineParams.vitesseMaxKmh;
-    return gpsPoints.filter((pt, i) => {
-      if (i === 0) return true;
-      const prev = gpsPoints[i - 1];
-      const dt = (pt.ts - prev.ts) / 1000;
-      if (dt <= 0) return false;
-      const speedKmh = (distanceM(prev.lat, prev.lng, pt.lat, pt.lng) / dt) * 3.6;
-      return speedKmh <= maxKmh * 2; // 2× tolerance before rejecting
-    });
-  }, [gpsPoints, machineParams.vitesseMaxKmh]);
+    const dragueMode = !!chantiers.find(c => c.id === selectedChantierId)?.drague;
+    const speedTol   = dragueMode ? 1.4 : 2.0;
+    // Dragage: reject if point is > max(4 × workWidth, 80 m) from rolling centroid
+    const driftM     = dragueMode
+      ? Math.max(machineParams.largeurTravailM * 4, 80)
+      : Infinity;
+    return filterGpsTrack(gpsPoints, machineParams.vitesseMaxKmh, speedTol, driftM);
+  }, [gpsPoints, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, chantiers, selectedChantierId]);
 
   // ── Computed metrics ───────────────────────────────────────────────────
   const distM    = totalDistanceM(filteredPoints);
