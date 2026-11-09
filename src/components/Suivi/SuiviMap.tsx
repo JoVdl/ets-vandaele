@@ -199,27 +199,28 @@ export interface ChantierZone {
 }
 
 interface Props {
-  gpsPoints:        GpsPoint[];
-  currentPos:       GpsPoint | null;
-  drawMode:         boolean;
-  drawPoints:       { lat: number; lng: number }[];
-  onDrawPoint:      (lat: number, lng: number) => void;
-  followGps:        boolean;
-  onDisableFollow:  () => void;
-  chantierZones:    ChantierZone[];
-  selectedZoneId:   string;
-  onZoneClick:      (id: string) => void;
-  showZones:        boolean;
-  satellite:        'ign' | 'esri' | 'osm';
-  workColor:        string;
-  largeurM:         number;
-  smoothAlpha:      number;
-  sessionActive:    boolean;
-  jumpToPos:        [number, number] | null;
-  liveSessions:     LiveSession[];
-  mySessionId:      string;
-  historicalTrails: { points: GpsPoint[]; color: string }[];
-  isDragage?:       boolean;
+  gpsPoints:                GpsPoint[];
+  currentPos:               GpsPoint | null;
+  drawMode:                 boolean;
+  drawPoints:               { lat: number; lng: number }[];
+  onDrawPoint:              (lat: number, lng: number) => void;
+  followGps:                boolean;
+  onDisableFollow:          () => void;
+  chantierZones:            ChantierZone[];
+  selectedZoneId:           string;
+  onZoneClick:              (id: string) => void;
+  showZones:                boolean;
+  satellite:                'ign' | 'esri' | 'osm';
+  workColor:                string;
+  largeurM:                 number;
+  smoothAlpha:              number;
+  sessionActive:            boolean;
+  jumpToPos:                [number, number] | null;
+  liveSessions:             LiveSession[];
+  mySessionId:              string;
+  historicalTrails:         { points: GpsPoint[]; color: string; sessionId?: string }[];
+  isDragage?:               boolean;
+  onHistoricalTrailClick?:  (sessionId: string) => void;
 }
 
 function liveIcon(label: string) {
@@ -238,7 +239,7 @@ export default function SuiviMap({
   followGps, onDisableFollow, chantierZones, selectedZoneId, onZoneClick,
   showZones, satellite, workColor, largeurM, smoothAlpha,
   sessionActive, jumpToPos, liveSessions, mySessionId, historicalTrails,
-  isDragage,
+  isDragage, onHistoricalTrailClick,
 }: Props) {
 
   const center: [number, number] = currentPos
@@ -279,10 +280,10 @@ export default function SuiviMap({
   );
 
   // Historical trails from past sessions (smoothed + optional swath rects)
-  const historicalRendered = useMemo(() => historicalTrails.map(({ points, color }) => {
+  const historicalRendered = useMemo(() => historicalTrails.map(({ points, color, sessionId }) => {
     const sm = smoothPoints(points, smoothAlpha);
-    if (largeurM > 0) return { kind: 'rects' as const, color, data: swathRects(sm, largeurM / 2) };
-    return { kind: 'line' as const, color, data: sm.map(p => [p.lat, p.lng] as [number, number]) };
+    if (largeurM > 0) return { kind: 'rects' as const, color, sessionId, data: swathRects(sm, largeurM / 2) };
+    return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]) };
   }), [historicalTrails, smoothAlpha, largeurM]);
 
   // Bearing of the machine: angle from the last two smoothed GPS points
@@ -337,17 +338,23 @@ export default function SuiviMap({
         })}
 
         {/* Historical trails from past sessions */}
-        {historicalRendered.map((h, si) =>
-          h.kind === 'rects'
+        {historicalRendered.map((h, si) => {
+          const clickable = !!(h.sessionId && onHistoricalTrailClick);
+          const handlers = clickable
+            ? { click: (e: L.LeafletMouseEvent) => { L.DomEvent.stopPropagation(e); onHistoricalTrailClick!(h.sessionId!); } }
+            : undefined;
+          return h.kind === 'rects'
             ? h.data.map((rect, i) => (
                 <Polygon
                   key={`h-${si}-${i}`}
                   positions={rect}
                   color={h.color}
                   fillColor={h.color}
-                  fillOpacity={0.4}
-                  weight={0}
-                  stroke={false}
+                  fillOpacity={clickable ? 0.55 : 0.4}
+                  weight={clickable ? 1 : 0}
+                  stroke={clickable}
+                  eventHandlers={handlers}
+                  className={clickable ? 'cursor-pointer' : undefined}
                 />
               ))
             : h.data.length > 1 && (
@@ -355,11 +362,13 @@ export default function SuiviMap({
                   key={`h-${si}`}
                   positions={h.data}
                   color={h.color}
-                  weight={3}
-                  opacity={0.5}
+                  weight={clickable ? 5 : 3}
+                  opacity={clickable ? 0.75 : 0.5}
+                  eventHandlers={handlers}
+                  className={clickable ? 'cursor-pointer' : undefined}
                 />
-              )
-        )}
+              );
+        })}
 
         {/* Work trail — swath rectangles or polyline */}
         {largeurM > 0

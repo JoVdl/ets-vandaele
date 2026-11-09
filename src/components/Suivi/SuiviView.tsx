@@ -454,21 +454,41 @@ export default function SuiviView({ role, onLogout }: Props) {
       }
     }
     if (c.latitude && c.longitude) return [c.latitude, c.longitude];
+    // Fallback: first GPS point from any session of this chantier
+    for (const s of sessions) {
+      if (s.chantierId === selectedChantierId && s.gpsPoints.length > 0) {
+        return [s.gpsPoints[0].lat, s.gpsPoints[0].lng];
+      }
+    }
     return null;
-  }, [selectedChantierId, chantiers]);
+  }, [selectedChantierId, chantiers, sessions]);
 
-  // Historical GPS trails for all chantiers, coloured by chantier type
+  // Session colors for the selected chantier (distinct per session, oldest→newest)
+  const HIST_PALETTE = ['#06b6d4', '#8b5cf6', '#f97316', '#ec4899', '#14b8a6', '#f59e0b', '#a3e635'];
+
+  // Historical GPS trails for all chantiers — selected chantier gets distinct colors + sessionId
   const historicalTrails = useMemo(() => {
     const chanMap: Record<string, Chantier> = {};
     for (const c of chantiers) chanMap[c.id] = c;
+
+    const selSorted = sessions
+      .filter(s => s.chantierId === selectedChantierId && s.gpsPoints.length > 1)
+      .sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime());
+    const selIdxMap = new Map(selSorted.map((s, i) => [s.id, i]));
+
     return sessions
       .filter(s => s.gpsPoints.length > 1)
       .map(s => {
+        if (s.chantierId === selectedChantierId) {
+          const idx   = selIdxMap.get(s.id) ?? 0;
+          const color = HIST_PALETTE[idx % HIST_PALETTE.length];
+          return { points: s.gpsPoints, color, sessionId: s.id };
+        }
         const c = chanMap[s.chantierId];
         const color = c ? (CHANTIER_TYPES[c.type]?.color ?? '#22c55e') : '#22c55e';
         return { points: s.gpsPoints, color };
       });
-  }, [sessions, chantiers]);
+  }, [sessions, chantiers, selectedChantierId]);
 
   const chantierZones = useMemo<ChantierZone[]>(() =>
     chantiers
@@ -750,6 +770,10 @@ export default function SuiviView({ role, onLogout }: Props) {
               mySessionId={sessionIdRef.current}
               historicalTrails={historicalTrails}
               isDragage={isDragage}
+              onHistoricalTrailClick={sessionId => {
+                const s = sessions.find(ss => ss.id === sessionId);
+                if (s) setSelectedSession(s);
+              }}
             />
 
             {/* Map control buttons */}
