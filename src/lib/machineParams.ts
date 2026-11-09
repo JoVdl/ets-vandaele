@@ -54,12 +54,12 @@ const STORAGE_KEY = 'suivi_machine_params';
 
 export function loadMachineParams(chantierType?: string): MachineParams {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw) as MachineParams;
   } catch { /* ignore */ }
   return defaultParams(chantierType);
 }
 
 export function saveMachineParams(p: MachineParams): void {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch { /* ignore */ }
 }
