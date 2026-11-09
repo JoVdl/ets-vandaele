@@ -23,6 +23,8 @@ import {
 } from '../../hooks/useLiveSessions';
 import { saveActiveSession, loadActiveSession, clearActiveSession } from '../../lib/suiviOffline';
 import { clearSession, loadSuiviConfig } from '../../lib/suiviConfig';
+import { writeChantierEvent, listenChantierEvents, getDeviceId } from '../../lib/chantierEvents';
+import { showNotification, notificationsEnabled, setNotificationsEnabled, requestAndEnable } from '../../lib/notifications';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { PinRole, SuiviSession, SuiviIncident, IncidentType } from '../../types/suivi';
@@ -69,6 +71,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   // Use role as the Firestore document ID — guarantees exactly one live document
   // per role (patron / salarie) regardless of refreshes or tabs.
   const sessionIdRef = useRef<string>(role);
+  const deviceId = useRef(getDeviceId()).current;
 
   // ── Session state ──────────────────────────────────────────────────────
   const [sessionActive, setSessionActive]   = useState(false);
@@ -444,6 +447,44 @@ export default function SuiviView({ role, onLogout }: Props) {
     }
   }, [selectedChantierId]);
 
+  // ── Notifications : écoute des événements Firestore de l'autre appareil ──
+  useEffect(() => {
+    if (!notificationsEnabled()) return;
+    const since = new Date();
+    const unsub = listenChantierEvents(since, deviceId, ev => {
+      const who = ev.operateur === 'salarie' ? salarieName : 'Patron';
+      switch (ev.type) {
+        case 'session_start':
+          showNotification(`▶️ Session démarrée`, `${ev.chantierNom} — ${who}`);
+          break;
+        case 'session_pause':
+          showNotification(`⏸️ Session en pause`, `${ev.chantierNom} — ${who}`);
+          break;
+        case 'session_resume':
+          showNotification(`▶️ Session reprise`, `${ev.chantierNom} — ${who}`);
+          break;
+        case 'session_end':
+          showNotification(
+            `🏁 Session terminée`,
+            ev.dureeSessionMin
+              ? `${ev.chantierNom} — ${formatDuration(ev.dureeSessionMin)} (${who})`
+              : `${ev.chantierNom} — ${who}`,
+          );
+          break;
+        case 'incident':
+          showNotification(
+            `⚠️ Incident — ${ev.chantierNom}`,
+            ev.incidentLabel
+              ? `${ev.incidentLabel}${ev.incidentDureeMin ? ` · ${ev.incidentDureeMin} min` : ''} (${who})`
+              : who,
+          );
+          break;
+      }
+    });
+    return unsub;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salarieName, deviceId]);
+
   // ── Reset machine params when chantier type or dragage mode changes ──────
   useEffect(() => {
     if (!selectedChantier) return;
@@ -582,19 +623,33 @@ export default function SuiviView({ role, onLogout }: Props) {
   // ── Session controls ───────────────────────────────────────────────────
   const handleStart = useCallback(() => {
     if (!selectedChantierId) { setShowChantierPicker(true); return; }
+    const ch = chantiers.find(c => c.id === selectedChantierId);
     resetPoints();
     setElapsed(0);
     setSessionStart(new Date());
     setSessionActive(true);
     setSessionPaused(false);
     setSessionIncidents([]);
-  }, [selectedChantierId, role, resetPoints]);
+    if (ch) {
+      writeChantierEvent({ type: 'session_start', chantierId: ch.id, chantierNom: ch.nom, operateur: role, deviceId });
+    }
+  }, [selectedChantierId, role, resetPoints, chantiers, deviceId]);
 
   const handlePause = useCallback(() => {
-    setSessionPaused(p => !p);
+    setSessionPaused(p => {
+      const pausing = !p;
+      const ch = chantiers.find(c => c.id === selectedChantierId);
+      if (ch) {
+        writeChantierEvent({
+          type: pausing ? 'session_pause' : 'session_resume',
+          chantierId: ch.id, chantierNom: ch.nom, operateur: role, deviceId,
+        });
+      }
+      return pausing;
+    });
     setAutoPausedByZone(false);
     farCountRef.current = 0;
-  }, []);
+  }, [chantiers, selectedChantierId, role, deviceId]);
 
   const handleStop = useCallback(async () => {
     if (!selectedChantier) return;
@@ -603,14 +658,22 @@ export default function SuiviView({ role, onLogout }: Props) {
     setSessionPaused(false);
     clearActiveSession();
     clearLiveSession(sessionIdRef.current);
+    const dureeMin = sessionStart ? Math.round((Date.now() - sessionStart.getTime()) / 60_000) : Math.round(elapsed / 60);
+    writeChantierEvent({
+      type: 'session_end',
+      chantierId: selectedChantier.id,
+      chantierNom: selectedChantier.nom,
+      operateur: role,
+      deviceId,
+      dureeSessionMin: dureeMin,
+    });
     await saveSession({
       chantierId:           selectedChantier.id,
       chantierNom:          selectedChantier.nom,
       operateur:            role,
       dateDebut:            sessionStart?.toISOString() ?? new Date().toISOString(),
       dateFin:              new Date().toISOString(),
-      // Use real timestamp diff — accurate even when app was in background
-      dureeMinutes:         sessionStart ? Math.round((Date.now() - sessionStart.getTime()) / 60_000) : Math.round(elapsed / 60),
+      dureeMinutes:         dureeMin,
       gpsPoints,
       notes:                '',
       // Pass pre-computed values so the save uses the same formula as the live display
@@ -631,7 +694,7 @@ export default function SuiviView({ role, onLogout }: Props) {
     setElapsed(0);
     setSessionStart(null);
     setSessionIncidents([]);
-  }, [selectedChantier, saveSession, role, sessionStart, elapsed, gpsPoints, resetPoints, areaM, rendement]);
+  }, [selectedChantier, saveSession, role, sessionStart, elapsed, gpsPoints, resetPoints, areaM, rendement, deviceId]);
 
   // ── Draw mode ──────────────────────────────────────────────────────────
   const handleDrawPoint = useCallback((lat: number, lng: number) => {
@@ -1778,6 +1841,17 @@ export default function SuiviView({ role, onLogout }: Props) {
           onAdd={inc => {
             setSessionIncidents(prev => [...prev, inc]);
             setShowIncidentModal(false);
+            if (selectedChantier) {
+              writeChantierEvent({
+                type: 'incident',
+                chantierId: selectedChantier.id,
+                chantierNom: selectedChantier.nom,
+                operateur: role,
+                deviceId,
+                incidentLabel: INCIDENT_LABELS[inc.type as IncidentType] ?? inc.type,
+                incidentDureeMin: inc.dureeMinutes,
+              });
+            }
           }}
         />
       )}
@@ -2193,6 +2267,56 @@ function MachineParamsPanel({
   );
 }
 
+function NotificationToggle() {
+  const supported = 'Notification' in window;
+  const [status, setStatus] = useState<'granted' | 'denied' | 'default' | 'unsupported'>(
+    !supported ? 'unsupported'
+    : Notification.permission === 'granted' ? 'granted'
+    : Notification.permission === 'denied' ? 'denied'
+    : 'default',
+  );
+  const [enabled, setEnabled] = useState(() => notificationsEnabled());
+
+  const handleToggle = async () => {
+    if (!supported) return;
+    if (enabled) {
+      setNotificationsEnabled(false);
+      setEnabled(false);
+    } else {
+      const result = await requestAndEnable();
+      setStatus(result === 'unsupported' ? 'unsupported' : result);
+      if (result === 'granted') setEnabled(true);
+    }
+  };
+
+  return (
+    <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <p className="text-white text-sm font-semibold">Notifications</p>
+          <p className="text-slate-500 text-[11px] mt-0.5">
+            {status === 'unsupported' ? 'Non supporté par ce navigateur'
+             : status === 'denied'    ? 'Bloquées dans les paramètres du navigateur'
+             : enabled                ? 'Actives — démarrage, pause, incidents…'
+                                      : 'Recevoir une alerte à chaque événement'}
+          </p>
+        </div>
+        <button
+          onClick={handleToggle}
+          disabled={status === 'unsupported' || status === 'denied'}
+          className={`relative w-12 h-6 rounded-full transition-colors disabled:opacity-40 ${enabled ? 'bg-green-600' : 'bg-slate-700'}`}>
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : ''}`} />
+        </button>
+      </div>
+      {status === 'denied' && (
+        <p className="text-amber-400 text-[10px]">
+          Autorisez les notifications dans les réglages du navigateur pour activer.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SettingsPanel() {
   const [salaryPin,   setSalaryPin]   = useState('');
   const [patronPin,   setPatronPin]   = useState('');
@@ -2252,6 +2376,7 @@ function SettingsPanel() {
           {saved ? '✓ Enregistré' : saving ? 'Enregistrement…' : 'Enregistrer les codes'}
         </button>
       </div>
+      <NotificationToggle />
       <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-4">
         <p className="text-slate-400 text-xs">
           Le code patron donne accès au Plan de Charge, à l'historique complet et aux analytiques.
