@@ -93,6 +93,7 @@ export default function SuiviView({ role, onLogout }: Props) {
     try { return !localStorage.getItem('lastSelectedChantierId'); } catch { return true; }
   });
   const [showMachineEdit, setShowMachineEdit] = useState(false);
+  const [liveJump, setLiveJump] = useState<[number, number] | null>(null);
   const [clientFilter, setClientFilter]     = useState<string | null>(() => {
     try { return localStorage.getItem('suiviClientFilter') ?? null; } catch { return null; }
   });
@@ -398,6 +399,8 @@ export default function SuiviView({ role, onLogout }: Props) {
         rendementM2h: rendement,
         progressPct:  progress,
         dureeMinutes: sessionStart ? Math.round((Date.now() - sessionStart.getTime()) / 60_000) : Math.round(elapsed / 60),
+        ...(isDragage && volumeM3 > 0 && { volumeM3, debitM3h }),
+        paused:       sessionPaused,
       });
     };
     push(); // push immediately
@@ -417,6 +420,22 @@ export default function SuiviView({ role, onLogout }: Props) {
 
   // Temps perdu sur incidents (session en cours)
   const tempsPerduMinLive = sessionIncidents.reduce((a, i) => a + i.dureeMinutes, 0);
+
+  // ── Live viewer : session d'un autre device sur le chantier sélectionné ───
+  const otherLive = !sessionActive && selectedChantierId
+    ? (liveSessions.find(ls => ls.chantierId === selectedChantierId && ls.sessionId !== sessionIdRef.current) ?? null)
+    : null;
+
+  // Centre la carte sur la position live quand une session apparaît/change d'opérateur
+  useEffect(() => {
+    if (otherLive) {
+      setLiveJump([otherLive.lat, otherLive.lng]);
+      setFollowGps(false);
+    } else {
+      setLiveJump(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otherLive?.sessionId]);
 
   // Persist last selected chantier for auto-restore on next launch
   useEffect(() => {
@@ -768,7 +787,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               chantierZones={chantierZones}
               selectedZoneId={selectedChantierId}
               onZoneClick={id => { setSelectedChantierId(id); setShowChantierPicker(false); setFollowGps(false); }}
-              jumpToPos={jumpToPos}
+              jumpToPos={liveJump ?? jumpToPos}
               showZones={showZones}
               satellite={tileMode}
               workColor={workColor}
@@ -934,8 +953,8 @@ export default function SuiviView({ role, onLogout }: Props) {
 
             {panelOpen && (
               <>
-                {/* Chantier stats panel — visible when a chantier is selected but not in session */}
-                {!sessionActive && selectedChantier && (
+                {/* Chantier stats panel — visible when a chantier is selected but not in session, and no other live session */}
+                {!sessionActive && selectedChantier && !otherLive && (
                   <div className="border-b border-white/[0.07] px-2 pb-3 pt-1">
                     <div className="flex items-center gap-1.5 mb-2 px-1">
                       <span className="text-slate-500 text-[10px] uppercase tracking-wide truncate flex-1">
@@ -1045,6 +1064,40 @@ export default function SuiviView({ role, onLogout }: Props) {
                   </div>
                 )}
 
+                {/* ── Live viewer — session active sur un autre device ── */}
+                {otherLive && !sessionActive && (() => {
+                  const minsAgo = Math.round((Date.now() - new Date(otherLive.lastUpdate).getTime()) / 60_000);
+                  return (
+                    <div className="border-b border-white/[0.07] px-2 pb-3 pt-2">
+                      <div className="flex items-center gap-2 mb-2 px-1">
+                        <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse flex-shrink-0" />
+                        <span className="text-orange-300 text-xs font-semibold flex-1">
+                          {otherLive.operateur === 'salarie' ? salarieName : 'Patron'} — session en cours
+                          {otherLive.paused && ' (pause)'}
+                        </span>
+                        <span className="text-slate-500 text-[10px]">
+                          {minsAgo > 0 ? `màj il y a ${minsAgo} min` : 'maintenant'}
+                        </span>
+                      </div>
+                      {isDragage ? (
+                        <div className="grid grid-cols-4 gap-1">
+                          <Metric label="Durée" value={formatDuration(otherLive.dureeMinutes)} small />
+                          <Metric label="Volume" value={(otherLive.volumeM3 ?? 0) > 0 ? `${otherLive.volumeM3!.toFixed(1)} m³` : '—'} small />
+                          <Metric label="Débit" value={(otherLive.debitM3h ?? 0) > 0 ? `${otherLive.debitM3h!.toFixed(1)}` : '—'} sub="m³/h" small />
+                          <Metric label="Distance" value={formatDistance(otherLive.distM)} small />
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-4 gap-1">
+                          <Metric label="Durée" value={formatDuration(otherLive.dureeMinutes)} small />
+                          <Metric label="Surface" value={formatArea(otherLive.areaM)} small />
+                          <Metric label="Rendement" value={`${Math.round(otherLive.rendementM2h)}`} sub="m²/h" small />
+                          <Metric label="Avancement" value={otherLive.progressPct != null ? `${Math.round(otherLive.progressPct)} %` : '—'} small />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {sessionActive && !isDragage && (
                   <div className="grid grid-cols-4 gap-0 border-b border-white/[0.07] px-2 pb-3">
                     <Metric label="Durée" value={formatTime(elapsed)} />
@@ -1135,7 +1188,15 @@ export default function SuiviView({ role, onLogout }: Props) {
                   )}
 
                   <div className="flex-1 flex items-center gap-2 justify-center">
-                    {!sessionActive ? (
+                    {!sessionActive && otherLive ? (
+                      /* Viewer: session active sur un autre device — bouton centrage */
+                      <button
+                        onClick={() => { setLiveJump([otherLive.lat, otherLive.lng]); setFollowGps(false); }}
+                        className="flex-1 flex items-center justify-center gap-2 h-14 rounded-2xl bg-orange-900/60 border border-orange-600/40 text-orange-300 font-bold text-sm hover:bg-orange-800/70 active:scale-95 transition-all">
+                        <Radio size={18} className="animate-pulse" />
+                        Localiser sur la carte
+                      </button>
+                    ) : !sessionActive ? (
                       <button onClick={handleStart}
                         className="flex-1 flex items-center justify-center gap-2 h-14 rounded-2xl bg-green-600 text-white text-base font-bold hover:bg-green-500 active:scale-95 transition-all shadow-lg shadow-green-600/30">
                         <Play size={20} fill="currentColor" />
@@ -1663,6 +1724,8 @@ export default function SuiviView({ role, onLogout }: Props) {
           params={machineParams}
           chantierType={selectedChantier?.type}
           isDragage={isDragage}
+          sessionActive={sessionActive}
+          sessionAreaM={areaM}
           onClose={() => setShowMachinePanel(false)}
           onChange={p => { setMachineParamsState(p); saveMachineParams(p); }}
         />
@@ -1905,11 +1968,13 @@ function OperatorBar({ label, hours, total, color }: { label: string; hours: num
 }
 
 function MachineParamsPanel({
-  params, chantierType, isDragage, onClose, onChange,
+  params, chantierType, isDragage, sessionActive, sessionAreaM, onClose, onChange,
 }: {
   params: MachineParams;
   chantierType?: string;
   isDragage?: boolean;
+  sessionActive?: boolean;
+  sessionAreaM?: number;
   onClose: () => void;
   onChange: (p: MachineParams) => void;
 }) {
@@ -1994,6 +2059,23 @@ function MachineParamsPanel({
                   )}
                 </p>
               </div>
+
+              {/* Live preview: volume calculé avec les nouveaux paramètres */}
+              {sessionActive && (sessionAreaM ?? 0) > 0 && (() => {
+                const previewVol = (sessionAreaM ?? 0) * (local.profondeurDragageM ?? 0) * Math.max(1, local.nbPassesParPosition ?? 1);
+                return (
+                  <div className="bg-cyan-900/40 border border-cyan-700/40 rounded-xl px-3 py-2.5">
+                    <p className="text-cyan-400 text-[10px] uppercase tracking-wide mb-1">Aperçu — session en cours</p>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-white font-bold text-lg tabular-nums">{previewVol.toFixed(1)} m³</span>
+                      <span className="text-cyan-400 text-[10px]">avec ces paramètres</span>
+                    </div>
+                    <p className="text-slate-500 text-[10px] mt-0.5">
+                      {formatArea(sessionAreaM ?? 0)} × {(local.profondeurDragageM ?? 0).toFixed(2)} m × {Math.max(1, local.nbPassesParPosition ?? 1)} passe{(local.nbPassesParPosition ?? 1) > 1 ? 's' : ''}
+                    </p>
+                  </div>
+                );
+              })()}
             </>
           )}
 

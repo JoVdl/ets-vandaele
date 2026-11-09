@@ -20,6 +20,10 @@ export interface LiveSession {
   rendementM2h:   number;
   progressPct:    number | null;
   dureeMinutes:   number;
+  // Dragage extras
+  volumeM3?:      number;
+  debitM3h?:      number;
+  paused?:        boolean;
   lastUpdate:     string; // ISO
 }
 
