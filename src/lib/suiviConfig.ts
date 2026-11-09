@@ -2,11 +2,12 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 export interface SuiviConfig {
-  salaryPin: string;   // PIN salarié
-  patronPin: string;   // PIN patron (donne accès à l'historique complet)
+  salaryPin:    string;
+  patronPin:    string;
+  salarieName?: string;  // prénom affiché à la place de "Salarié"
 }
 
-const DEFAULTS: SuiviConfig = { salaryPin: '1234', patronPin: '2001' };
+const DEFAULTS: SuiviConfig = { salaryPin: '1234', patronPin: '2001', salarieName: 'Hugo' };
 const SESSION_KEY = 'suivi_pin_role';
 
 export async function loadSuiviConfig(): Promise<SuiviConfig> {

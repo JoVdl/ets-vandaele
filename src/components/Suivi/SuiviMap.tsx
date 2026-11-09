@@ -221,6 +221,7 @@ interface Props {
   historicalTrails:         { points: GpsPoint[]; color: string; sessionId?: string }[];
   isDragage?:               boolean;
   onHistoricalTrailClick?:  (sessionId: string) => void;
+  salarieName?:             string;
 }
 
 function liveIcon(label: string) {
@@ -239,7 +240,7 @@ export default function SuiviMap({
   followGps, onDisableFollow, chantierZones, selectedZoneId, onZoneClick,
   showZones, satellite, workColor, largeurM, smoothAlpha,
   sessionActive, jumpToPos, liveSessions, mySessionId, historicalTrails,
-  isDragage, onHistoricalTrailClick,
+  isDragage, onHistoricalTrailClick, salarieName = 'Hugo',
 }: Props) {
 
   const center: [number, number] = currentPos
@@ -407,7 +408,7 @@ export default function SuiviMap({
           .filter(s => s.sessionId !== mySessionId)
           .map(s => (
             <Marker key={s.sessionId} position={[s.lat, s.lng]}
-              icon={liveIcon(s.operateur === 'salarie' ? 'Salarié' : 'Patron')} />
+              icon={liveIcon(s.operateur === 'salarie' ? salarieName : 'Patron')} />
           ))
         }
 

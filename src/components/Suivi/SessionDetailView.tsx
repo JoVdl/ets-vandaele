@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap } from 'reac
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ArrowLeft, Printer, AlertTriangle } from 'lucide-react';
-import { INCIDENT_LABELS, INCIDENT_COLORS, SessionTimeline } from './SuiviView';
+import { INCIDENT_LABELS, INCIDENT_COLORS, SessionTimeline } from './incidentUtils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { SuiviSession, GpsPoint } from '../../types/suivi';
@@ -53,6 +53,7 @@ interface Props {
   chantierZones: ChantierZone[];
   machineParams?: { largeurTravailM: number; vitesseMaxKmh: number; recouvrementPct: number };
   workColor:     string;
+  salarieName?:  string;
   onClose:       () => void;
 }
 
@@ -102,6 +103,7 @@ function openPrintRecap(
   workColor: string,
   zonePolygons: { lat: number; lng: number }[][],
   extras: RecapExtras,
+  salarieName = 'Hugo',
 ) {
   const dateStr   = format(new Date(session.dateDebut), 'EEEE dd MMMM yyyy', { locale: fr });
   const dateFin   = session.dateFin ? new Date(session.dateFin) : null;
@@ -211,7 +213,7 @@ function openPrintRecap(
     <div style="font-weight:700;color:#fff;letter-spacing:.04em;text-transform:uppercase;font-size:11px">Rapport d'intervention</div>
     <div>${dateStr}</div>
     <div>${format(new Date(session.dateDebut), 'HH:mm', { locale: fr })}${dateFin ? ' → ' + format(dateFin, 'HH:mm', { locale: fr }) : ''}</div>
-    <div>${session.operateur === 'patron' ? 'Patron' : 'Salarié'}</div>
+    <div>${session.operateur === 'patron' ? 'Patron' : salarieName}</div>
   </div>
 </div>
 
@@ -256,7 +258,7 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, workColor, onClose }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, workColor, salarieName = 'Hugo', onClose }: Props) {
   const trail = session.gpsPoints.map(p => [p.lat, p.lng] as [number, number]);
   const center: [number, number] = trail.length > 0
     ? trail[Math.floor(trail.length / 2)]
@@ -332,7 +334,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
           <p className="text-white text-sm font-semibold truncate">{session.chantierNom}</p>
           <p className="text-slate-400 text-[10px]">
             {format(new Date(session.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
-            {' · '}{session.operateur === 'patron' ? 'Patron' : 'Salarié'}
+            {' · '}{session.operateur === 'patron' ? 'Patron' : salarieName}
           </p>
         </div>
         {session.pendingSync && (
@@ -345,6 +347,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
             session, chantier, thisPct, cumulPct, rendMoyen, workColor,
             chantierZones.flatMap(z => z.polygons.filter(p => p.length >= 3)),
             { workSpeedKmh, correctedSurfaceM2, correctedRendement },
+            salarieName,
           )}
           title="Récap client (PDF)"
           className="flex-shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white"
@@ -499,7 +502,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
         <div className="flex items-center justify-between text-[10px] text-slate-600">
           <span>Début : {format(new Date(session.dateDebut), 'HH:mm', { locale: fr })}</span>
           {dateFin && <span>Fin : {format(dateFin, 'HH:mm', { locale: fr })}</span>}
-          <span>{session.operateur === 'patron' ? 'Patron' : 'Salarié'}</span>
+          <span>{session.operateur === 'patron' ? 'Patron' : salarieName}</span>
         </div>
       </div>
     </div>

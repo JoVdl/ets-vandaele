@@ -22,11 +22,13 @@ import {
   pushLiveSession, clearLiveSession, useLiveSessions,
 } from '../../hooks/useLiveSessions';
 import { saveActiveSession, loadActiveSession, clearActiveSession } from '../../lib/suiviOffline';
-import { clearSession } from '../../lib/suiviConfig';
+import { clearSession, loadSuiviConfig } from '../../lib/suiviConfig';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { PinRole, SuiviSession, SuiviIncident, IncidentType } from '../../types/suivi';
 import type { Chantier } from '../../types';
+import { INCIDENT_LABELS, HIST_PALETTE, SessionTimeline, GlobalTimeline } from './incidentUtils';
+import ChantierDetailView from './ChantierDetailView';
 
 interface Props {
   role: PinRole;
@@ -57,6 +59,8 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [restoredBanner, setRestoredBanner]   = useState<string | null>(null); // chantier nom
   const [autoPausedByZone, setAutoPausedByZone] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showChantierDetail, setShowChantierDetail] = useState(false);
+  const [salarieName, setSalarieName] = useState('Hugo');
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [sessionIncidents, setSessionIncidents]   = useState<SuiviIncident[]>([]);
   const [confirmStop, setConfirmStop] = useState(false);
@@ -265,6 +269,10 @@ export default function SuiviView({ role, onLogout }: Props) {
     };
   }, [saveActiveRef]);
 
+  useEffect(() => {
+    loadSuiviConfig().then(cfg => { if (cfg.salarieName) setSalarieName(cfg.salarieName); });
+  }, []);
+
   // Auto-restore on mount (no confirm — silent restore with dismissable banner)
   useEffect(() => {
     const saved = loadActiveSession();
@@ -466,9 +474,6 @@ export default function SuiviView({ role, onLogout }: Props) {
     }
     return null;
   }, [selectedChantierId, chantiers, sessions]);
-
-  // Session colors for the selected chantier (distinct per session, oldest→newest)
-  const HIST_PALETTE = ['#06b6d4', '#8b5cf6', '#f97316', '#ec4899', '#14b8a6', '#f59e0b', '#a3e635'];
 
   // Historical GPS trails for all chantiers — selected chantier gets distinct colors + sessionId
   const historicalTrails = useMemo(() => {
@@ -778,6 +783,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                 const s = sessions.find(ss => ss.id === sessionId);
                 if (s) setSelectedSession(s);
               }}
+              salarieName={salarieName}
             />
 
             {/* Map control buttons */}
@@ -1162,7 +1168,12 @@ export default function SuiviView({ role, onLogout }: Props) {
               {/* ── Global stats ── */}
               {chantierDashStats && chantierDashStats.sessions.length > 0 && (
                 <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3">
-                  <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2">Cumul chantier</p>
+                  <button
+                    onClick={() => setShowChantierDetail(true)}
+                    className="w-full flex items-center justify-between mb-2 group">
+                    <p className="text-slate-500 text-[10px] uppercase tracking-wide">Cumul chantier</p>
+                    <span className="text-[10px] text-slate-600 group-hover:text-slate-400 transition-colors">Détail →</span>
+                  </button>
                   {isDragage ? (
                     <div className="grid grid-cols-4 gap-1 mb-2">
                       <SmallStat label="Sessions" value={`${chantierDashStats.sessions.length}`} />
@@ -1240,7 +1251,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
                         <p className="text-orange-300 text-xs font-semibold uppercase tracking-wide">
-                          {ls.operateur === 'salarie' ? 'Salarié' : 'Patron'} — en cours
+                          {ls.operateur === 'salarie' ? salarieName : 'Patron'} — en cours
                         </p>
                         <span className="ml-auto text-slate-500 text-[10px]">
                           {minsAgo > 0 ? `màj il y a ${minsAgo} min` : 'maintenant'}
@@ -1276,7 +1287,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                                   {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
                                 </p>
                                 <p className="text-slate-500 text-[10px] mt-0.5">
-                                  {s.operateur === 'patron' ? 'Patron' : 'Salarié'}
+                                  {s.operateur === 'patron' ? 'Patron' : salarieName}
                                   {s.profondeurDragageM != null ? ` · ${s.profondeurDragageM.toFixed(2)} m prof.` : ''}
                                 </p>
                               </div>
@@ -1366,7 +1377,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                               <p className="text-white text-sm font-semibold truncate">{s.chantierNom}</p>
                               <p className="text-slate-400 text-[10px] mt-0.5">
                                 {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
-                                {' · '}{s.operateur === 'patron' ? 'Patron' : 'Salarié'}
+                                {' · '}{s.operateur === 'patron' ? 'Patron' : salarieName}
                                 {chan?.type ? ` · ${TYPE_LABELS[chan.type] ?? chan.type}` : ''}
                               </p>
                             </div>
@@ -1458,7 +1469,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                           <div className="flex-1 min-w-0">
                             <p className="text-white text-sm font-semibold truncate">{s.chantierNom}</p>
                             <p className="text-slate-400 text-[10px]">
-                              {s.operateur === 'salarie' ? 'Salarié' : 'Patron'}
+                              {s.operateur === 'salarie' ? salarieName : 'Patron'}
                               {minsAgo > 0 ? ` · il y a ${minsAgo} min` : ' · maintenant'}
                             </p>
                           </div>
@@ -1564,7 +1575,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                       )}
                       {analytics.salarieH > 0 && (
                         <OperatorBar
-                          label="Salarié"
+                          label={salarieName}
                           hours={analytics.salarieH}
                           total={analytics.totalH}
                           color="bg-green-500"
@@ -1618,6 +1629,17 @@ export default function SuiviView({ role, onLogout }: Props) {
         />
       )}
 
+      {/* ── Chantier detail overlay ─────────────────────────────────────── */}
+      {showChantierDetail && selectedChantier && chantierDashStats && (
+        <ChantierDetailView
+          chantier={selectedChantier}
+          sessions={chantierDashStats.sessions}
+          isDragage={isDragage}
+          salarieName={salarieName}
+          onClose={() => setShowChantierDetail(false)}
+        />
+      )}
+
       {/* ── Session detail overlay ──────────────────────────────────────── */}
       {selectedSession && (
         <SessionDetailView
@@ -1629,6 +1651,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           workColor={selectedSession.chantierId === selectedChantierId
             ? workColor
             : '#22c55e'}
+          salarieName={salarieName}
           onClose={() => setSelectedSession(null)}
         />
       )}
@@ -2037,17 +2060,24 @@ function MachineParamsPanel({
 }
 
 function SettingsPanel() {
-  const [salaryPin, setSalaryPin] = useState('');
-  const [patronPin, setPatronPin] = useState('');
-  const [saved, setSaved]         = useState(false);
-  const [saving, setSaving]       = useState(false);
+  const [salaryPin,   setSalaryPin]   = useState('');
+  const [patronPin,   setPatronPin]   = useState('');
+  const [salarieName, setSalarieName] = useState('Hugo');
+  const [saved, setSaved]             = useState(false);
+  const [saving, setSaving]           = useState(false);
+
+  useEffect(() => {
+    import('../../lib/suiviConfig').then(({ loadSuiviConfig }) => {
+      loadSuiviConfig().then(cfg => { if (cfg.salarieName) setSalarieName(cfg.salarieName); });
+    });
+  }, []);
 
   const handleSave = async () => {
     if (salaryPin.length < 4 || patronPin.length < 4) return;
     setSaving(true);
     try {
       const { saveSuiviConfig } = await import('../../lib/suiviConfig');
-      await saveSuiviConfig({ salaryPin, patronPin });
+      await saveSuiviConfig({ salaryPin, patronPin, salarieName: salarieName.trim() || 'Hugo' });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } finally {
@@ -2059,6 +2089,14 @@ function SettingsPanel() {
     <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
       <h2 className="text-white font-bold text-base">Paramètres accès</h2>
       <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 space-y-4">
+        <div>
+          <label className="text-slate-400 text-xs uppercase tracking-wide block mb-1">
+            Prénom du salarié
+          </label>
+          <input type="text" placeholder="ex: Hugo" value={salarieName}
+            onChange={e => setSalarieName(e.target.value.slice(0, 30))}
+            className="w-full bg-white/[0.08] border border-white/[0.10] text-white rounded-xl px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-green-500/60" />
+        </div>
         <div>
           <label className="text-slate-400 text-xs uppercase tracking-wide block mb-1">
             Code salarié
@@ -2179,25 +2217,8 @@ function MachineTypeEdit({
   );
 }
 
-// ── Incident labels & colors ───────────────────────────────────────────────────
-
-export const INCIDENT_LABELS: Record<IncidentType, string> = {
-  bouchon_avant_pompe: 'Bouchon avant pompe',
-  bouchon_apres_pompe: 'Bouchon après pompe',
-  deplacement_cables:  'Déplacement câbles',
-  ajout_tuyaux:        'Ajout de tuyaux',
-  panne_mecanique:     'Panne mécanique',
-  autre:               'Autre',
-};
-
-export const INCIDENT_COLORS: Record<IncidentType, string> = {
-  bouchon_avant_pompe: '#f97316',
-  bouchon_apres_pompe: '#ef4444',
-  deplacement_cables:  '#a855f7',
-  ajout_tuyaux:        '#3b82f6',
-  panne_mecanique:     '#eab308',
-  autre:               '#6b7280',
-};
+// ── Re-exports for backward compatibility ──────────────────────────────────────
+export { INCIDENT_LABELS, INCIDENT_COLORS, SessionTimeline } from './incidentUtils';
 
 const INCIDENT_OPTIONS: { value: IncidentType; label: string }[] = [
   { value: 'bouchon_avant_pompe', label: 'Bouchon avant pompe' },
@@ -2208,153 +2229,6 @@ const INCIDENT_OPTIONS: { value: IncidentType; label: string }[] = [
   { value: 'autre',               label: 'Autre' },
 ];
 
-// ── SessionTimeline ────────────────────────────────────────────────────────────
-
-export function SessionTimeline({ session }: { session: SuiviSession }) {
-  const [activeIdx, setActiveIdx] = useState<number | null>(null);
-  const totalMin = session.dureeMinutes;
-  if (totalMin <= 0) return null;
-
-  const sessionStartMs = new Date(session.dateDebut).getTime();
-
-  const segments = (session.incidents ?? []).map((inc, i) => {
-    const incEndMs   = new Date(inc.ts).getTime();
-    const incStartMs = incEndMs - inc.dureeMinutes * 60_000;
-    const startPct   = Math.max(0, ((incStartMs - sessionStartMs) / (totalMin * 60_000)) * 100);
-    const widthPct   = Math.min(100 - startPct, (inc.dureeMinutes / totalMin) * 100);
-    return { inc, startPct, widthPct, i };
-  });
-
-  return (
-    <div className="mt-2.5">
-      <div
-        className="relative h-2 rounded-full overflow-hidden"
-        style={{ background: '#16a34a66' }}
-        onClick={() => setActiveIdx(null)}
-      >
-        {segments.map(seg => (
-          <button
-            key={seg.i}
-            onClick={e => { e.stopPropagation(); setActiveIdx(activeIdx === seg.i ? null : seg.i); }}
-            className="absolute top-0 h-full rounded-sm min-w-[3px] transition-opacity hover:opacity-90 active:opacity-75"
-            style={{
-              left:            `${seg.startPct}%`,
-              width:           `${Math.max(seg.widthPct, 2)}%`,
-              backgroundColor: INCIDENT_COLORS[seg.inc.type],
-            }}
-          />
-        ))}
-      </div>
-      {activeIdx !== null && segments[activeIdx] && (
-        <div className="mt-1 px-2 py-1 bg-slate-800/90 border border-white/[0.12] rounded-lg text-[10px] text-slate-200 flex items-center gap-1.5">
-          <span
-            className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: INCIDENT_COLORS[segments[activeIdx].inc.type] }}
-          />
-          <span className="font-semibold">{INCIDENT_LABELS[segments[activeIdx].inc.type]}</span>
-          <span className="text-slate-400">·</span>
-          <span>{segments[activeIdx].inc.dureeMinutes} min</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── GlobalTimeline ─────────────────────────────────────────────────────────────
-
-function GlobalTimeline({ sessions }: { sessions: SuiviSession[] }) {
-  const [activeKey, setActiveKey] = useState<string | null>(null);
-
-  const ordered = [...sessions].sort(
-    (a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime(),
-  );
-  const totalMin = ordered.reduce((a, s) => a + s.dureeMinutes, 0);
-  if (totalMin <= 0) return null;
-
-  // Build incident overlay segments
-  interface GlobalSeg { key: string; color: string; startPct: number; widthPct: number; label: string }
-  const overlays: GlobalSeg[] = [];
-  const dividers: number[] = [];
-  let cursor = 0;
-
-  for (let si = 0; si < ordered.length; si++) {
-    const s = ordered[si];
-    const sessionStartMs = new Date(s.dateDebut).getTime();
-
-    for (const inc of (s.incidents ?? [])) {
-      const incEndMs   = new Date(inc.ts).getTime();
-      const incStartMs = incEndMs - inc.dureeMinutes * 60_000;
-      const offsetMin  = Math.max(0, (incStartMs - sessionStartMs) / 60_000);
-      const startPct   = ((cursor + offsetMin) / totalMin) * 100;
-      const widthPct   = (inc.dureeMinutes / totalMin) * 100;
-      overlays.push({
-        key:      `${s.id}-${inc.ts}`,
-        color:    INCIDENT_COLORS[inc.type],
-        startPct: Math.min(startPct, ((cursor + s.dureeMinutes) / totalMin) * 100 - 0.5),
-        widthPct: Math.max(widthPct, 0.5),
-        label:    `${INCIDENT_LABELS[inc.type]} · ${inc.dureeMinutes} min`,
-      });
-    }
-
-    cursor += s.dureeMinutes;
-    if (si < ordered.length - 1) dividers.push((cursor / totalMin) * 100);
-  }
-
-  // Legend — only show types that actually appear
-  const usedTypes = Array.from(new Set(
-    ordered.flatMap(s => (s.incidents ?? []).map(i => i.type))
-  ));
-
-  return (
-    <div className="mt-2" onClick={() => setActiveKey(null)}>
-      <div
-        className="relative h-3 rounded-full overflow-hidden"
-        style={{ background: '#16a34a55' }}
-      >
-        {/* Session dividers */}
-        {dividers.map((pct, i) => (
-          <div key={i} className="absolute top-0 bottom-0 w-px bg-black/50 pointer-events-none" style={{ left: `${pct}%` }} />
-        ))}
-        {/* Incident overlays */}
-        {overlays.map(seg => (
-          <button
-            key={seg.key}
-            onClick={e => { e.stopPropagation(); setActiveKey(activeKey === seg.key ? null : seg.key); }}
-            className="absolute top-0 h-full min-w-[3px] rounded-sm transition-opacity hover:opacity-90 active:opacity-75"
-            style={{
-              left:            `${seg.startPct}%`,
-              width:           `${seg.widthPct}%`,
-              backgroundColor: seg.color,
-            }}
-          />
-        ))}
-      </div>
-      {activeKey !== null && overlays.find(s => s.key === activeKey) && (
-        <div className="mt-1 px-2 py-1 bg-slate-800/90 border border-white/[0.12] rounded-lg text-[10px] text-slate-200 flex items-center gap-1.5">
-          <span
-            className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: overlays.find(s => s.key === activeKey)!.color }}
-          />
-          {overlays.find(s => s.key === activeKey)!.label}
-        </div>
-      )}
-      {usedTypes.length > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
-          {usedTypes.map(t => (
-            <span key={t} className="flex items-center gap-1 text-[9px] text-slate-400">
-              <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: INCIDENT_COLORS[t] }} />
-              {INCIDENT_LABELS[t]}
-            </span>
-          ))}
-          <span className="flex items-center gap-1 text-[9px] text-slate-400">
-            <span className="inline-block w-2 h-2 rounded-full bg-green-600/70" />
-            Curage
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── IncidentModal ──────────────────────────────────────────────────────────────
 
