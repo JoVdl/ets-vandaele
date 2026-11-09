@@ -342,8 +342,11 @@ export default function SuiviView({ role, onLogout }: Props) {
     ? instantSpeedKmh(filteredPoints[filteredPoints.length - 2], filteredPoints[filteredPoints.length - 1])
     : 0;
   const speedAvg  = avgSpeedKmh(filteredPoints);
-  const elapsedH  = elapsed / 3600;
-  const rendement = elapsedH > 0 && areaM > 0 ? areaM / elapsedH : 0;
+  // Net elapsed time = total elapsed minus incident time (incidents are included in total duration)
+  const tempsPerduMinLive = sessionIncidents.reduce((a, i) => a + i.dureeMinutes, 0);
+  const elapsedH    = elapsed / 3600;
+  const netElapsedH = Math.max(0, elapsedH - tempsPerduMinLive / 60);
+  const rendement = netElapsedH > 0 && areaM > 0 ? areaM / netElapsedH : 0;
 
   const selectedChantier = chantiers.find(c => c.id === selectedChantierId);
   const progress = selectedChantier?.surface && areaM > 0
@@ -416,10 +419,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   const profondeur = machineParams.profondeurDragageM;
   const nbPasses   = Math.max(1, machineParams.nbPassesParPosition ?? 1);
   const volumeM3   = isDragage && profondeur > 0 ? areaM * profondeur * nbPasses : 0;
-  const debitM3h   = elapsedH > 0 && volumeM3 > 0 ? volumeM3 / elapsedH : 0;
-
-  // Temps perdu sur incidents (session en cours)
-  const tempsPerduMinLive = sessionIncidents.reduce((a, i) => a + i.dureeMinutes, 0);
+  const debitM3h   = netElapsedH > 0 && volumeM3 > 0 ? volumeM3 / netElapsedH : 0;
 
   // ── Live viewer : session d'un autre device sur le chantier sélectionné ───
   const otherLive = !sessionActive && selectedChantierId

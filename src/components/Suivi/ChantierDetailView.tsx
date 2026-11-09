@@ -53,10 +53,27 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
   const totalSurfaceM2   = sessions.reduce((a, s) => a + s.surfaceCoveredM2, 0);
   const totalIncidentMin = sessions.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
   const totalIncidentCnt = sessions.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
-  const debits           = sessions.filter(s => (s.debitM3h ?? 0) > 0).map(s => s.debitM3h!);
-  const avgDebitM3h      = debits.length > 0 ? debits.reduce((a, b) => a + b, 0) / debits.length : 0;
-  const rendements       = sessions.filter(s => s.rendementM2h > 0).map(s => s.rendementM2h);
-  const avgRendM2h       = rendements.length > 0 ? rendements.reduce((a, b) => a + b, 0) / rendements.length : 0;
+
+  // Recalculate rendement/debit on net time (dureeMinutes minus incidents) so old saved values don't skew averages
+  const netDebits = sessions
+    .filter(s => (s.volumeM3 ?? 0) > 0)
+    .map(s => {
+      const incMin = s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0;
+      const netH = Math.max(0, s.dureeMinutes - incMin) / 60;
+      return netH > 0 ? s.volumeM3! / netH : 0;
+    })
+    .filter(d => d > 0);
+  const avgDebitM3h = netDebits.length > 0 ? netDebits.reduce((a, b) => a + b, 0) / netDebits.length : 0;
+
+  const netRendements = sessions
+    .filter(s => s.surfaceCoveredM2 > 0)
+    .map(s => {
+      const incMin = s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0;
+      const netH = Math.max(0, s.dureeMinutes - incMin) / 60;
+      return netH > 0 ? s.surfaceCoveredM2 / netH : 0;
+    })
+    .filter(r => r > 0);
+  const avgRendM2h = netRendements.length > 0 ? netRendements.reduce((a, b) => a + b, 0) / netRendements.length : 0;
 
   // Hours-budget progress
   const totalH          = totalMinutes / 60;
@@ -220,8 +237,11 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
             <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2">Sessions</p>
             <div className="space-y-2">
               {ordered.map((s, i) => {
-                const incMin = s.incidents?.reduce((a, inc) => a + inc.dureeMinutes, 0) ?? 0;
-                const color  = HIST_PALETTE[i % HIST_PALETTE.length];
+                const incMin  = s.incidents?.reduce((a, inc) => a + inc.dureeMinutes, 0) ?? 0;
+                const netH    = Math.max(0, s.dureeMinutes - incMin) / 60;
+                const netDebit    = netH > 0 && (s.volumeM3 ?? 0) > 0 ? s.volumeM3! / netH : 0;
+                const netRendement = netH > 0 && s.surfaceCoveredM2 > 0 ? s.surfaceCoveredM2 / netH : 0;
+                const color   = HIST_PALETTE[i % HIST_PALETTE.length];
                 return (
                   <div key={s.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3">
                     <div className="flex items-center gap-2 mb-2">
@@ -237,14 +257,14 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                       <div className="grid grid-cols-4 gap-1">
                         <StatTile small label="Durée"  value={formatDuration(s.dureeMinutes)} />
                         <StatTile small label="Perdu"  value={incMin > 0 ? `${incMin} min` : '—'} accent={incMin > 0 ? 'amber' : undefined} />
-                        <StatTile small label="Volume" value={s.volumeM3 != null && s.volumeM3 > 0 ? `${s.volumeM3.toFixed(1)} m³` : '—'} />
-                        <StatTile small label="Rend."  value={s.debitM3h != null && s.debitM3h > 0 ? `${s.debitM3h.toFixed(1)} m³/h` : '—'} />
+                        <StatTile small label="Volume" value={(s.volumeM3 ?? 0) > 0 ? `${s.volumeM3!.toFixed(1)} m³` : '—'} />
+                        <StatTile small label="Rend."  value={netDebit > 0 ? `${netDebit.toFixed(1)} m³/h` : '—'} />
                       </div>
                     ) : (
                       <div className="grid grid-cols-4 gap-1">
                         <StatTile small label="Durée"   value={formatDuration(s.dureeMinutes)} />
                         <StatTile small label="Surface" value={formatArea(s.surfaceCoveredM2)} />
-                        <StatTile small label="Rend."   value={`${Math.round(s.rendementM2h)} m²/h`} />
+                        <StatTile small label="Rend."   value={netRendement > 0 ? `${Math.round(netRendement)} m²/h` : '—'} />
                         <StatTile small label="Vit."    value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)} km/h` : '—'} />
                       </div>
                     )}
