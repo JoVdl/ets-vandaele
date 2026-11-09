@@ -9,10 +9,17 @@ import type { PinRole } from './types/suivi';
 
 type Tool = 'home' | 'planning' | 'suivi';
 
+function isPwa(): boolean {
+  return window.matchMedia('(display-mode: standalone)').matches
+    || (navigator as unknown as Record<string, unknown>).standalone === true;
+}
+
 function getToolFromHash(): Tool {
   const h = location.hash;
   if (h === '#planning') return 'planning';
   if (h === '#suivi')    return 'suivi';
+  // When launched from home screen (PWA), go directly to suivi
+  if (isPwa()) return 'suivi';
   return 'home';
 }
 
