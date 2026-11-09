@@ -30,7 +30,7 @@ export async function requestAndEnable(): Promise<'granted' | 'denied' | 'unsupp
 export function showNotification(title: string, body: string): void {
   if (Notification.permission !== 'granted') return;
   if (!notificationsEnabled()) return;
-  const opts: NotificationOptions = { body, icon: '/favicon.svg', tag: 'ets-chantier', silent: false };
+  const opts: NotificationOptions = { body, icon: '/ets-vandaele/favicon.svg', tag: 'ets-chantier', silent: false };
   // Prefer service worker notification (required for iOS PWA)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready

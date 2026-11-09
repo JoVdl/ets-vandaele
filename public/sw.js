@@ -10,7 +10,7 @@ self.addEventListener('push', e => {
   try {
     const { title, body, icon } = e.data.json();
     e.waitUntil(
-      self.registration.showNotification(title, { body, icon: icon ?? '/favicon.svg' })
+      self.registration.showNotification(title, { body, icon: icon ?? '/ets-vandaele/favicon.svg' })
     );
   } catch {}
 });
