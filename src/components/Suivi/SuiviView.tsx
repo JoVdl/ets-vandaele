@@ -59,6 +59,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [sessionIncidents, setSessionIncidents]   = useState<SuiviIncident[]>([]);
+  const [confirmStop, setConfirmStop] = useState(false);
 
   // Use role as the Firestore document ID — guarantees exactly one live document
   // per role (patron / salarie) regardless of refreshes or tabs.
@@ -549,6 +550,7 @@ export default function SuiviView({ role, onLogout }: Props) {
 
   const handleStop = useCallback(async () => {
     if (!selectedChantier) return;
+    setConfirmStop(false);
     setSessionActive(false);
     setSessionPaused(false);
     clearActiveSession();
@@ -1028,19 +1030,36 @@ export default function SuiviView({ role, onLogout }: Props) {
                 )}
 
                 <div className="flex items-center gap-3 px-3 pb-3 pt-1">
-                  <button
-                    onClick={() => { setDrawMode(d => !d); if (!drawMode) handleDrawClear(); }}
-                    className={`p-3 rounded-xl transition-colors ${
-                      drawMode ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-white/[0.08] border border-white/[0.10] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200'
-                    }`}>
-                    <Ruler size={18} />
-                  </button>
-                  <button
-                    onClick={() => setShowMachinePanel(true)}
-                    className="p-3 rounded-xl bg-white/[0.08] border border-white/[0.10] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200 transition-colors"
-                    title="Paramètres machine">
-                    <SlidersHorizontal size={18} />
-                  </button>
+                  {/* Left tools — hidden when confirming stop to make room */}
+                  {!confirmStop && (
+                    <>
+                      <button
+                        onClick={() => { setDrawMode(d => !d); if (!drawMode) handleDrawClear(); }}
+                        className={`p-3 rounded-xl transition-colors ${
+                          drawMode ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-white/[0.08] border border-white/[0.10] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200'
+                        }`}>
+                        <Ruler size={18} />
+                      </button>
+                      <button
+                        onClick={() => setShowMachinePanel(true)}
+                        className="p-3 rounded-xl bg-white/[0.08] border border-white/[0.10] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200 transition-colors"
+                        title="Paramètres machine">
+                        <SlidersHorizontal size={18} />
+                      </button>
+                      {/* Incident button — moved here, away from Stop */}
+                      {sessionActive && isDragage && (
+                        <button onClick={() => setShowIncidentModal(true)}
+                          className="relative p-3 rounded-xl bg-amber-700/60 border border-amber-600/40 text-amber-300 hover:bg-amber-600/70 active:scale-95 transition-all">
+                          <AlertTriangle size={18} />
+                          {sessionIncidents.length > 0 && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">
+                              {sessionIncidents.length}
+                            </span>
+                          )}
+                        </button>
+                      )}
+                    </>
+                  )}
 
                   <div className="flex-1 flex items-center gap-2 justify-center">
                     {!sessionActive ? (
@@ -1049,6 +1068,23 @@ export default function SuiviView({ role, onLogout }: Props) {
                         <Play size={20} fill="currentColor" />
                         Démarrer
                       </button>
+                    ) : confirmStop ? (
+                      /* ── Stop confirmation ── */
+                      <div className="flex-1 flex items-center gap-2">
+                        <span className="text-white text-sm font-semibold flex-shrink-0">Terminer la session ?</span>
+                        <div className="flex gap-2 ml-auto">
+                          <button
+                            onClick={() => setConfirmStop(false)}
+                            className="h-11 px-4 rounded-xl bg-white/[0.10] border border-white/[0.12] text-slate-200 font-semibold text-sm hover:bg-white/[0.16] active:scale-95 transition-all">
+                            Annuler
+                          </button>
+                          <button
+                            onClick={handleStop}
+                            className="h-11 px-4 rounded-xl bg-red-600 text-white font-bold text-sm hover:bg-red-500 active:scale-95 transition-all shadow-lg shadow-red-600/30">
+                            Terminer
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <>
                         <button onClick={handlePause}
@@ -1058,17 +1094,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                           {sessionPaused ? <Play size={18} fill="currentColor" /> : <Pause size={18} />}
                           {sessionPaused ? 'Reprendre' : 'Pause'}
                         </button>
-                        {/* Incident button — only during dragage */}
-                        {isDragage && (
-                          <button onClick={() => setShowIncidentModal(true)}
-                            className="relative w-14 h-14 rounded-2xl bg-amber-600/80 border border-amber-500/40 text-white flex flex-col items-center justify-center gap-0.5 hover:bg-amber-500 active:scale-95 transition-all">
-                            <AlertTriangle size={16} />
-                            {sessionIncidents.length > 0 && (
-                              <span className="text-[9px] font-bold leading-none">{sessionIncidents.length}</span>
-                            )}
-                          </button>
-                        )}
-                        <button onClick={handleStop}
+                        <button onClick={() => setConfirmStop(true)}
                           className="w-14 h-14 rounded-2xl bg-red-600 text-white flex items-center justify-center hover:bg-red-500 active:scale-95 transition-all shadow-lg shadow-red-600/30">
                           <Square size={20} fill="currentColor" />
                         </button>
