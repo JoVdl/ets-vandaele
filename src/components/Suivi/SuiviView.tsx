@@ -1311,6 +1311,14 @@ export default function SuiviView({ role, onLogout }: Props) {
                               </div>
                             )}
                             {isDragage && <SessionTimeline session={s} />}
+                            {isDragage && incMin > 0 && (
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                <AlertTriangle size={10} className="text-amber-400 flex-shrink-0" />
+                                <span className="text-amber-400 text-[10px]">
+                                  {s.incidents!.length} incident{s.incidents!.length > 1 ? 's' : ''} · {incMin} min perdues
+                                </span>
+                              </div>
+                            )}
                           </button>
 
                           {/* Delete row */}
