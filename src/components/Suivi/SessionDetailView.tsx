@@ -40,9 +40,10 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
     if (positions.length < 2) return;
-    const bounds = L.latLngBounds(positions);
-    map.fitBounds(bounds, { padding: [32, 32], animate: false });
-  }, [map, positions]);
+    map.invalidateSize();
+    map.fitBounds(L.latLngBounds(positions), { padding: [32, 32], animate: false });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
   return null;
 }
 

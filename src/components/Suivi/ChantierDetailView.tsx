@@ -21,8 +21,12 @@ function FitAll({ positions }: { positions: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
     if (positions.length < 2) return;
+    // invalidateSize ensures the map knows its real pixel dimensions
+    // (needed when MapContainer mounts inside a flex/overflow container)
+    map.invalidateSize();
     map.fitBounds(L.latLngBounds(positions), { padding: [28, 28], animate: false });
-  }, [map, positions]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
   return null;
 }
 
@@ -74,8 +78,9 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
       const all = chantier.polygon.flat();
       if (all.length > 0) { const c = centroid(all); return [c.lat, c.lng]; }
     }
+    if (chantier.latitude && chantier.longitude) return [chantier.latitude, chantier.longitude];
     if (allPositions.length > 0) return allPositions[0];
-    return [50.4, 2.8];
+    return [43.7, -0.26]; // fallback SW France
   }, [chantier, allPositions]);
 
   return (
@@ -96,29 +101,29 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
 
       <div className="flex-1 overflow-y-auto">
 
-        {/* Map */}
-        {allPositions.length > 1 ? (
-          <div className="h-56 relative flex-shrink-0">
-            <MapContainer center={mapCenter} zoom={15} className="w-full h-full" zoomControl={false} preferCanvas>
-              <TileLayer
-                url="https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
-                attribution="&copy; IGN"
-                maxZoom={20}
-              />
-              <FitAll positions={allPositions} />
-              {chantier.polygon?.flatMap((poly, pi) =>
-                poly.length >= 3 ? [
-                  <Polygon key={`zone-${pi}`}
-                    positions={poly.map(p => [p.lat, p.lng] as [number, number])}
-                    color="#64748b" fillColor="#64748b" fillOpacity={0.15} weight={2}
-                  />,
-                ] : []
-              )}
-              {trails.map(t => t.positions.length > 1 && (
-                <Polyline key={t.id} positions={t.positions} color={t.color} weight={3.5} opacity={0.9} />
-              ))}
-            </MapContainer>
-            {/* Session color legend */}
+        {/* Map — always shown; FitAll fits GPS traces when available, else zoom on mapCenter */}
+        <div className="h-56 relative flex-shrink-0">
+          <MapContainer center={mapCenter} zoom={16} className="w-full h-full" zoomControl={false} preferCanvas>
+            <TileLayer
+              url="https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
+              attribution="&copy; IGN"
+              maxZoom={20}
+            />
+            <FitAll positions={allPositions} />
+            {chantier.polygon?.flatMap((poly, pi) =>
+              poly.length >= 3 ? [
+                <Polygon key={`zone-${pi}`}
+                  positions={poly.map(p => [p.lat, p.lng] as [number, number])}
+                  color="#64748b" fillColor="#64748b" fillOpacity={0.15} weight={2}
+                />,
+              ] : []
+            )}
+            {trails.map(t => t.positions.length > 1 && (
+              <Polyline key={t.id} positions={t.positions} color={t.color} weight={3.5} opacity={0.9} />
+            ))}
+          </MapContainer>
+          {/* Session color legend */}
+          {trails.length > 0 && (
             <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm rounded-lg px-2 py-1.5 flex flex-col gap-1 max-h-32 overflow-y-auto z-[1000]">
               {trails.map((t) => (
                 <span key={t.id} className="flex items-center gap-1.5 text-[9px] text-white whitespace-nowrap">
@@ -127,12 +132,8 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                 </span>
               ))}
             </div>
-          </div>
-        ) : (
-          <div className="h-20 flex items-center justify-center text-slate-600 text-xs">
-            Aucune donnée GPS enregistrée
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="px-3 py-3 space-y-4">
 
