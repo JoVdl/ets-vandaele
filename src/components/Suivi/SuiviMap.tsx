@@ -167,8 +167,13 @@ function AutoCenter({ pos, follow }: { pos: [number, number] | null; follow: boo
 
 function JumpTo({ pos }: { pos: [number, number] | null }) {
   const map = useMap();
+  const lastKeyRef = useRef('');
   useEffect(() => {
-    if (pos) map.setView(pos, Math.max(map.getZoom(), 17), { animate: true });
+    if (!pos) { lastKeyRef.current = ''; return; }
+    const key = `${pos[0].toFixed(6)},${pos[1].toFixed(6)}`;
+    if (key === lastKeyRef.current) return; // same coordinates — don't re-jump
+    lastKeyRef.current = key;
+    map.setView(pos, Math.max(map.getZoom(), 17), { animate: true });
   }, [pos, map]);
   return null;
 }

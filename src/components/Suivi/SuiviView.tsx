@@ -454,8 +454,7 @@ export default function SuiviView({ role, onLogout }: Props) {
     }
     if (c.latitude && c.longitude) return [c.latitude, c.longitude];
     return null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedChantierId]);
+  }, [selectedChantierId, chantiers]);
 
   // Historical GPS trails for all chantiers, coloured by chantier type
   const historicalTrails = useMemo(() => {
