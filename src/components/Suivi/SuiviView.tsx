@@ -2182,7 +2182,7 @@ export const INCIDENT_LABELS: Record<IncidentType, string> = {
   autre:               'Autre',
 };
 
-const INCIDENT_COLORS: Record<IncidentType, string> = {
+export const INCIDENT_COLORS: Record<IncidentType, string> = {
   bouchon_avant_pompe: '#f97316',
   bouchon_apres_pompe: '#ef4444',
   deplacement_cables:  '#a855f7',
@@ -2202,7 +2202,7 @@ const INCIDENT_OPTIONS: { value: IncidentType; label: string }[] = [
 
 // ── SessionTimeline ────────────────────────────────────────────────────────────
 
-function SessionTimeline({ session }: { session: SuiviSession }) {
+export function SessionTimeline({ session }: { session: SuiviSession }) {
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const totalMin = session.dureeMinutes;
   if (totalMin <= 0) return null;

@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, AlertTriangle } from 'lucide-react';
+import { INCIDENT_LABELS, INCIDENT_COLORS, SessionTimeline } from './SuiviView';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { SuiviSession, GpsPoint } from '../../types/suivi';
@@ -471,6 +472,26 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
                 <span> · {formatArea(Math.max(0, surface - cumul.totalCoveredM2))} restants</span>
               )}
             </p>
+          </div>
+        )}
+
+        {/* Timeline + incidents */}
+        {session.incidents && session.incidents.length > 0 && (
+          <div className="mb-2">
+            <SessionTimeline session={session} />
+            <div className="flex flex-wrap gap-1 mt-2">
+              {session.incidents.map((inc, i) => (
+                <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] border"
+                  style={{
+                    backgroundColor: INCIDENT_COLORS[inc.type] + '22',
+                    borderColor:     INCIDENT_COLORS[inc.type] + '55',
+                    color:           INCIDENT_COLORS[inc.type],
+                  }}>
+                  <AlertTriangle size={8} />
+                  {INCIDENT_LABELS[inc.type]} · {inc.dureeMinutes} min
+                </span>
+              ))}
+            </div>
           </div>
         )}
 
