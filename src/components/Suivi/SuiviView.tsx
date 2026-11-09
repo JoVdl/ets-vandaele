@@ -957,53 +957,90 @@ export default function SuiviView({ role, onLogout }: Props) {
                     </div>
 
                     {selectedChantierStats ? (
-                      <>
-                        <div className="grid grid-cols-4 gap-1 mb-2">
-                          {selectedChantier.surface && selectedChantier.surface > 0 && (
-                            <Metric label="Surface tot." value={formatArea(selectedChantier.surface)} />
-                          )}
-                          <Metric label="Couverte" value={formatArea(selectedChantierStats.covered)} />
+                      isDragage ? (
+                        /* ── Dragage stats : heures + volume + budget ── */
+                        (() => {
+                          const budgetH  = selectedChantier.dureeEstimeeH ?? 0;
+                          const totalH   = selectedChantierStats.totalMinutes / 60;
+                          const bPct     = budgetH > 0 ? Math.min(100, (totalH / budgetH) * 100) : null;
+                          return (
+                            <>
+                              <div className="grid grid-cols-3 gap-1 mb-1.5">
+                                <Metric label="Sessions" value={`${selectedChantierStats.sessionCount}`} small />
+                                <Metric label="Volume tot." value={`${(chantierDashStats?.totalVolumeM3 ?? 0).toFixed(0)} m³`} small />
+                                <Metric label="Heures eff." value={`${totalH.toFixed(1)} h`} small />
+                              </div>
+                              {bPct !== null && (
+                                <>
+                                  <div className="h-1.5 bg-white/[0.08] rounded-full overflow-hidden mb-1 mx-1">
+                                    <div className={`h-full rounded-full transition-all ${bPct >= 90 ? 'bg-red-500' : bPct >= 70 ? 'bg-amber-400' : 'bg-green-500'}`}
+                                      style={{ width: `${bPct}%` }} />
+                                  </div>
+                                  <div className="flex justify-between px-1">
+                                    <span className={`text-[10px] ${bPct >= 90 ? 'text-red-400' : bPct >= 70 ? 'text-amber-400' : 'text-green-400'}`}>
+                                      {bPct.toFixed(0)} %
+                                    </span>
+                                    <span className="text-slate-500 text-[10px]">{totalH.toFixed(1)} h / {budgetH} h vendues</span>
+                                  </div>
+                                </>
+                              )}
+                            </>
+                          );
+                        })()
+                      ) : (
+                        /* ── Surface-based stats (non-dragage) ── */
+                        <>
+                          <div className="grid grid-cols-4 gap-1 mb-2">
+                            {selectedChantier.surface && selectedChantier.surface > 0 && (
+                              <Metric label="Surface tot." value={formatArea(selectedChantier.surface)} />
+                            )}
+                            <Metric label="Couverte" value={formatArea(selectedChantierStats.covered)} />
+                            {selectedChantierStats.pct != null && (
+                              <Metric label="Effectué" value={`${selectedChantierStats.pct} %`} />
+                            )}
+                            <Metric label="Sessions" value={`${selectedChantierStats.sessionCount}`} />
+                          </div>
                           {selectedChantierStats.pct != null && (
-                            <Metric label="Effectué" value={`${selectedChantierStats.pct} %`} />
-                          )}
-                          <Metric label="Sessions" value={`${selectedChantierStats.sessionCount}`} />
-                        </div>
-
-                        {selectedChantierStats.pct != null && (
-                          <div className="h-1.5 bg-white/[0.08] rounded-full overflow-hidden mb-2 mx-1">
-                            <div
-                              className={`h-full rounded-full transition-all ${
+                            <div className="h-1.5 bg-white/[0.08] rounded-full overflow-hidden mb-2 mx-1">
+                              <div className={`h-full rounded-full transition-all ${
                                 selectedChantierStats.pct >= 80 ? 'bg-green-500'
                                   : selectedChantierStats.pct >= 40 ? 'bg-amber-400' : 'bg-orange-500'
-                              }`}
-                              style={{ width: `${selectedChantierStats.pct}%` }}
-                            />
+                              }`} style={{ width: `${selectedChantierStats.pct}%` }} />
+                            </div>
+                          )}
+                          <div className="grid grid-cols-3 gap-1">
+                            <Metric label="Temps passé" value={formatDuration(selectedChantierStats.totalMinutes)} small />
+                            {selectedChantierStats.rendMoyen != null && (
+                              <Metric label="Rend. moyen" value={`${selectedChantierStats.rendMoyen.toLocaleString('fr-FR')} m²/h`} small />
+                            )}
+                            {selectedChantierStats.remaining != null && selectedChantierStats.remaining > 0 && (
+                              <Metric label="Restant" value={formatArea(selectedChantierStats.remaining)} small />
+                            )}
+                            {selectedChantierStats.pct === 100 && (
+                              <Metric label="Statut" value="Terminé ✓" small />
+                            )}
+                            {selectedChantierStats.tempsRestant != null && selectedChantierStats.tempsRestant > 0 && (
+                              <Metric label="Tps restant" value={formatDuration(selectedChantierStats.tempsRestant)} small />
+                            )}
                           </div>
-                        )}
-
-                        <div className="grid grid-cols-3 gap-1">
-                          <Metric label="Temps passé" value={formatDuration(selectedChantierStats.totalMinutes)} small />
-                          {selectedChantierStats.rendMoyen != null && (
-                            <Metric label="Rend. moyen" value={`${selectedChantierStats.rendMoyen.toLocaleString('fr-FR')} m²/h`} small />
-                          )}
-                          {selectedChantierStats.remaining != null && selectedChantierStats.remaining > 0 && (
-                            <Metric label="Restant" value={formatArea(selectedChantierStats.remaining)} small />
-                          )}
-                          {selectedChantierStats.pct === 100 && (
-                            <Metric label="Statut" value="Terminé ✓" small />
-                          )}
-                          {selectedChantierStats.tempsRestant != null && selectedChantierStats.tempsRestant > 0 && (
-                            <Metric label="Tps restant" value={formatDuration(selectedChantierStats.tempsRestant)} small />
-                          )}
-                        </div>
-                      </>
+                        </>
+                      )
                     ) : (
-                      <div className="grid grid-cols-2 gap-1">
-                        {selectedChantier.surface && selectedChantier.surface > 0 && (
-                          <Metric label="Surface totale" value={formatArea(selectedChantier.surface)} small />
-                        )}
-                        <Metric label="Sessions" value="0" small />
-                      </div>
+                      isDragage ? (
+                        <div className="grid grid-cols-2 gap-1">
+                          {(selectedChantier.dureeEstimeeH ?? 0) > 0 && (
+                            <Metric label="Budget" value={`${selectedChantier.dureeEstimeeH} h vendues`} small />
+                          )}
+                          <Metric label="Sessions" value="0 · Pas encore démarré" small />
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-1">
+                          {selectedChantier.surface && selectedChantier.surface > 0 && (
+                            <Metric label="Surface totale" value={formatArea(selectedChantier.surface)} small />
+                          )}
+                          <Metric label="Sessions" value="0" small />
+                        </div>
+                      )
                     )}
                   </div>
                 )}
@@ -1020,14 +1057,13 @@ export default function SuiviView({ role, onLogout }: Props) {
                 )}
 
                 {sessionActive && isDragage && (
-                  <div className="grid grid-cols-4 gap-0 border-b border-white/[0.07] px-2 pb-3">
-                    <Metric label="Durée" value={formatTime(elapsed)} />
-                    <Metric label="Vitesse" value={`${speedNow.toFixed(1)} km/h`}
-                      sub={`moy ${speedAvg.toFixed(1)}`} />
+                  <div className="grid grid-cols-4 gap-0 border-b border-white/[0.07] px-2 pb-2 pt-1">
+                    <Metric label="Durée" value={formatTime(elapsed)} small />
+                    <Metric label="Heures" value={`${(elapsed / 3600).toFixed(1)} h`} small />
                     <Metric label="Volume" value={volumeM3 > 0 ? `${volumeM3.toFixed(1)} m³` : profondeur > 0 ? '0 m³' : '—'}
-                      sub={profondeur > 0 ? `${profondeur} m × ${nbPasses}p` : 'prof. non définie'} />
+                      sub={profondeur > 0 ? `${profondeur} m` : undefined} small />
                     <Metric label="Débit" value={debitM3h > 0 ? `${debitM3h.toFixed(1)}` : '—'}
-                      sub="m³/h" />
+                      sub="m³/h" small />
                   </div>
                 )}
 
@@ -1038,16 +1074,19 @@ export default function SuiviView({ role, onLogout }: Props) {
                     {!isDragage && selectedChantier?.surface && (
                       <Metric label="Surface tot." value={formatArea(selectedChantier.surface)} small />
                     )}
-                    {isDragage && (
-                      <Metric label="Surface draguée" value={formatArea(areaM)} small />
-                    )}
                     {isDragage && profondeur > 0 && (
                       <Metric label="Profondeur" value={`${profondeur.toFixed(2)} m`} small />
                     )}
-                    {tempsRestantMin != null && tempsRestantMin > 0 && (
+                    {isDragage && (
+                      <Metric
+                        label={sessionIncidents.length > 0 ? `${sessionIncidents.length} incident${sessionIncidents.length > 1 ? 's' : ''}` : 'Incidents'}
+                        value={tempsPerduMinLive > 0 ? `${tempsPerduMinLive} min` : '—'}
+                        small />
+                    )}
+                    {!isDragage && tempsRestantMin != null && tempsRestantMin > 0 && (
                       <Metric label="Temps restant" value={formatDuration(tempsRestantMin)} small />
                     )}
-                    {tempsRestantMin === 0 && (
+                    {!isDragage && tempsRestantMin === 0 && (
                       <Metric label="Terminé !" value="✓" small />
                     )}
                     {drawSaved != null && <Metric label="Zone mesurée" value={formatArea(drawSaved)} small />}
