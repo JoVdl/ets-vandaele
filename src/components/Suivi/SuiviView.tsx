@@ -275,6 +275,7 @@ export default function SuiviView({ role, onLogout }: Props) {
       setElapsed(Math.round((Date.now() - new Date(saved.dateDebut).getTime()) / 1000));
       setSessionActive(true);
       setRestoredBanner(saved.chantierNom);
+      setTimeout(() => setRestoredBanner(null), 4000);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
