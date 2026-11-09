@@ -8,6 +8,10 @@ export function setNotificationsEnabled(v: boolean) {
   localStorage.setItem(PERM_KEY, v ? '1' : '0');
 }
 
+export function notificationApiAvailable(): boolean {
+  return 'Notification' in window || 'serviceWorker' in navigator;
+}
+
 export async function requestAndEnable(): Promise<'granted' | 'denied' | 'unsupported'> {
   if (!('Notification' in window)) return 'unsupported';
   if (Notification.permission === 'denied') return 'denied';
@@ -24,17 +28,17 @@ export async function requestAndEnable(): Promise<'granted' | 'denied' | 'unsupp
 }
 
 export function showNotification(title: string, body: string): void {
-  if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
   if (!notificationsEnabled()) return;
-  try {
-    new Notification(title, {
-      body,
-      icon: '/cen-logo.png',
-      tag: 'ets-chantier',
-      silent: false,
-    });
-  } catch {
-    // Notification API may throw in certain browser/OS combos
+  const opts: NotificationOptions = { body, icon: '/favicon.svg', tag: 'ets-chantier', silent: false };
+  // Prefer service worker notification (required for iOS PWA)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready
+      .then(reg => reg.showNotification(title, opts))
+      .catch(() => {
+        try { new Notification(title, opts); } catch {}
+      });
+  } else {
+    try { new Notification(title, opts); } catch {}
   }
 }

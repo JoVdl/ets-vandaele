@@ -24,7 +24,7 @@ import {
 import { saveActiveSession, loadActiveSession, clearActiveSession } from '../../lib/suiviOffline';
 import { clearSession, loadSuiviConfig } from '../../lib/suiviConfig';
 import { writeChantierEvent, listenChantierEvents, getDeviceId } from '../../lib/chantierEvents';
-import { showNotification, notificationsEnabled, setNotificationsEnabled, requestAndEnable } from '../../lib/notifications';
+import { showNotification, notificationsEnabled, setNotificationsEnabled, requestAndEnable, notificationApiAvailable } from '../../lib/notifications';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { PinRole, SuiviSession, SuiviIncident, IncidentType } from '../../types/suivi';
@@ -2268,9 +2268,10 @@ function MachineParamsPanel({
 }
 
 function NotificationToggle() {
-  const supported = 'Notification' in window;
+  const supported = notificationApiAvailable();
   const [status, setStatus] = useState<'granted' | 'denied' | 'default' | 'unsupported'>(
     !supported ? 'unsupported'
+    : !('Notification' in window) ? 'default'
     : Notification.permission === 'granted' ? 'granted'
     : Notification.permission === 'denied' ? 'denied'
     : 'default',
@@ -2295,10 +2296,10 @@ function NotificationToggle() {
         <div>
           <p className="text-white text-sm font-semibold">Notifications</p>
           <p className="text-slate-500 text-[11px] mt-0.5">
-            {status === 'unsupported' ? 'Non supporté par ce navigateur'
-             : status === 'denied'    ? 'Bloquées dans les paramètres du navigateur'
+            {status === 'unsupported' ? 'Ajoutez l\'appli à l\'écran d\'accueil pour activer'
+             : status === 'denied'    ? 'Bloquées — autorisez dans les réglages du navigateur'
              : enabled                ? 'Actives — démarrage, pause, incidents…'
-                                      : 'Recevoir une alerte à chaque événement'}
+                                      : 'Recevoir une alerte à chaque événement chantier'}
           </p>
         </div>
         <button
