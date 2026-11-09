@@ -323,10 +323,11 @@ export default function SuiviView({ role, onLogout }: Props) {
   // ── GPS filter: speed outliers + anchor drift (dragage) ─────────────
   const filteredPoints = useMemo(() => {
     const dragueMode = !!chantiers.find(c => c.id === selectedChantierId)?.drague;
-    const speedTol   = dragueMode ? 1.4 : 2.0;
-    // Dragage: reject if point is > max(4 × workWidth, 80 m) from rolling centroid
+    const speedTol   = dragueMode ? 1.6 : 2.0;
+    // Dragage: reject if point is > max(10 × workWidth, 150 m) from rolling centroid
+    // — generous enough for real papillonnage, blocks operator walking 300+ m to shore
     const driftM     = dragueMode
-      ? Math.max(machineParams.largeurTravailM * 4, 80)
+      ? Math.max(machineParams.largeurTravailM * 10, 150)
       : Infinity;
     return filterGpsTrack(gpsPoints, machineParams.vitesseMaxKmh, speedTol, driftM);
   }, [gpsPoints, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, chantiers, selectedChantierId]);

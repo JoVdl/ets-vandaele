@@ -17,20 +17,19 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-function FitAll({ positions }: { positions: [number, number][] }) {
+function FitAll({ positions, fallback }: { positions: [number, number][]; fallback: [number, number] }) {
   const map = useMap();
   useEffect(() => {
-    // Defer fitBounds so the browser has fully painted the container
-    // before Leaflet computes its pixel dimensions.
     const tid = setTimeout(() => {
       map.invalidateSize();
       if (positions.length >= 2) {
         map.fitBounds(L.latLngBounds(positions), { padding: [28, 28], animate: false });
+      } else {
+        map.setView(fallback, 16, { animate: false });
       }
-    }, 80);
+    }, 150);
     return () => clearTimeout(tid);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
+  }, [map, positions, fallback]);
   return null;
 }
 
@@ -69,8 +68,8 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
     const filtered = filterGpsTrack(
       s.gpsPoints,
       isDragage ? 3 : 25,
-      isDragage ? 1.4 : 2.0,
-      isDragage ? 80 : Infinity,
+      isDragage ? 1.6 : 2.0,
+      isDragage ? 150 : Infinity,
     );
     return {
       id:        s.id,
@@ -122,7 +121,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
               attribution="&copy; IGN"
               maxZoom={20}
             />
-            <FitAll positions={allPositions} />
+            <FitAll positions={allPositions} fallback={mapCenter} />
             {chantier.polygon?.flatMap((poly, pi) =>
               poly.length >= 3 ? [
                 <Polygon key={`zone-${pi}`}

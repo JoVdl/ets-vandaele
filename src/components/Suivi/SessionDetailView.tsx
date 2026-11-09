@@ -36,18 +36,19 @@ function zoneLabel(nom: string, color: string) {
   });
 }
 
-function FitBounds({ positions }: { positions: [number, number][] }) {
+function FitBounds({ positions, fallback }: { positions: [number, number][]; fallback: [number, number] }) {
   const map = useMap();
   useEffect(() => {
     const tid = setTimeout(() => {
       map.invalidateSize();
       if (positions.length >= 2) {
         map.fitBounds(L.latLngBounds(positions), { padding: [32, 32], animate: false });
+      } else {
+        map.setView(fallback, 16, { animate: false });
       }
-    }, 80);
+    }, 150);
     return () => clearTimeout(tid);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
+  }, [map, positions, fallback]);
   return null;
 }
 
@@ -269,8 +270,8 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
   const filteredGps = filterGpsTrack(
     session.gpsPoints,
     machineParams?.vitesseMaxKmh ?? 25,
-    isDragageSession ? 1.4 : 2.0,
-    isDragageSession ? Math.max((machineParams?.largeurTravailM ?? 6) * 4, 80) : Infinity,
+    isDragageSession ? 1.6 : 2.0,
+    isDragageSession ? Math.max((machineParams?.largeurTravailM ?? 6) * 10, 150) : Infinity,
   );
   const trail = filteredGps.map(p => [p.lat, p.lng] as [number, number]);
   const center: [number, number] = trail.length > 0
@@ -385,7 +386,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
               maxZoom={20}
             />
 
-            <FitBounds positions={trail} />
+            <FitBounds positions={trail} fallback={center} />
 
             {/* Chantier zones */}
             {chantierZones.flatMap(z => {
