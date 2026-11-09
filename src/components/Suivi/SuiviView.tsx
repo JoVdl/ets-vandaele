@@ -448,8 +448,9 @@ export default function SuiviView({ role, onLogout }: Props) {
   }, [selectedChantierId]);
 
   // ── Notifications : écoute des événements Firestore de l'autre appareil ──
+  // Le listener est toujours actif ; showNotification vérifie la permission
+  // au moment de l'événement (permet d'activer les notifs sans recharger).
   useEffect(() => {
-    if (!notificationsEnabled()) return;
     const since = new Date();
     const unsub = listenChantierEvents(since, deviceId, ev => {
       const who = ev.operateur === 'salarie' ? salarieName : 'Patron';
