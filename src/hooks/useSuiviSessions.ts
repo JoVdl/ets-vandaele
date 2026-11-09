@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  collection, addDoc, onSnapshot, query, orderBy,
+  collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy,
   limit, Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -91,5 +91,11 @@ export function useSuiviSessions() {
     queuePendingSession(full);
   }, []);
 
-  return { sessions, saveSession, syncing };
+  const deleteSession = useCallback(async (id: string) => {
+    try {
+      await deleteDoc(doc(db, COL, id));
+    } catch { /* offline or not found — ignore */ }
+  }, []);
+
+  return { sessions, saveSession, deleteSession, syncing };
 }

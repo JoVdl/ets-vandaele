@@ -9,6 +9,7 @@ interface GpsHook {
   accuracy: number | null;
   resetPoints: () => void;
   addPoints: (pts: GpsPoint[]) => void;  // for restoring crash-recovered session
+  addPoint: (pt: GpsPoint) => void;      // bridge a single GPS gap point
 }
 
 export function useGps(active: boolean): GpsHook {
@@ -72,5 +73,10 @@ export function useGps(active: boolean): GpsHook {
     if (pts.length) lastRef.current = pts[pts.length - 1];
   }, []);
 
-  return { points, currentPos, error, accuracy, resetPoints, addPoints };
+  const addPoint = useCallback((pt: GpsPoint) => {
+    lastRef.current = pt;
+    setPoints(prev => [...prev, pt]);
+  }, []);
+
+  return { points, currentPos, error, accuracy, resetPoints, addPoints, addPoint };
 }

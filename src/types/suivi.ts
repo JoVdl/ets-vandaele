@@ -6,6 +6,21 @@ export interface GpsPoint {
   acc?: number;    // accuracy in metres
 }
 
+export type IncidentType =
+  | 'bouchon_avant_pompe'
+  | 'bouchon_apres_pompe'
+  | 'deplacement_cables'
+  | 'ajout_tuyaux'
+  | 'panne_mecanique'
+  | 'autre';
+
+export interface SuiviIncident {
+  type: IncidentType;
+  dureeMinutes: number;  // 5–60 by 5
+  ts: string;            // ISO timestamp when incident was logged
+  note?: string;
+}
+
 export interface SuiviSession {
   id: string;
   chantierId: string;
@@ -24,6 +39,7 @@ export interface SuiviSession {
   debitM3h?: number;              // débit de dragage en m³/h
   profondeurDragageM?: number;    // épaisseur de vase par passe
   nbPassesParPosition?: number;   // nb balayages G-D avant avancement de 40 cm
+  incidents?: SuiviIncident[]; // in-session incidents (bouchon, câbles, etc.)
   notes?: string;
   pendingSync?: boolean;       // stored offline, not yet in Firestore
 }

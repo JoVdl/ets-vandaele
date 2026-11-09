@@ -3,6 +3,7 @@ import {
   Play, Pause, Square, MapPin, Wifi, WifiOff, LocateFixed,
   ChevronUp, ChevronDown, History, Settings, Ruler, Trash2, Check, X, LogOut,
   BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers, SlidersHorizontal, Radio, Wrench,
+  AlertTriangle,
 } from 'lucide-react';
 import SuiviMap, { type ChantierZone } from './SuiviMap';
 import SessionDetailView from './SessionDetailView';
@@ -24,7 +25,7 @@ import { saveActiveSession, loadActiveSession, clearActiveSession } from '../../
 import { clearSession } from '../../lib/suiviConfig';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import type { PinRole, SuiviSession } from '../../types/suivi';
+import type { PinRole, SuiviSession, SuiviIncident, IncidentType } from '../../types/suivi';
 import type { Chantier } from '../../types';
 
 interface Props {
@@ -49,12 +50,15 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function SuiviView({ role, onLogout }: Props) {
   const { chantiers, updateChantier } = useChantiers();
-  const { sessions, saveSession, syncing } = useSuiviSessions();
+  const { sessions, saveSession, deleteSession, syncing } = useSuiviSessions();
   const { liveSessions } = useLiveSessions();
   const [view, setView] = useState<View>('map');
   const [selectedSession, setSelectedSession] = useState<SuiviSession | null>(null);
   const [restoredBanner, setRestoredBanner]   = useState<string | null>(null); // chantier nom
   const [autoPausedByZone, setAutoPausedByZone] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showIncidentModal, setShowIncidentModal] = useState(false);
+  const [sessionIncidents, setSessionIncidents]   = useState<SuiviIncident[]>([]);
 
   // Use role as the Firestore document ID — guarantees exactly one live document
   // per role (patron / salarie) regardless of refreshes or tabs.
@@ -113,7 +117,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [machineParams, setMachineParamsState] = useState<MachineParams>(() => loadMachineParams());
 
   // ── GPS ────────────────────────────────────────────────────────────────
-  const { points: gpsPoints, currentPos, error: gpsError, accuracy, resetPoints, addPoints } =
+  const { points: gpsPoints, currentPos, error: gpsError, accuracy, resetPoints, addPoints, addPoint } =
     useGps(sessionActive && !sessionPaused && !isHidden);
 
   // ── Nearby chantier detection ──────────────────────────────────────────
@@ -405,6 +409,19 @@ export default function SuiviView({ role, onLogout }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChantier?.type, selectedChantier?.drague]);
 
+  // ── Dragage: bridge GPS gap when returning from background ───────────────
+  // Add current position as a trail point so the covered area during background
+  // is included in surface/volume calculations.
+  const prevHiddenRef = useRef(false);
+  useEffect(() => {
+    const wasHidden = prevHiddenRef.current;
+    prevHiddenRef.current = isHidden;
+    if (wasHidden && !isHidden && sessionActive && !sessionPaused && isDragage && currentPos) {
+      addPoint({ lat: currentPos.lat, lng: currentPos.lng, ts: Date.now(), acc: currentPos.acc });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHidden]);
+
   // ── Work trail color (from chantier type) ─────────────────────────────
   const workColor = selectedChantier
     ? (CHANTIER_TYPES[selectedChantier.type]?.color ?? '#22c55e')
@@ -494,6 +511,7 @@ export default function SuiviView({ role, onLogout }: Props) {
     setSessionStart(new Date());
     setSessionActive(true);
     setSessionPaused(false);
+    setSessionIncidents([]);
   }, [selectedChantierId, role, resetPoints]);
 
   const handlePause = useCallback(() => {
@@ -529,10 +547,13 @@ export default function SuiviView({ role, onLogout }: Props) {
         profondeurDragageM:  profondeur > 0 ? profondeur : undefined,
         ...(nbPasses > 1 && { nbPassesParPosition: nbPasses }),
       }),
+      // Incidents logged during session
+      ...(sessionIncidents.length > 0 && { incidents: sessionIncidents }),
     });
     resetPoints();
     setElapsed(0);
     setSessionStart(null);
+    setSessionIncidents([]);
   }, [selectedChantier, saveSession, role, sessionStart, elapsed, gpsPoints, resetPoints, areaM, rendement]);
 
   // ── Draw mode ──────────────────────────────────────────────────────────
@@ -1010,6 +1031,16 @@ export default function SuiviView({ role, onLogout }: Props) {
                           {sessionPaused ? <Play size={18} fill="currentColor" /> : <Pause size={18} />}
                           {sessionPaused ? 'Reprendre' : 'Pause'}
                         </button>
+                        {/* Incident button — only during dragage */}
+                        {isDragage && (
+                          <button onClick={() => setShowIncidentModal(true)}
+                            className="relative w-14 h-14 rounded-2xl bg-amber-600/80 border border-amber-500/40 text-white flex flex-col items-center justify-center gap-0.5 hover:bg-amber-500 active:scale-95 transition-all">
+                            <AlertTriangle size={16} />
+                            {sessionIncidents.length > 0 && (
+                              <span className="text-[9px] font-bold leading-none">{sessionIncidents.length}</span>
+                            )}
+                          </button>
+                        )}
                         <button onClick={handleStop}
                           className="w-14 h-14 rounded-2xl bg-red-600 text-white flex items-center justify-center hover:bg-red-500 active:scale-95 transition-all shadow-lg shadow-red-600/30">
                           <Square size={20} fill="currentColor" />
@@ -1050,8 +1081,9 @@ export default function SuiviView({ role, onLogout }: Props) {
                     ? Math.round((remaining / s.rendementM2h) * 60) : null;
 
                   return (
-                    <button key={s.id} onClick={() => setSelectedSession(s)}
-                      className="w-full text-left bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 hover:bg-white/[0.10] transition-colors active:scale-[0.99]">
+                    <div key={s.id} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden">
+                      <button onClick={() => setSelectedSession(s)}
+                        className="w-full text-left p-3 hover:bg-white/[0.05] transition-colors active:scale-[0.99]">
 
                       {/* Header */}
                       <div className="flex items-start justify-between gap-2 mb-2">
@@ -1096,6 +1128,18 @@ export default function SuiviView({ role, onLogout }: Props) {
                         {cumul && cumul.sessionCount > 1 && ` · ${cumul.sessionCount} sessions sur ce chantier`}
                       </p>
 
+                      {/* Incidents */}
+                      {s.incidents && s.incidents.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {s.incidents.map((inc, i) => (
+                            <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] border border-amber-700/40">
+                              <AlertTriangle size={8} />
+                              {INCIDENT_LABELS[inc.type] ?? inc.type} · {inc.dureeMinutes} min
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Chantier cumulative progress */}
                       {pct != null && (
                         <>
@@ -1123,7 +1167,33 @@ export default function SuiviView({ role, onLogout }: Props) {
                           </div>
                         </>
                       )}
-                    </button>
+                      </button>
+
+                      {/* Delete row */}
+                      {confirmDeleteId === s.id ? (
+                        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-red-950/60 border-t border-red-800/40">
+                          <span className="text-red-400 text-xs">Supprimer cette session ?</span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-3 py-1 rounded-lg bg-white/[0.08] text-slate-300 text-xs">
+                              Annuler
+                            </button>
+                            <button
+                              onClick={async () => { await deleteSession(s.id); setConfirmDeleteId(null); }}
+                              className="px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold">
+                              Confirmer
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteId(s.id)}
+                          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-slate-600 hover:text-red-400 text-xs border-t border-white/[0.05] transition-colors">
+                          <Trash2 size={11} /> Supprimer
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -1340,6 +1410,17 @@ export default function SuiviView({ role, onLogout }: Props) {
             ? workColor
             : '#22c55e'}
           onClose={() => setSelectedSession(null)}
+        />
+      )}
+
+      {/* ── Incident modal ──────────────────────────────────────────────── */}
+      {showIncidentModal && (
+        <IncidentModal
+          onClose={() => setShowIncidentModal(false)}
+          onAdd={inc => {
+            setSessionIncidents(prev => [...prev, inc]);
+            setShowIncidentModal(false);
+          }}
         />
       )}
 
@@ -1634,71 +1715,71 @@ function MachineParamsPanel({
             </>
           )}
 
-          <div>
-            <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
-              {isDragage ? 'Largeur de balayage (m) — rayon arc × 2' : 'Largeur de travail (m)'}
-            </label>
-            <div className="flex items-center gap-3">
-              <input
-                type="range" min="0" max="20" step="0.5"
-                value={local.largeurTravailM}
-                onChange={e => set('largeurTravailM', parseFloat(e.target.value))}
-                className="flex-1 accent-green-500"
-              />
-              <span className="text-white font-bold tabular-nums w-12 text-right">
-                {local.largeurTravailM === 0 ? '—' : `${local.largeurTravailM.toFixed(1)} m`}
-              </span>
-            </div>
-            <p className="text-slate-500 text-[10px] mt-1">
-              {isDragage
-                ? (local.largeurTravailM > 0
-                    ? `Portée du bras × 2. Rayon : ${(local.largeurTravailM / 2).toFixed(1)} m chaque côté.`
-                    : 'Portée du bras × 2. 0 = surface non calculée.')
-                : '0 = pas de suivi de surface par bandes'}
-            </p>
-          </div>
+          {!isDragage && (
+            <>
+              <div>
+                <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
+                  Largeur de travail (m)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range" min="0" max="20" step="0.5"
+                    value={local.largeurTravailM}
+                    onChange={e => set('largeurTravailM', parseFloat(e.target.value))}
+                    className="flex-1 accent-green-500"
+                  />
+                  <span className="text-white font-bold tabular-nums w-12 text-right">
+                    {local.largeurTravailM === 0 ? '—' : `${local.largeurTravailM.toFixed(1)} m`}
+                  </span>
+                </div>
+                <p className="text-slate-500 text-[10px] mt-1">
+                  0 = pas de suivi de surface par bandes
+                </p>
+              </div>
 
-          <div>
-            <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
-              Vitesse max GPS (km/h)
-            </label>
-            <div className="flex items-center gap-3">
-              <input
-                type="range" min="2" max="60" step="1"
-                value={local.vitesseMaxKmh}
-                onChange={e => set('vitesseMaxKmh', parseInt(e.target.value))}
-                className="flex-1 accent-green-500"
-              />
-              <span className="text-white font-bold tabular-nums w-14 text-right">
-                {local.vitesseMaxKmh} km/h
-              </span>
-            </div>
-            <p className="text-slate-500 text-[10px] mt-1">
-              Points GPS au-delà de cette vitesse sont ignorés
-            </p>
-          </div>
+              <div>
+                <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
+                  Vitesse max GPS (km/h)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range" min="2" max="60" step="1"
+                    value={local.vitesseMaxKmh}
+                    onChange={e => set('vitesseMaxKmh', parseInt(e.target.value))}
+                    className="flex-1 accent-green-500"
+                  />
+                  <span className="text-white font-bold tabular-nums w-14 text-right">
+                    {local.vitesseMaxKmh} km/h
+                  </span>
+                </div>
+                <p className="text-slate-500 text-[10px] mt-1">
+                  Points GPS au-delà de cette vitesse sont ignorés
+                </p>
+              </div>
 
-          <div>
-            <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
-              Recouvrement des passes (%)
-            </label>
-            <div className="flex items-center gap-3">
-              <input
-                type="range" min="0" max="40" step="5"
-                value={local.recouvrementPct}
-                onChange={e => set('recouvrementPct', parseInt(e.target.value))}
-                className="flex-1 accent-green-500"
-              />
-              <span className="text-white font-bold tabular-nums w-12 text-right">
-                {local.recouvrementPct} %
-              </span>
-            </div>
-            {local.largeurTravailM > 0 && (
-              <p className="text-slate-500 text-[10px] mt-1">
-                Largeur effective : {(local.largeurTravailM * (1 - local.recouvrementPct / 100)).toFixed(2)} m
-              </p>
-            )}
-          </div>
+              <div>
+                <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
+                  Recouvrement des passes (%)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range" min="0" max="40" step="5"
+                    value={local.recouvrementPct}
+                    onChange={e => set('recouvrementPct', parseInt(e.target.value))}
+                    className="flex-1 accent-green-500"
+                  />
+                  <span className="text-white font-bold tabular-nums w-12 text-right">
+                    {local.recouvrementPct} %
+                  </span>
+                </div>
+                {local.largeurTravailM > 0 && (
+                  <p className="text-slate-500 text-[10px] mt-1">
+                    Largeur effective : {(local.largeurTravailM * (1 - local.recouvrementPct / 100)).toFixed(2)} m
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
           <div>
             <label className="text-slate-400 text-xs uppercase tracking-wide block mb-2">
@@ -1872,6 +1953,96 @@ function MachineTypeEdit({
           className="w-full h-12 rounded-xl bg-green-600 text-white font-bold disabled:opacity-40 hover:bg-green-500 transition-colors"
         >
           {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Incident labels ────────────────────────────────────────────────────────────
+
+export const INCIDENT_LABELS: Record<IncidentType, string> = {
+  bouchon_avant_pompe: 'Bouchon avant pompe',
+  bouchon_apres_pompe: 'Bouchon après pompe',
+  deplacement_cables:  'Déplacement câbles',
+  ajout_tuyaux:        'Ajout de tuyaux',
+  panne_mecanique:     'Panne mécanique',
+  autre:               'Autre',
+};
+
+const INCIDENT_OPTIONS: { value: IncidentType; label: string }[] = [
+  { value: 'bouchon_avant_pompe', label: 'Bouchon avant pompe' },
+  { value: 'bouchon_apres_pompe', label: 'Bouchon après pompe' },
+  { value: 'deplacement_cables',  label: 'Déplacement de câbles' },
+  { value: 'ajout_tuyaux',        label: 'Ajout de tuyaux' },
+  { value: 'panne_mecanique',     label: 'Panne mécanique' },
+  { value: 'autre',               label: 'Autre' },
+];
+
+// ── IncidentModal ──────────────────────────────────────────────────────────────
+
+function IncidentModal({
+  onClose,
+  onAdd,
+}: {
+  onClose: () => void;
+  onAdd: (inc: SuiviIncident) => void;
+}) {
+  const [type, setType] = useState<IncidentType>('bouchon_avant_pompe');
+  const [duree, setDuree] = useState(10);
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-end">
+      <div className="w-full bg-slate-900/90 backdrop-blur-2xl rounded-t-3xl p-5 pb-8 border-t border-white/[0.08]">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-bold flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-400" />
+            Déclarer un incident
+          </h3>
+          <button onClick={onClose} className="text-slate-400 p-1"><X size={20} /></button>
+        </div>
+
+        {/* Type */}
+        <label className="block text-slate-400 text-xs uppercase tracking-wide mb-1.5">Type d'incident</label>
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {INCIDENT_OPTIONS.map(o => (
+            <button
+              key={o.value}
+              onClick={() => setType(o.value)}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-colors border ${
+                type === o.value
+                  ? 'bg-amber-700/70 border-amber-500 text-amber-100'
+                  : 'bg-white/[0.06] border-white/[0.08] text-slate-300 hover:bg-white/[0.10]'
+              }`}>
+              {type === o.value && <Check size={13} className="text-amber-300 flex-shrink-0" />}
+              <span className="truncate">{o.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Duration */}
+        <label className="block text-slate-400 text-xs uppercase tracking-wide mb-2">
+          Durée estimée de l'arrêt
+        </label>
+        <div className="flex flex-wrap gap-2 mb-5">
+          {[5, 10, 15, 20, 30, 45, 60].map(min => (
+            <button
+              key={min}
+              onClick={() => setDuree(min)}
+              className={`px-3 py-1.5 rounded-xl text-sm font-semibold transition-colors border ${
+                duree === min
+                  ? 'bg-amber-600 border-amber-500 text-white'
+                  : 'bg-white/[0.06] border-white/[0.08] text-slate-300 hover:bg-white/[0.10]'
+              }`}>
+              {min < 60 ? `${min} min` : '1 h'}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => onAdd({ type, dureeMinutes: duree, ts: new Date().toISOString() })}
+          className="w-full h-12 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-500 transition-colors">
+          Enregistrer l'incident
         </button>
       </div>
     </div>
