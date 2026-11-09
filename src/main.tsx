@@ -6,7 +6,7 @@ import App from './App.tsx'
 
 // Register service worker for PWA + notifications
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
 createRoot(document.getElementById('root')!).render(
