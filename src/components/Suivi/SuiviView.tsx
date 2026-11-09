@@ -25,6 +25,7 @@ import { saveActiveSession, loadActiveSession, clearActiveSession } from '../../
 import { clearSession, loadSuiviConfig } from '../../lib/suiviConfig';
 import { writeChantierEvent, listenChantierEvents, getDeviceId } from '../../lib/chantierEvents';
 import { showNotification, notificationsEnabled, setNotificationsEnabled, requestAndEnable, notificationApiAvailable } from '../../lib/notifications';
+import { registerFcmToken } from '../../lib/fcm';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { PinRole, SuiviSession, SuiviIncident, IncidentType } from '../../types/suivi';
@@ -486,6 +487,9 @@ export default function SuiviView({ role, onLogout }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [salarieName, deviceId]);
 
+  // ── Register FCM token (background push notifications) ───────────────────
+  useEffect(() => { registerFcmToken().catch(() => {}); }, []);
+
   // ── Reset machine params when chantier type or dragage mode changes ──────
   useEffect(() => {
     if (!selectedChantier) return;
@@ -632,7 +636,7 @@ export default function SuiviView({ role, onLogout }: Props) {
     setSessionPaused(false);
     setSessionIncidents([]);
     if (ch) {
-      writeChantierEvent({ type: 'session_start', chantierId: ch.id, chantierNom: ch.nom, operateur: role, deviceId });
+      writeChantierEvent({ type: 'session_start', chantierId: ch.id, chantierNom: ch.nom, operateur: role, deviceId, salarieNom: salarieName });
     }
   }, [selectedChantierId, role, resetPoints, chantiers, deviceId]);
 
@@ -643,7 +647,7 @@ export default function SuiviView({ role, onLogout }: Props) {
       if (ch) {
         writeChantierEvent({
           type: pausing ? 'session_pause' : 'session_resume',
-          chantierId: ch.id, chantierNom: ch.nom, operateur: role, deviceId,
+          chantierId: ch.id, chantierNom: ch.nom, operateur: role, deviceId, salarieNom: salarieName,
         });
       }
       return pausing;
@@ -666,6 +670,7 @@ export default function SuiviView({ role, onLogout }: Props) {
       chantierNom: selectedChantier.nom,
       operateur: role,
       deviceId,
+      salarieNom: salarieName,
       dureeSessionMin: dureeMin,
     });
     await saveSession({
@@ -1849,6 +1854,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                 chantierNom: selectedChantier.nom,
                 operateur: role,
                 deviceId,
+                salarieNom: salarieName,
                 incidentLabel: INCIDENT_LABELS[inc.type as IncidentType] ?? inc.type,
                 incidentDureeMin: inc.dureeMinutes,
               });
@@ -2287,7 +2293,10 @@ function NotificationToggle() {
     } else {
       const result = await requestAndEnable();
       setStatus(result === 'unsupported' ? 'unsupported' : result);
-      if (result === 'granted') setEnabled(true);
+      if (result === 'granted') {
+        setEnabled(true);
+        registerFcmToken().catch(() => {});
+      }
     }
   };
 

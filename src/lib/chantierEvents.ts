@@ -17,6 +17,7 @@ export interface ChantierEvent {
   chantierId: string;
   chantierNom: string;
   operateur: 'patron' | 'salarie';
+  salarieNom?: string;
   deviceId: string;
   ts: Timestamp;
   incidentLabel?: string;
