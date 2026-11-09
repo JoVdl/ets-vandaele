@@ -33,12 +33,28 @@ export function useSuiviSessions() {
   const [sessions, setSessions] = useState<SuiviSession[]>([]);
   const [syncing, setSyncing] = useState(false);
 
-  // ── Real-time listener ──────────────────────────────────────────────────
+  // ── Real-time listener — re-souscrit au retour au premier plan ──────────
   useEffect(() => {
     const q = query(collection(db, COL), orderBy('dateDebut', 'desc'), limit(50));
-    return onSnapshot(q, snap => {
+
+    const subscribe = () => onSnapshot(q, snap => {
       setSessions(snap.docs.map(d => sessionFromFirestore(d.id, d.data() as Record<string, unknown>)));
     }, () => { /* offline — keep stale */ });
+
+    let unsub = subscribe();
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        unsub();          // détache l'ancien listener (peut-être gelé)
+        unsub = subscribe(); // ré-ouvre une connexion fraîche
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      unsub();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   // ── Sync pending offline sessions when network returns ──────────────────
