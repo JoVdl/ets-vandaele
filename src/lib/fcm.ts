@@ -3,7 +3,7 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { app, db } from './firebase';
 import { getDeviceId } from './chantierEvents';
 
-const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
+const VAPID_KEY = 'BEYhiUnhu3XHw-AhHcQ9hCrFWiJo7DcZV7HCWuww6TGeTRjDO0XoC6GJ5Sq1VCHQq2DC1s94_QKub6V0TmaLgtI';
 
 export async function registerFcmToken(): Promise<void> {
   if (!VAPID_KEY) return;

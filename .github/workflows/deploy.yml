@@ -31,8 +31,6 @@ jobs:
       - run: npm ci
 
       - run: npm run build
-        env:
-          VITE_FIREBASE_VAPID_KEY: ${{ secrets.VITE_FIREBASE_VAPID_KEY }}
 
       - name: Generate calendar.ics
         run: node scripts/generate-ical.mjs dist/calendar.ics
