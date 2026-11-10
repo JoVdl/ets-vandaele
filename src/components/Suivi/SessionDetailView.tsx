@@ -9,7 +9,7 @@ import { fr } from 'date-fns/locale';
 import type { SuiviSession, SuiviIncident, IncidentType, GpsPoint } from '../../types/suivi';
 import type { Chantier } from '../../types';
 import type { ChantierZone } from './SuiviMap';
-import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM, filterGpsTrack, stripVolumeM3WithSegments } from '../../lib/geo';
+import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM, filterGpsTrack, stripVolumeM3WithSegments, convexHull } from '../../lib/geo';
 import { CHANTIER_TYPES } from '../../lib/constants';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -323,6 +323,12 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
     isDragageSession ? Math.max((machineParams?.largeurTravailM ?? 6) * 10, 150) : Infinity,
   );
   const trail = filteredGps.map(p => [p.lat, p.lng] as [number, number]);
+  const hullPositions: [number, number][] | null = isDragageSession && filteredGps.length >= 3
+    ? (() => {
+        const h = convexHull(filteredGps.map(p => ({ lat: p.lat, lng: p.lng })));
+        return h.length >= 3 ? h.map(p => [p.lat, p.lng] as [number, number]) : null;
+      })()
+    : null;
   const center: [number, number] = trail.length > 0
     ? trail[Math.floor(trail.length / 2)]
     : [43.7, -0.26];
@@ -467,8 +473,24 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
               ];
             })}
 
-            {/* GPS trail */}
-            <Polyline positions={trail} color={workColor} weight={4} opacity={0.9} />
+            {/* GPS trail — filled hull polygon for drague, polyline otherwise */}
+            {hullPositions ? (
+              <>
+                <Polygon
+                  positions={hullPositions}
+                  color={workColor}
+                  fillColor={workColor}
+                  fillOpacity={0.35}
+                  weight={2}
+                  opacity={0.80}
+                />
+                {trail.length > 1 && (
+                  <Polyline positions={trail} color={workColor} weight={1.5} opacity={0.40} dashArray="3 6" />
+                )}
+              </>
+            ) : (
+              <Polyline positions={trail} color={workColor} weight={4} opacity={0.9} />
+            )}
 
             {/* Start / end markers */}
             {startMarker && <Marker position={trail[0]} icon={startMarker} />}
