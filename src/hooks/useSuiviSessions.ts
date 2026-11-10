@@ -45,14 +45,21 @@ export function useSuiviSessions() {
 
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        unsub();          // détache l'ancien listener (peut-être gelé)
-        unsub = subscribe(); // ré-ouvre une connexion fraîche
+        unsub();
+        unsub = subscribe();
       }
     };
+
+    // Re-subscribe périodique toutes les 3 min (évite les connexions WS figées)
+    const interval = setInterval(() => {
+      unsub();
+      unsub = subscribe();
+    }, 3 * 60 * 1000);
 
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       unsub();
+      clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);

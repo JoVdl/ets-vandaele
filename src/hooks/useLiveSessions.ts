@@ -46,8 +46,8 @@ export function useLiveSessions() {
   const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
 
   useEffect(() => {
-    return onSnapshot(collection(db, COL), snap => {
-      const cutoff = Date.now() - 5 * 60 * 1000; // ignore stale (> 5 min)
+    const subscribe = () => onSnapshot(collection(db, COL), snap => {
+      const cutoff = Date.now() - 10 * 60 * 1000; // ignore stale (> 10 min)
       setLiveSessions(
         snap.docs
           .map(d => {
@@ -61,6 +61,29 @@ export function useLiveSessions() {
           .filter(s => new Date(s.lastUpdate).getTime() > cutoff)
       );
     }, () => {});
+
+    let unsub = subscribe();
+
+    // Re-subscribe on tab focus (connexion Firestore peut se figer en arrière-plan)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        unsub();
+        unsub = subscribe();
+      }
+    };
+
+    // Re-subscribe périodique toutes les 3 min (évite les connexions WS figées)
+    const interval = setInterval(() => {
+      unsub();
+      unsub = subscribe();
+    }, 3 * 60 * 1000);
+
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      unsub();
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   return { liveSessions };
