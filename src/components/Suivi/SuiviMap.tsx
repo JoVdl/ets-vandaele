@@ -323,7 +323,7 @@ export default function SuiviMap({
     if (!isDragage) return null;
     const allPts = historicalRendered
       .filter(h => h.kind === 'hull' && h.sessionId) // only the selected chantier's sessions
-      .flatMap(h => h.data.map(([lat, lng]) => ({ lat, lng })));
+      .flatMap(h => (h.data as [number, number][]).map(([lat, lng]) => ({ lat, lng })));
     if (allPts.length < 3) return null;
     const hull = convexHull(allPts);
     if (hull.length < 3) return null;
