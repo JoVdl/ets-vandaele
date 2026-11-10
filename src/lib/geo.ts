@@ -101,17 +101,20 @@ export function totalDistanceM(points: GpsPoint[]): number {
 /**
  * Filtre une trace GPS brute pour éliminer les points incohérents.
  *
- * Deux filtres combinés :
+ * Trois filtres enchaînés :
  *  1. Vitesse instantanée > vitesseMaxKmh × speedTolerance → rejeté
  *  2. Dragage (anchorDriftM fini) : point à plus de anchorDriftM m
  *     du centroïde des 30 derniers points acceptés → rejeté
  *     (élimine l'opérateur qui s'éloigne de la machine avec son téléphone)
+ *  3. Dragage seulement — post-filtre cluster : supprime les points aberrants
+ *     isolés (transit de positionnement initial, saut GPS) en gardant uniquement
+ *     les points à moins de 4.4 × MAD du centre médian global (≈ 3σ).
  *
  * @param points         Points GPS bruts (ordre chronologique)
  * @param vitesseMaxKmh  Vitesse max de la machine (paramètre utilisateur)
  * @param speedTolerance Multiplicateur de tolérance (1.4 dragage, 2.0 surface)
  * @param anchorDriftM   Distance max tolérée depuis le centroïde glissant.
- *                       Infinity = filtre désactivé (non-dragage)
+ *                       Infinity = filtres 2 & 3 désactivés (non-dragage)
  */
 export function filterGpsTrack(
   points: GpsPoint[],
@@ -143,6 +146,23 @@ export function filterGpsTrack(
     }
 
     accepted.push(pt);
+  }
+
+  // ── 3. Cluster post-filter — drague only ──────────────────────────────
+  // Removes initial positioning transit and isolated GPS jumps by keeping only
+  // points within 4.4 × MAD of the global median center (≈ 3σ for normal dist).
+  if (anchorDriftM < Infinity && accepted.length >= 10) {
+    const sortedLat = accepted.map(p => p.lat).sort((a, b) => a - b);
+    const sortedLng = accepted.map(p => p.lng).sort((a, b) => a - b);
+    const mid = Math.floor(accepted.length / 2);
+    const medLat = sortedLat[mid];
+    const medLng = sortedLng[mid];
+    const sortedDists = accepted
+      .map(p => distanceM(p.lat, p.lng, medLat, medLng))
+      .sort((a, b) => a - b);
+    const mad = sortedDists[mid]; // median absolute deviation
+    const clusterRadiusM = Math.max(mad * 4.4, 25); // ≈ 3σ, min 25 m
+    return accepted.filter(p => distanceM(p.lat, p.lng, medLat, medLng) <= clusterRadiusM);
   }
 
   return accepted;
