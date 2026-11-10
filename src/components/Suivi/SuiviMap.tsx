@@ -424,11 +424,11 @@ export default function SuiviMap({
                 className={clickable ? 'cursor-pointer' : undefined}
               >
                 {h.hullArea >= 50 && (
-                  <Tooltip permanent direction="center" offset={[0, 0]}>
-                    <div style={{ textAlign: 'center', lineHeight: 1.3 }}>
-                      <div style={{ fontWeight: 700, fontSize: 11 }}>{formatArea(h.hullArea)}</div>
-                      {(h.vol ?? 0) > 0 && <div style={{ fontSize: 10 }}>{h.vol!.toFixed(1)} m³</div>}
-                      {viewMode === 'depth' && h.depth > 0 && <div style={{ fontSize: 10, opacity: 0.8 }}>{h.depth.toFixed(2)} m</div>}
+                  <Tooltip permanent direction="center" offset={[0, 0]} className="hull-label">
+                    <div style={{ textAlign: 'center', lineHeight: 1.4 }}>
+                      {formatArea(h.hullArea)}
+                      {(h.vol ?? 0) > 0 && <><br />{h.vol!.toFixed(1)} m³</>}
+                      {viewMode === 'depth' && h.depth > 0 && <><br />{h.depth.toFixed(2)} m</>}
                     </div>
                   </Tooltip>
                 )}
@@ -461,10 +461,10 @@ export default function SuiviMap({
                   opacity={0.80}
                 >
                   {activeHullArea >= 50 && (
-                    <Tooltip permanent direction="center" offset={[0, 0]}>
-                      <div style={{ textAlign: 'center', lineHeight: 1.3 }}>
-                        <div style={{ fontWeight: 700, fontSize: 11 }}>{formatArea(activeHullArea)}</div>
-                        {(currentVolumeM3 ?? 0) > 0 && <div style={{ fontSize: 10 }}>{currentVolumeM3!.toFixed(1)} m³</div>}
+                    <Tooltip permanent direction="center" offset={[0, 0]} className="hull-label">
+                      <div style={{ textAlign: 'center', lineHeight: 1.4 }}>
+                        {formatArea(activeHullArea)}
+                        {(currentVolumeM3 ?? 0) > 0 && <><br />{currentVolumeM3!.toFixed(1)} m³</>}
                       </div>
                     </Tooltip>
                   )}
@@ -501,10 +501,10 @@ export default function SuiviMap({
             weight={2}
             opacity={0.85}
           >
-            <Tooltip permanent direction="center" offset={[0, 0]}>
-              <div style={{ textAlign: 'center', lineHeight: 1.3 }}>
-                <div style={{ fontWeight: 700, fontSize: 12 }}>{formatArea(totalHullData.totalArea)}</div>
-                {totalHullData.totalVol > 0 && <div style={{ fontSize: 11 }}>{totalHullData.totalVol.toFixed(1)} m³ total</div>}
+            <Tooltip permanent direction="center" offset={[0, 0]} className="hull-label">
+              <div style={{ textAlign: 'center', lineHeight: 1.4 }}>
+                {formatArea(totalHullData.totalArea)}
+                {totalHullData.totalVol > 0 && <><br />{totalHullData.totalVol.toFixed(1)} m³</>}
               </div>
             </Tooltip>
           </Polygon>
