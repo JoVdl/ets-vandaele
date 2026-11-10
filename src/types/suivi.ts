@@ -40,6 +40,7 @@ export interface SuiviSession {
   profondeurDragageM?: number;    // épaisseur de vase par passe
   nbPassesParPosition?: number;   // nb balayages G-D avant avancement de 40 cm
   incidents?: SuiviIncident[]; // in-session incidents (bouchon, câbles, etc.)
+  depthSegments?: { fromTs: number; profondeurM: number }[]; // depth per time segment (dragage)
   notes?: string;
   pendingSync?: boolean;       // stored offline, not yet in Firestore
 }

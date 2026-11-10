@@ -9,7 +9,7 @@ import { fr } from 'date-fns/locale';
 import type { SuiviSession, SuiviIncident, IncidentType, GpsPoint } from '../../types/suivi';
 import type { Chantier } from '../../types';
 import type { ChantierZone } from './SuiviMap';
-import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM, filterGpsTrack } from '../../lib/geo';
+import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM, filterGpsTrack, stripVolumeM3WithSegments } from '../../lib/geo';
 import { CHANTIER_TYPES } from '../../lib/constants';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -338,10 +338,14 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
     const effWidth   = machineParams.largeurTravailM * (1 - machineParams.recouvrementPct / 100);
     const surfaceM2  = workDistM * effWidth;
     const rendt      = surfaceM2 / durationH;
-    // Volume: surface × profondeur par passe × nb passes (from saved session params)
+    // Volume: use per-segment depth if recorded, else flat surface × profondeur × nbPasses
     const profondeur = session.profondeurDragageM ?? 0;
     const nbPasses   = Math.max(1, session.nbPassesParPosition ?? 1);
-    const volM3      = isDragageSession && profondeur > 0 ? surfaceM2 * profondeur * nbPasses : null;
+    const volM3 = isDragageSession && profondeur > 0
+      ? (session.depthSegments && session.depthSegments.length > 0 && machineParams
+          ? stripVolumeM3WithSegments(workPts, machineParams.largeurTravailM, machineParams.recouvrementPct, session.depthSegments)
+          : surfaceM2 * profondeur * nbPasses)
+      : null;
     const debitM3h   = volM3 != null && durationH > 0 ? volM3 / durationH : null;
     return { workSpeedKmh: speedKmh, correctedSurfaceM2: surfaceM2, correctedRendement: rendt, correctedVolumeM3: volM3, correctedDebitM3h: debitM3h };
   })();

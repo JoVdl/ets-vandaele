@@ -168,6 +168,32 @@ export function filterGpsTrack(
   return accepted;
 }
 
+/**
+ * Convex hull of a set of lat/lng points (Andrew's monotone chain, O(n log n)).
+ * Returns the boundary vertices in counter-clockwise order.
+ * Useful for drague: turns the scattered papillonnage GPS points into a filled zone.
+ */
+export function convexHull(pts: { lat: number; lng: number }[]): { lat: number; lng: number }[] {
+  if (pts.length < 3) return pts;
+  const sorted = [...pts].sort((a, b) => a.lng !== b.lng ? a.lng - b.lng : a.lat - b.lat);
+  const cross = (o: { lat: number; lng: number }, a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
+    (a.lng - o.lng) * (b.lat - o.lat) - (a.lat - o.lat) * (b.lng - o.lng);
+  const lower: { lat: number; lng: number }[] = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: { lat: number; lng: number }[] = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
+
 /** Shoelace formula on local flat projection. Accurate for areas < ~100 km². */
 export function areaM2(points: { lat: number; lng: number }[]): number {
   if (points.length < 3) return 0;
@@ -270,6 +296,35 @@ export function stripAreaM2(points: GpsPoint[], largeurM: number, recouvrementPc
   if (largeurM <= 0) return 0;
   const effectiveWidth = largeurM * (1 - recouvrementPct / 100);
   return totalDistanceM(points) * effectiveWidth;
+}
+
+/**
+ * Volume dragué avec profondeur variable par segment.
+ * Chaque segment GPS utilise la profondeur active à ce moment (depthSegments).
+ * Dépôt au segment ayant fromTs ≤ midpoint timestamp.
+ * Si depthSegments est vide ou largeurM ≤ 0, retourne 0.
+ */
+export function stripVolumeM3WithSegments(
+  points: GpsPoint[],
+  largeurM: number,
+  recouvrementPct: number,
+  depthSegments: { fromTs: number; profondeurM: number }[],
+): number {
+  if (largeurM <= 0 || points.length < 2 || depthSegments.length === 0) return 0;
+  const effectiveWidth = largeurM * (1 - recouvrementPct / 100);
+  let volume = 0;
+  for (let i = 1; i < points.length; i++) {
+    const dist   = distanceM(points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng);
+    const midTs  = (points[i - 1].ts + points[i].ts) / 2;
+    // Find depth: last segment whose fromTs ≤ midTs
+    let depth = depthSegments[0].profondeurM;
+    for (const seg of depthSegments) {
+      if (midTs >= seg.fromTs) depth = seg.profondeurM;
+      else break;
+    }
+    volume += dist * effectiveWidth * depth;
+  }
+  return volume;
 }
 
 export function centroid(points: { lat: number; lng: number }[]): { lat: number; lng: number } {

@@ -13,11 +13,12 @@ import { useChantiers } from '../../hooks/useChantiers';
 import { CHANTIER_TYPES } from '../../lib/constants';
 import {
   areaM2, formatArea, formatDistance, formatDuration, centroid,
-  avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, stripAreaM2, filterGpsTrack,
+  avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, stripAreaM2, stripVolumeM3WithSegments, filterGpsTrack,
 } from '../../lib/geo';
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
 } from '../../lib/machineParams';
+import { useChantierParams } from '../../hooks/useChantierParams';
 import {
   pushLiveSession, clearLiveSession, useLiveSessions,
 } from '../../hooks/useLiveSessions';
@@ -131,6 +132,12 @@ export default function SuiviView({ role, onLogout }: Props) {
 
   // ── Machine params ─────────────────────────────────────────────────────
   const [machineParams, setMachineParamsState] = useState<MachineParams>(() => loadMachineParams());
+
+  // Firestore-synced params: persists across sessions, shared between patron and salarié
+  const { chantierParams, paramsLoaded, saveChantierParams } = useChantierParams(selectedChantierId || null);
+
+  // Depth segments: tracks profondeurDragageM × nbPasses changes during an active dragage session
+  const [depthSegments, setDepthSegments] = useState<{ fromTs: number; profondeurM: number }[]>([]);
 
   // ── GPS ────────────────────────────────────────────────────────────────
   const { points: gpsPoints, currentPos, error: gpsError, accuracy, resetPoints, addPoints, addPoint } =
@@ -424,10 +431,14 @@ export default function SuiviView({ role, onLogout }: Props) {
   // ── Dragage mode (drague aspiratrice) ────────────────────────────────────
   const isDragage = !!selectedChantier?.drague;
 
-  // ── Dragage: volume and débit (papillonnage: area × profondeur × nb passes) ─
+  // ── Dragage: volume and débit (papillonnage: depth-weighted per GPS segment) ─
   const profondeur = machineParams.profondeurDragageM;
   const nbPasses   = Math.max(1, machineParams.nbPassesParPosition ?? 1);
-  const volumeM3   = isDragage && profondeur > 0 ? areaM * profondeur * nbPasses : 0;
+  const volumeM3   = isDragage && profondeur > 0
+    ? (depthSegments.length > 0
+        ? stripVolumeM3WithSegments(filteredPoints, machineParams.largeurTravailM, machineParams.recouvrementPct, depthSegments)
+        : areaM * profondeur * nbPasses)
+    : 0;
   const debitM3h   = netElapsedH > 0 && volumeM3 > 0 ? volumeM3 / netElapsedH : 0;
 
   // ── Live viewer : session d'un autre device sur le chantier sélectionné ───
@@ -495,14 +506,27 @@ export default function SuiviView({ role, onLogout }: Props) {
   // ── Register FCM token (background push notifications) ───────────────────
   useEffect(() => { registerFcmToken().catch(() => {}); }, []);
 
-  // ── Reset machine params when chantier type or dragage mode changes ──────
+  // ── Load machine params: Firestore (shared/persisted) → type defaults ────
+  // Fires when chantier switches or when remote params update (other device changed them).
   useEffect(() => {
-    if (!selectedChantier) return;
-    const p = defaultParams(selectedChantier.type, selectedChantier.drague ?? false);
+    if (!selectedChantier || !paramsLoaded) return;
+    const p = chantierParams ?? defaultParams(selectedChantier.type, selectedChantier.drague ?? false);
     setMachineParamsState(p);
     saveMachineParams(p);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedChantier?.type, selectedChantier?.drague]);
+  }, [selectedChantier?.id, chantierParams, paramsLoaded]);
+
+  // ── Track effective depth changes during an active dragage session ─────
+  useEffect(() => {
+    if (!sessionActive || !isDragage) return;
+    const effectiveDepth = machineParams.profondeurDragageM * Math.max(1, machineParams.nbPassesParPosition ?? 1);
+    if (effectiveDepth <= 0) return;
+    setDepthSegments(prev => {
+      if (prev.length > 0 && prev[prev.length - 1].profondeurM === effectiveDepth) return prev;
+      return [...prev, { fromTs: Date.now(), profondeurM: effectiveDepth }];
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [machineParams.profondeurDragageM, machineParams.nbPassesParPosition, sessionActive, isDragage]);
 
   // ── Dragage: bridge GPS gap when returning from background ───────────────
   // Add current position as a trail point so the covered area during background
@@ -640,6 +664,13 @@ export default function SuiviView({ role, onLogout }: Props) {
     setSessionActive(true);
     setSessionPaused(false);
     setSessionIncidents([]);
+    // Initialise depth tracking for dragage sessions
+    if (ch?.drague) {
+      const effDepth = machineParams.profondeurDragageM * Math.max(1, machineParams.nbPassesParPosition ?? 1);
+      setDepthSegments(effDepth > 0 ? [{ fromTs: Date.now(), profondeurM: effDepth }] : []);
+    } else {
+      setDepthSegments([]);
+    }
     if (ch) {
       writeChantierEvent({ type: 'session_start', chantierId: ch.id, chantierNom: ch.nom, operateur: role, deviceId, salarieNom: salarieName });
     }
@@ -700,11 +731,14 @@ export default function SuiviView({ role, onLogout }: Props) {
       }),
       // Incidents logged during session
       ...(sessionIncidents.length > 0 && { incidents: sessionIncidents }),
+      // Depth segments for accurate variable-depth volume (dragage)
+      ...(depthSegments.length > 1 && { depthSegments }),
     });
     resetPoints();
     setElapsed(0);
     setSessionStart(null);
     setSessionIncidents([]);
+    setDepthSegments([]);
   }, [selectedChantier, saveSession, role, sessionStart, elapsed, gpsPoints, resetPoints, areaM, rendement, deviceId]);
 
   // ── Draw mode ──────────────────────────────────────────────────────────
@@ -1814,7 +1848,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           sessionActive={sessionActive}
           sessionAreaM={areaM}
           onClose={() => setShowMachinePanel(false)}
-          onChange={p => { setMachineParamsState(p); saveMachineParams(p); }}
+          onChange={p => { setMachineParamsState(p); saveMachineParams(p); saveChantierParams(p); }}
         />
       )}
 

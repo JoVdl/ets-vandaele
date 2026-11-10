@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap, useMapEvent
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { GpsPoint } from '../../types/suivi';
-import { areaM2, formatArea, centroid, swathRects, smoothPoints, distanceM } from '../../lib/geo';
+import { areaM2, formatArea, centroid, swathRects, smoothPoints, distanceM, convexHull } from '../../lib/geo';
 import type { LiveSession } from '../../hooks/useLiveSessions';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -280,12 +280,24 @@ export default function SuiviMap({
     [smoothed],
   );
 
-  // Historical trails from past sessions — polyline for drague, swath rects for surface work
+  // Historical trails from past sessions — hull for drague, swath rects for surface work
   const historicalRendered = useMemo(() => historicalTrails.map(({ points, color, sessionId }) => {
     const sm = smoothPoints(points, smoothAlpha);
-    if (!isDragage && largeurM > 0) return { kind: 'rects' as const, color, sessionId, data: swathRects(sm, largeurM / 2) };
+    if (isDragage) {
+      const hull = convexHull(sm.map(p => ({ lat: p.lat, lng: p.lng })));
+      if (hull.length >= 3) return { kind: 'hull' as const, color, sessionId, data: hull.map(p => [p.lat, p.lng] as [number, number]) };
+      return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]) };
+    }
+    if (largeurM > 0) return { kind: 'rects' as const, color, sessionId, data: swathRects(sm, largeurM / 2) };
     return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]) };
   }), [historicalTrails, smoothAlpha, largeurM, isDragage]);
+
+  // Convex hull of current drague trail — shows the dredged zone as a filled polygon
+  const hullPositions = useMemo(() => {
+    if (!isDragage || smoothed.length < 3) return null;
+    const hull = convexHull(smoothed.map(p => ({ lat: p.lat, lng: p.lng })));
+    return hull.length >= 3 ? hull.map(p => [p.lat, p.lng] as [number, number]) : null;
+  }, [isDragage, smoothed]);
 
   // Bearing of the machine: angle from the last two smoothed GPS points
   const lastBearingRef = useRef(0);
@@ -344,38 +356,66 @@ export default function SuiviMap({
           const handlers = clickable
             ? { click: (e: L.LeafletMouseEvent) => { L.DomEvent.stopPropagation(e); onHistoricalTrailClick!(h.sessionId!); } }
             : undefined;
-          return h.kind === 'rects'
-            ? h.data.map((rect, i) => (
-                <Polygon
-                  key={`h-${si}-${i}`}
-                  positions={rect}
-                  color={h.color}
-                  fillColor={h.color}
-                  fillOpacity={clickable ? 0.55 : 0.4}
-                  weight={clickable ? 1 : 0}
-                  stroke={clickable}
-                  eventHandlers={handlers}
-                  className={clickable ? 'cursor-pointer' : undefined}
-                />
-              ))
-            : h.data.length > 1 && (
-                <Polyline
-                  key={`h-${si}`}
-                  positions={h.data}
-                  color={h.color}
-                  weight={clickable ? 5 : 3}
-                  opacity={clickable ? 0.75 : 0.5}
-                  eventHandlers={handlers}
-                  className={clickable ? 'cursor-pointer' : undefined}
-                />
-              );
+          if (h.kind === 'rects') {
+            return h.data.map((rect, i) => (
+              <Polygon
+                key={`h-${si}-${i}`}
+                positions={rect}
+                color={h.color}
+                fillColor={h.color}
+                fillOpacity={clickable ? 0.55 : 0.4}
+                weight={clickable ? 1 : 0}
+                stroke={clickable}
+                eventHandlers={handlers}
+                className={clickable ? 'cursor-pointer' : undefined}
+              />
+            ));
+          }
+          if (h.kind === 'hull') {
+            return h.data.length >= 3 && (
+              <Polygon
+                key={`h-${si}`}
+                positions={h.data}
+                color={h.color}
+                fillColor={h.color}
+                fillOpacity={clickable ? 0.45 : 0.30}
+                weight={clickable ? 2 : 1.5}
+                opacity={clickable ? 0.85 : 0.65}
+                eventHandlers={handlers}
+                className={clickable ? 'cursor-pointer' : undefined}
+              />
+            );
+          }
+          return h.data.length > 1 && (
+            <Polyline
+              key={`h-${si}`}
+              positions={h.data}
+              color={h.color}
+              weight={clickable ? 5 : 3}
+              opacity={clickable ? 0.75 : 0.5}
+              eventHandlers={handlers}
+              className={clickable ? 'cursor-pointer' : undefined}
+            />
+          );
         })}
 
-        {/* Work trail — polyline for drague, swath rectangles for surface work */}
+        {/* Work trail — convex hull (filled zone) for drague, swath rectangles for surface work */}
         {isDragage
-          ? trail.length > 1 && (
-              <Polyline positions={trail} color={workColor} weight={5} opacity={0.85} />
-            )
+          ? <>
+              {hullPositions && (
+                <Polygon
+                  positions={hullPositions}
+                  color={workColor}
+                  fillColor={workColor}
+                  fillOpacity={0.35}
+                  weight={2}
+                  opacity={0.80}
+                />
+              )}
+              {trail.length > 1 && (
+                <Polyline positions={trail} color={workColor} weight={1.5} opacity={0.40} dashArray="3 6" />
+              )}
+            </>
           : largeurM > 0
             ? rects.map((rect, i) => (
                 <Polygon
