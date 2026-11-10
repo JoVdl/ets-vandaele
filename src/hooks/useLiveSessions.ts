@@ -24,6 +24,7 @@ export interface LiveSession {
   volumeM3?:      number;
   debitM3h?:      number;
   paused?:        boolean;
+  recentTrack?:   { lat: number; lng: number }[];
   lastUpdate:     string; // ISO
 }
 

@@ -280,12 +280,12 @@ export default function SuiviMap({
     [smoothed],
   );
 
-  // Historical trails from past sessions (smoothed + optional swath rects)
+  // Historical trails from past sessions — polyline for drague, swath rects for surface work
   const historicalRendered = useMemo(() => historicalTrails.map(({ points, color, sessionId }) => {
     const sm = smoothPoints(points, smoothAlpha);
-    if (largeurM > 0) return { kind: 'rects' as const, color, sessionId, data: swathRects(sm, largeurM / 2) };
+    if (!isDragage && largeurM > 0) return { kind: 'rects' as const, color, sessionId, data: swathRects(sm, largeurM / 2) };
     return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]) };
-  }), [historicalTrails, smoothAlpha, largeurM]);
+  }), [historicalTrails, smoothAlpha, largeurM, isDragage]);
 
   // Bearing of the machine: angle from the last two smoothed GPS points
   const lastBearingRef = useRef(0);
@@ -371,22 +371,26 @@ export default function SuiviMap({
               );
         })}
 
-        {/* Work trail — swath rectangles or polyline */}
-        {largeurM > 0
-          ? rects.map((rect, i) => (
-              <Polygon
-                key={i}
-                positions={rect}
-                color={workColor}
-                fillColor={workColor}
-                fillOpacity={0.55}
-                weight={0}
-                stroke={false}
-              />
-            ))
-          : trail.length > 1 && (
-              <Polyline positions={trail} color={workColor} weight={4} opacity={0.85} />
+        {/* Work trail — polyline for drague, swath rectangles for surface work */}
+        {isDragage
+          ? trail.length > 1 && (
+              <Polyline positions={trail} color={workColor} weight={5} opacity={0.85} />
             )
+          : largeurM > 0
+            ? rects.map((rect, i) => (
+                <Polygon
+                  key={i}
+                  positions={rect}
+                  color={workColor}
+                  fillColor={workColor}
+                  fillOpacity={0.55}
+                  weight={0}
+                  stroke={false}
+                />
+              ))
+            : trail.length > 1 && (
+                <Polyline positions={trail} color={workColor} weight={4} opacity={0.85} />
+              )
         }
 
         {/* Draw polygon */}
@@ -402,6 +406,21 @@ export default function SuiviMap({
         {drawMode && drawPoints.map((p, i) => (
           <Marker key={i} position={[p.lat, p.lng]} icon={drawIcon} />
         ))}
+
+        {/* Live other-operator GPS trails */}
+        {liveSessions
+          .filter(s => s.sessionId !== mySessionId && s.recentTrack && s.recentTrack.length > 1)
+          .map(s => (
+            <Polyline
+              key={`trail-${s.sessionId}`}
+              positions={s.recentTrack!.map(p => [p.lat, p.lng] as [number, number])}
+              color="#f97316"
+              weight={3}
+              opacity={0.65}
+              dashArray="4 4"
+            />
+          ))
+        }
 
         {/* Live other-operator markers */}
         {liveSessions

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy,
+  collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy,
   limit, Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -113,5 +113,11 @@ export function useSuiviSessions() {
     } catch { /* offline or not found — ignore */ }
   }, []);
 
-  return { sessions, saveSession, deleteSession, syncing };
+  const updateSession = useCallback(async (id: string, patch: Partial<Omit<SuiviSession, 'id'>>) => {
+    try {
+      await updateDoc(doc(db, COL, id), patch as Record<string, unknown>);
+    } catch { /* offline — ignore */ }
+  }, []);
+
+  return { sessions, saveSession, deleteSession, updateSession, syncing };
 }

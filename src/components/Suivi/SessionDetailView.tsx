@@ -1,12 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ArrowLeft, Printer, AlertTriangle } from 'lucide-react';
-import { INCIDENT_LABELS, INCIDENT_COLORS, SessionTimeline } from './incidentUtils';
+import { ArrowLeft, Printer, AlertTriangle, Plus, X, Check } from 'lucide-react';
+import { INCIDENT_LABELS, INCIDENT_COLORS } from './incidentUtils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import type { SuiviSession, GpsPoint } from '../../types/suivi';
+import type { SuiviSession, SuiviIncident, IncidentType, GpsPoint } from '../../types/suivi';
 import type { Chantier } from '../../types';
 import type { ChantierZone } from './SuiviMap';
 import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM, filterGpsTrack } from '../../lib/geo';
@@ -52,6 +52,15 @@ function FitBounds({ positions, fallback }: { positions: [number, number][]; fal
   return null;
 }
 
+const INCIDENT_OPTIONS: { value: IncidentType; label: string }[] = [
+  { value: 'bouchon_avant_pompe', label: 'Bouchon avant pompe' },
+  { value: 'bouchon_apres_pompe', label: 'Bouchon après pompe' },
+  { value: 'deplacement_cables',  label: 'Déplacement câbles' },
+  { value: 'ajout_tuyaux',        label: 'Ajout de tuyaux' },
+  { value: 'panne_mecanique',     label: 'Panne mécanique' },
+  { value: 'autre',               label: 'Autre' },
+];
+
 interface Props {
   session:       SuiviSession;
   chantier?:     Chantier;
@@ -60,6 +69,7 @@ interface Props {
   machineParams?: { largeurTravailM: number; vitesseMaxKmh: number; recouvrementPct: number };
   workColor:     string;
   salarieName?:  string;
+  onUpdateIncidents?: (incidents: SuiviIncident[]) => Promise<void>;
   onClose:       () => void;
 }
 
@@ -264,8 +274,43 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, workColor, salarieName = 'Hugo', onClose }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose }: Props) {
   const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
+
+  // Local incidents state — reflects Firestore changes via updated session prop
+  const [incidents, setIncidents] = useState<SuiviIncident[]>(session.incidents ?? []);
+  const [showAddIncident, setShowAddIncident] = useState(false);
+  const [incType, setIncType] = useState<IncidentType>('bouchon_avant_pompe');
+  const [incDuree, setIncDuree] = useState(10);
+  const [saving, setSaving] = useState(false);
+
+  // Sync when session prop is updated from Firestore
+  useEffect(() => {
+    setIncidents(session.incidents ?? []);
+  }, [session.incidents]);
+
+  async function handleAddIncident() {
+    if (!onUpdateIncidents) return;
+    const newInc: SuiviIncident = { type: incType, dureeMinutes: incDuree, ts: new Date().toISOString() };
+    const updated = [...incidents, newInc];
+    setSaving(true);
+    await onUpdateIncidents(updated);
+    setIncidents(updated);
+    setShowAddIncident(false);
+    setSaving(false);
+  }
+
+  async function handleDeleteIncident(idx: number) {
+    if (!onUpdateIncidents) return;
+    const updated = incidents.filter((_, i) => i !== idx);
+    setSaving(true);
+    await onUpdateIncidents(updated);
+    setIncidents(updated);
+    setSaving(false);
+  }
+
+  const totalIncidentMin = incidents.reduce((a, i) => a + i.dureeMinutes, 0);
+  const curageMin = Math.max(0, session.dureeMinutes - totalIncidentMin);
   // Apply the same filter used at capture time (speed + anchor drift for dragage)
   const filteredGps = filterGpsTrack(
     session.gpsPoints,
@@ -492,13 +537,67 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
           </div>
         )}
 
-        {/* Timeline + incidents */}
-        {session.incidents && session.incidents.length > 0 && (
+        {/* Time breakdown bar */}
+        {session.dureeMinutes > 0 && (
           <div className="mb-2">
-            <SessionTimeline session={session} />
-            <div className="flex flex-wrap gap-1 mt-2">
-              {session.incidents.map((inc, i) => (
-                <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] border"
+            <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+              <span>Répartition du temps · {formatDuration(session.dureeMinutes)}</span>
+              {totalIncidentMin > 0 && (
+                <span className="text-amber-400">{totalIncidentMin} min d'incidents</span>
+              )}
+            </div>
+            <div className="flex h-4 rounded-full overflow-hidden gap-px">
+              <div
+                className="bg-green-700/80 flex items-center justify-center text-[8px] text-white font-bold min-w-0"
+                style={{ flex: curageMin }}
+                title={`Curage: ${formatDuration(curageMin)}`}
+              >
+                {curageMin > 15 && formatDuration(curageMin)}
+              </div>
+              {incidents.map((inc, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-center text-[8px] text-white font-bold min-w-0"
+                  style={{ flex: inc.dureeMinutes, backgroundColor: INCIDENT_COLORS[inc.type] + 'cc' }}
+                  title={`${INCIDENT_LABELS[inc.type]}: ${inc.dureeMinutes} min`}
+                >
+                  {inc.dureeMinutes >= 15 && `${inc.dureeMinutes}m`}
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2 mt-1">
+              <span className="flex items-center gap-1 text-[9px] text-green-500">
+                <span className="w-2 h-2 rounded-full bg-green-700 flex-shrink-0" />
+                Curage · {formatDuration(curageMin)}
+              </span>
+              {incidents.map((inc, i) => (
+                <span key={i} className="flex items-center gap-1 text-[9px]" style={{ color: INCIDENT_COLORS[inc.type] }}>
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: INCIDENT_COLORS[inc.type] }} />
+                  {INCIDENT_LABELS[inc.type]} · {inc.dureeMinutes} min
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Incidents list with delete + add */}
+        {onUpdateIncidents && (
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] text-slate-500 uppercase tracking-wide">Incidents</span>
+              <button
+                onClick={() => setShowAddIncident(true)}
+                className="flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300 px-2 py-0.5 rounded-lg border border-amber-700/40 hover:bg-amber-900/30 transition-colors"
+              >
+                <Plus size={10} /> Ajouter
+              </button>
+            </div>
+            {incidents.length === 0 && (
+              <p className="text-slate-600 text-[10px]">Aucun incident enregistré</p>
+            )}
+            <div className="flex flex-wrap gap-1">
+              {incidents.map((inc, i) => (
+                <span key={i} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[9px] border"
                   style={{
                     backgroundColor: INCIDENT_COLORS[inc.type] + '22',
                     borderColor:     INCIDENT_COLORS[inc.type] + '55',
@@ -506,9 +605,61 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
                   }}>
                   <AlertTriangle size={8} />
                   {INCIDENT_LABELS[inc.type]} · {inc.dureeMinutes} min
+                  <button
+                    onClick={() => handleDeleteIncident(i)}
+                    disabled={saving}
+                    className="ml-0.5 hover:opacity-70 transition-opacity"
+                    title="Supprimer"
+                  >
+                    <X size={9} />
+                  </button>
                 </span>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Add incident inline panel */}
+        {showAddIncident && (
+          <div className="mb-2 bg-slate-800/80 border border-white/[0.1] rounded-2xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-white font-semibold flex items-center gap-1.5">
+                <AlertTriangle size={12} className="text-amber-400" /> Ajouter un incident
+              </span>
+              <button onClick={() => setShowAddIncident(false)} className="text-slate-400"><X size={14} /></button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 mb-2">
+              {INCIDENT_OPTIONS.map(o => (
+                <button key={o.value} onClick={() => setIncType(o.value)}
+                  className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-[11px] font-medium text-left border transition-colors ${
+                    incType === o.value
+                      ? 'bg-amber-700/70 border-amber-500 text-amber-100'
+                      : 'bg-white/[0.05] border-white/[0.08] text-slate-300'
+                  }`}>
+                  {incType === o.value && <Check size={10} className="text-amber-300 flex-shrink-0" />}
+                  <span className="truncate">{o.label}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {[5, 10, 15, 20, 30, 45, 60].map(min => (
+                <button key={min} onClick={() => setIncDuree(min)}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold border transition-colors ${
+                    incDuree === min
+                      ? 'bg-amber-600 border-amber-500 text-white'
+                      : 'bg-white/[0.06] border-white/[0.08] text-slate-300'
+                  }`}>
+                  {min < 60 ? `${min} min` : '1 h'}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleAddIncident}
+              disabled={saving}
+              className="w-full h-9 rounded-xl bg-amber-600 text-white text-sm font-bold hover:bg-amber-500 transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
           </div>
         )}
 

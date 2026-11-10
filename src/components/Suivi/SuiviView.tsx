@@ -56,7 +56,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function SuiviView({ role, onLogout }: Props) {
   const { chantiers, updateChantier } = useChantiers();
-  const { sessions, saveSession, deleteSession, syncing } = useSuiviSessions();
+  const { sessions, saveSession, deleteSession, updateSession, syncing } = useSuiviSessions();
   const { liveSessions } = useLiveSessions();
   const [view, setView] = useState<View>('map');
   const [selectedSession, setSelectedSession] = useState<SuiviSession | null>(null);
@@ -393,6 +393,10 @@ export default function SuiviView({ role, onLogout }: Props) {
     }
     const push = () => {
       if (!currentPos || !selectedChantier) return;
+      // Decimate filteredPoints to max 300 for Firestore payload
+      const pts = filteredPoints;
+      const step = pts.length > 300 ? Math.ceil(pts.length / 300) : 1;
+      const track = pts.filter((_, i) => i % step === 0 || i === pts.length - 1).map(p => ({ lat: p.lat, lng: p.lng }));
       pushLiveSession(sessionIdRef.current, {
         operateur:    role,
         chantierId:   selectedChantier.id,
@@ -408,6 +412,7 @@ export default function SuiviView({ role, onLogout }: Props) {
         dureeMinutes: sessionStart ? Math.round((Date.now() - sessionStart.getTime()) / 60_000) : Math.round(elapsed / 60),
         ...(isDragage && volumeM3 > 0 && { volumeM3, debitM3h }),
         paused:       sessionPaused,
+        recentTrack:  track,
       });
     };
     push(); // push immediately
@@ -1827,7 +1832,7 @@ export default function SuiviView({ role, onLogout }: Props) {
       {/* ── Session detail overlay ──────────────────────────────────────── */}
       {selectedSession && (
         <SessionDetailView
-          session={selectedSession}
+          session={sessions.find(s => s.id === selectedSession.id) ?? selectedSession}
           chantier={chantiers.find(c => c.id === selectedSession.chantierId)}
           chantierCumul={chantierCumul}
           chantierZones={chantierZones}
@@ -1836,6 +1841,9 @@ export default function SuiviView({ role, onLogout }: Props) {
             ? workColor
             : '#22c55e'}
           salarieName={salarieName}
+          onUpdateIncidents={async (incidents) => {
+            await updateSession(selectedSession.id, { incidents });
+          }}
           onClose={() => setSelectedSession(null)}
         />
       )}
