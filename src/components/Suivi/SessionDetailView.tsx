@@ -105,9 +105,11 @@ const BRAND_GREEN = '#56B57A';
 const BRAND_TEAL  = '#266E7B';
 
 interface RecapExtras {
-  workSpeedKmh:      number | null;
+  workSpeedKmh:       number | null;
   correctedSurfaceM2: number | null;
   correctedRendement: number | null;
+  correctedVolumeM3:  number | null;
+  correctedDebitM3h:  number | null;
 }
 
 function openPrintRecap(
@@ -135,14 +137,16 @@ function openPrintRecap(
   // Use corrected metrics when available (speed × width formula), else fall back to stored values
   const displaySurface   = extras.correctedSurfaceM2 ?? session.surfaceCoveredM2;
   const displayRendement = extras.correctedRendement  ?? session.rendementM2h;
+  const displayVolumeM3  = extras.correctedVolumeM3   ?? session.volumeM3 ?? 0;
+  const displayDebitM3h  = extras.correctedDebitM3h   ?? session.debitM3h ?? 0;
 
   const isDragageSession = (session.volumeM3 ?? 0) > 0;
   const rows: [string, string][] = [
     ['Durée de la session',  formatDuration(session.dureeMinutes)],
     ...(isDragageSession ? [
-      ['Volume dragué',        `${session.volumeM3!.toFixed(1)} m³`] as [string, string],
+      ['Volume dragué',        `${displayVolumeM3.toFixed(1)} m³`] as [string, string],
       ['Surface draguée',      formatArea(displaySurface)] as [string, string],
-      ['Débit de dragage',     session.debitM3h != null && session.debitM3h > 0 ? `${session.debitM3h.toFixed(1)} m³/h` : '—'] as [string, string],
+      ['Débit de dragage',     displayDebitM3h > 0 ? `${displayDebitM3h.toFixed(1)} m³/h` : '—'] as [string, string],
       ...(session.profondeurDragageM != null ? [[
         'Profondeur par passe',
         session.nbPassesParPosition != null && session.nbPassesParPosition > 1
@@ -324,9 +328,9 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
     : [43.7, -0.26];
 
   // Corrected metrics: recompute from filtered GPS (speed × width) using machine params
-  const { workSpeedKmh, correctedSurfaceM2, correctedRendement } = (() => {
+  const { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3, correctedDebitM3h } = (() => {
     if (!machineParams || machineParams.largeurTravailM <= 0 || session.dureeMinutes <= 0)
-      return { workSpeedKmh: null, correctedSurfaceM2: null, correctedRendement: null };
+      return { workSpeedKmh: null, correctedSurfaceM2: null, correctedRendement: null, correctedVolumeM3: null, correctedDebitM3h: null };
     const workPts    = filteredGps;
     const workDistM  = totalDistanceM(workPts);
     const durationH  = session.dureeMinutes / 60;
@@ -334,7 +338,12 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
     const effWidth   = machineParams.largeurTravailM * (1 - machineParams.recouvrementPct / 100);
     const surfaceM2  = workDistM * effWidth;
     const rendt      = surfaceM2 / durationH;
-    return { workSpeedKmh: speedKmh, correctedSurfaceM2: surfaceM2, correctedRendement: rendt };
+    // Volume: surface × profondeur par passe × nb passes (from saved session params)
+    const profondeur = session.profondeurDragageM ?? 0;
+    const nbPasses   = Math.max(1, session.nbPassesParPosition ?? 1);
+    const volM3      = isDragageSession && profondeur > 0 ? surfaceM2 * profondeur * nbPasses : null;
+    const debitM3h   = volM3 != null && durationH > 0 ? volM3 / durationH : null;
+    return { workSpeedKmh: speedKmh, correctedSurfaceM2: surfaceM2, correctedRendement: rendt, correctedVolumeM3: volM3, correctedDebitM3h: debitM3h };
   })();
 
   // Use corrected surface for progress % when available
@@ -405,7 +414,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
           onClick={() => openPrintRecap(
             session, chantier, thisPct, cumulPct, rendMoyen, workColor,
             chantierZones.flatMap(z => z.polygons.filter(p => p.length >= 3)),
-            { workSpeedKmh, correctedSurfaceM2, correctedRendement },
+            { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3, correctedDebitM3h },
             salarieName,
           )}
           title="Récap client (PDF)"
@@ -474,11 +483,11 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
         {/* Primary metrics */}
         <div className="grid grid-cols-4 gap-1 mb-2">
           <StatCard label="Durée"     value={formatDuration(session.dureeMinutes)} />
-          {session.volumeM3 != null && session.volumeM3 > 0 ? (
+          {isDragageSession ? (
             <>
-              <StatCard label="Volume dragué" value={`${session.volumeM3.toFixed(1)} m³`} />
-              <StatCard label="Distance"      value={formatDistance(session.distanceM)} />
-              <StatCard label="Débit"         value={session.debitM3h != null && session.debitM3h > 0 ? `${session.debitM3h.toFixed(1)} m³/h` : '—'} />
+              <StatCard label="Volume dragué" value={`${(correctedVolumeM3 ?? session.volumeM3 ?? 0).toFixed(1)} m³`} />
+              <StatCard label="Surface"       value={formatArea(displaySurface)} />
+              <StatCard label="Débit"         value={(correctedDebitM3h ?? session.debitM3h ?? 0) > 0 ? `${(correctedDebitM3h ?? session.debitM3h!).toFixed(1)} m³/h` : '—'} />
             </>
           ) : (
             <>
@@ -491,6 +500,14 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
 
         {/* Secondary metrics */}
         <div className="grid grid-cols-4 gap-1 mb-2">
+          {isDragageSession && session.profondeurDragageM != null && (
+            <StatCard
+              label="Profondeur"
+              value={session.nbPassesParPosition != null && session.nbPassesParPosition > 1
+                ? `${(session.profondeurDragageM * session.nbPassesParPosition).toFixed(2)} m`
+                : `${session.profondeurDragageM.toFixed(2)} m`}
+            />
+          )}
           {workSpeedKmh != null && (
             <StatCard label="Vit. travail" value={`${workSpeedKmh.toFixed(1)} km/h`} />
           )}
