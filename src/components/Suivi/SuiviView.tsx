@@ -582,16 +582,21 @@ export default function SuiviView({ role, onLogout }: Props) {
     return sessions
       .filter(s => s.gpsPoints.length > 1)
       .map(s => {
+        const c = chanMap[s.chantierId];
+        const isChantierDrague = c?.drague ?? false;
+        const pts = isChantierDrague
+          ? filterGpsTrack(s.gpsPoints, machineParams.vitesseMaxKmh, 1.6, 150)
+          : s.gpsPoints;
+        const profondeurM = (s.profondeurDragageM ?? 0) * Math.max(1, s.nbPassesParPosition ?? 1);
         if (s.chantierId === selectedChantierId) {
           const idx   = selIdxMap.get(s.id) ?? 0;
           const color = HIST_PALETTE[idx % HIST_PALETTE.length];
-          return { points: s.gpsPoints, color, sessionId: s.id };
+          return { points: pts, color, sessionId: s.id, volumeM3: s.volumeM3, profondeurM };
         }
-        const c = chanMap[s.chantierId];
         const color = c ? (CHANTIER_TYPES[c.type]?.color ?? '#22c55e') : '#22c55e';
-        return { points: s.gpsPoints, color };
+        return { points: pts, color, volumeM3: s.volumeM3, profondeurM };
       });
-  }, [sessions, chantiers, selectedChantierId]);
+  }, [sessions, chantiers, selectedChantierId, machineParams.vitesseMaxKmh]);
 
   const chantierZones = useMemo<ChantierZone[]>(() =>
     chantiers
@@ -910,6 +915,7 @@ export default function SuiviView({ role, onLogout }: Props) {
               mySessionId={sessionIdRef.current}
               historicalTrails={historicalTrails}
               isDragage={isDragage}
+              currentVolumeM3={volumeM3}
               onHistoricalTrailClick={sessionId => {
                 const s = sessions.find(ss => ss.id === sessionId);
                 if (s) setSelectedSession(s);

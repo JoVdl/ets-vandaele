@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap, useMapEvents } from 'react-leaflet';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, TileLayer, Polyline, Polygon, Marker, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { GpsPoint } from '../../types/suivi';
@@ -49,6 +49,14 @@ function bearingDeg(p1: { lat: number; lng: number }, p2: { lat: number; lng: nu
   const lat1R = p1.lat * Math.PI / 180;
   const b = Math.atan2(dLng * Math.cos(lat1R), dLat);
   return (b * 180 / Math.PI + 360) % 360;
+}
+
+function depthColor(depth: number, maxDepth: number): string {
+  const t = maxDepth > 0 ? Math.min(depth / maxDepth, 1) : 0;
+  const r = Math.round(0xbf - (0xbf - 0x1e) * t);
+  const g = Math.round(0xdb - (0xdb - 0x3a) * t);
+  const b = Math.round(0xfe - (0xfe - 0x8a) * t);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
 /** Machine-shaped divIcon: oriented rectangle + forward arrow. */
@@ -218,7 +226,8 @@ interface Props {
   jumpToPos:                [number, number] | null;
   liveSessions:             LiveSession[];
   mySessionId:              string;
-  historicalTrails:         { points: GpsPoint[]; color: string; sessionId?: string }[];
+  historicalTrails:         { points: GpsPoint[]; color: string; sessionId?: string; volumeM3?: number; profondeurM?: number }[];
+  currentVolumeM3?:         number;
   isDragage?:               boolean;
   onHistoricalTrailClick?:  (sessionId: string) => void;
   salarieName?:             string;
@@ -240,7 +249,7 @@ export default function SuiviMap({
   followGps, onDisableFollow, chantierZones, selectedZoneId, onZoneClick,
   showZones, satellite, workColor, largeurM, smoothAlpha,
   sessionActive, jumpToPos, liveSessions, mySessionId, historicalTrails,
-  isDragage, onHistoricalTrailClick, salarieName = 'Hugo',
+  isDragage, onHistoricalTrailClick, salarieName = 'Hugo', currentVolumeM3,
 }: Props) {
 
   const center: [number, number] = currentPos
@@ -281,15 +290,18 @@ export default function SuiviMap({
   );
 
   // Historical trails from past sessions — hull for drague, swath rects for surface work
-  const historicalRendered = useMemo(() => historicalTrails.map(({ points, color, sessionId }) => {
+  const historicalRendered = useMemo(() => historicalTrails.map(({ points, color, sessionId, volumeM3: vol, profondeurM: depth }) => {
     const sm = smoothPoints(points, smoothAlpha);
     if (isDragage) {
       const hull = convexHull(sm.map(p => ({ lat: p.lat, lng: p.lng })));
-      if (hull.length >= 3) return { kind: 'hull' as const, color, sessionId, data: hull.map(p => [p.lat, p.lng] as [number, number]) };
-      return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]) };
+      if (hull.length >= 3) {
+        const hullArea = areaM2(hull);
+        return { kind: 'hull' as const, color, sessionId, data: hull.map(p => [p.lat, p.lng] as [number, number]), hullArea, vol, depth: depth ?? 0 };
+      }
+      return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
     }
-    if (largeurM > 0) return { kind: 'rects' as const, color, sessionId, data: swathRects(sm, largeurM / 2) };
-    return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]) };
+    if (largeurM > 0) return { kind: 'rects' as const, color, sessionId, data: swathRects(sm, largeurM / 2), hullArea: 0, vol, depth: depth ?? 0 };
+    return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
   }), [historicalTrails, smoothAlpha, largeurM, isDragage]);
 
   // Convex hull of current drague trail — shows the dredged zone as a filled polygon
@@ -298,6 +310,32 @@ export default function SuiviMap({
     const hull = convexHull(smoothed.map(p => ({ lat: p.lat, lng: p.lng })));
     return hull.length >= 3 ? hull.map(p => [p.lat, p.lng] as [number, number]) : null;
   }, [isDragage, smoothed]);
+
+  // ── View mode (Sessions / Total hull / Depth gradient) ───────────────
+  const [viewMode, setViewMode] = useState<'sessions' | 'total' | 'depth'>('sessions');
+
+  const maxDepthM = useMemo(() => {
+    if (!isDragage) return 0;
+    return Math.max(0.5, ...historicalTrails.map(t => t.profondeurM ?? 0));
+  }, [isDragage, historicalTrails]);
+
+  const totalHullData = useMemo(() => {
+    if (!isDragage) return null;
+    const allPts = historicalRendered
+      .filter(h => h.kind === 'hull')
+      .flatMap(h => h.data.map(([lat, lng]) => ({ lat, lng })));
+    if (allPts.length < 3) return null;
+    const hull = convexHull(allPts);
+    if (hull.length < 3) return null;
+    const totalArea = areaM2(hull);
+    const totalVol  = historicalTrails.reduce((s, t) => s + (t.volumeM3 ?? 0), 0);
+    return { positions: hull.map(p => [p.lat, p.lng] as [number, number]), totalArea, totalVol };
+  }, [isDragage, historicalRendered, historicalTrails]);
+
+  const activeHullArea = useMemo(() => {
+    if (!hullPositions || hullPositions.length < 3) return 0;
+    return areaM2(hullPositions.map(([lat, lng]) => ({ lat, lng })));
+  }, [hullPositions]);
 
   // Bearing of the machine: angle from the last two smoothed GPS points
   const lastBearingRef = useRef(0);
@@ -351,7 +389,7 @@ export default function SuiviMap({
         })}
 
         {/* Historical trails from past sessions */}
-        {historicalRendered.map((h, si) => {
+        {viewMode !== 'total' && historicalRendered.map((h, si) => {
           const clickable = !!(h.sessionId && onHistoricalTrailClick);
           const handlers = clickable
             ? { click: (e: L.LeafletMouseEvent) => { L.DomEvent.stopPropagation(e); onHistoricalTrailClick!(h.sessionId!); } }
@@ -372,18 +410,29 @@ export default function SuiviMap({
             ));
           }
           if (h.kind === 'hull') {
+            const hc = viewMode === 'depth' ? depthColor(h.depth, maxDepthM) : h.color;
             return h.data.length >= 3 && (
               <Polygon
                 key={`h-${si}`}
                 positions={h.data}
-                color={h.color}
-                fillColor={h.color}
+                color={hc}
+                fillColor={hc}
                 fillOpacity={clickable ? 0.45 : 0.30}
                 weight={clickable ? 2 : 1.5}
                 opacity={clickable ? 0.85 : 0.65}
                 eventHandlers={handlers}
                 className={clickable ? 'cursor-pointer' : undefined}
-              />
+              >
+                {h.hullArea >= 50 && (
+                  <Tooltip permanent direction="center" offset={[0, 0]}>
+                    <div style={{ textAlign: 'center', lineHeight: 1.3 }}>
+                      <div style={{ fontWeight: 700, fontSize: 11 }}>{formatArea(h.hullArea)}</div>
+                      {(h.vol ?? 0) > 0 && <div style={{ fontSize: 10 }}>{h.vol!.toFixed(1)} m³</div>}
+                      {viewMode === 'depth' && h.depth > 0 && <div style={{ fontSize: 10, opacity: 0.8 }}>{h.depth.toFixed(2)} m</div>}
+                    </div>
+                  </Tooltip>
+                )}
+              </Polygon>
             );
           }
           return h.data.length > 1 && (
@@ -410,7 +459,16 @@ export default function SuiviMap({
                   fillOpacity={0.35}
                   weight={2}
                   opacity={0.80}
-                />
+                >
+                  {activeHullArea >= 50 && (
+                    <Tooltip permanent direction="center" offset={[0, 0]}>
+                      <div style={{ textAlign: 'center', lineHeight: 1.3 }}>
+                        <div style={{ fontWeight: 700, fontSize: 11 }}>{formatArea(activeHullArea)}</div>
+                        {(currentVolumeM3 ?? 0) > 0 && <div style={{ fontSize: 10 }}>{currentVolumeM3!.toFixed(1)} m³</div>}
+                      </div>
+                    </Tooltip>
+                  )}
+                </Polygon>
               )}
               {trail.length > 1 && (
                 <Polyline positions={trail} color={workColor} weight={1.5} opacity={0.40} dashArray="3 6" />
@@ -432,6 +490,25 @@ export default function SuiviMap({
                 <Polyline positions={trail} color={workColor} weight={4} opacity={0.85} />
               )
         }
+
+        {/* Total hull — all sessions merged */}
+        {isDragage && viewMode === 'total' && totalHullData && (
+          <Polygon
+            positions={totalHullData.positions}
+            color="#3b82f6"
+            fillColor="#3b82f6"
+            fillOpacity={0.30}
+            weight={2}
+            opacity={0.85}
+          >
+            <Tooltip permanent direction="center" offset={[0, 0]}>
+              <div style={{ textAlign: 'center', lineHeight: 1.3 }}>
+                <div style={{ fontWeight: 700, fontSize: 12 }}>{formatArea(totalHullData.totalArea)}</div>
+                {totalHullData.totalVol > 0 && <div style={{ fontSize: 11 }}>{totalHullData.totalVol.toFixed(1)} m³ total</div>}
+              </div>
+            </Tooltip>
+          </Polygon>
+        )}
 
         {/* Draw polygon */}
         {drawPoints.length >= 3 && (
@@ -496,6 +573,34 @@ export default function SuiviMap({
         <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[1000]
           bg-blue-600 text-white text-sm font-bold px-4 py-2 rounded-xl shadow-lg">
           {formatArea(drawnArea)}
+        </div>
+      )}
+
+      {/* View mode toggle — drague only */}
+      {isDragage && (
+        <div className="absolute top-2 left-2 z-[1000] flex flex-col gap-1">
+          {(['sessions', 'total', 'depth'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`text-xs px-2 py-1 rounded-lg font-semibold shadow backdrop-blur-sm transition
+                ${viewMode === mode ? 'bg-blue-600 text-white' : 'bg-black/50 text-white/80 hover:bg-black/70'}`}
+            >
+              {mode === 'sessions' ? 'Sessions' : mode === 'total' ? 'Total' : 'Profondeur'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Depth legend */}
+      {isDragage && viewMode === 'depth' && maxDepthM > 0 && (
+        <div className="absolute bottom-8 left-2 z-[1000] bg-black/70 text-white text-xs rounded-lg px-3 py-2 backdrop-blur-sm">
+          <div className="font-bold mb-1">Profondeur curée</div>
+          <div style={{ background: 'linear-gradient(to right, #bfdbfe, #1e3a8a)', width: 100, height: 10, borderRadius: 3 }} />
+          <div className="flex justify-between mt-1 opacity-80">
+            <span>0 m</span>
+            <span>{maxDepthM.toFixed(1)} m</span>
+          </div>
         </div>
       )}
     </div>

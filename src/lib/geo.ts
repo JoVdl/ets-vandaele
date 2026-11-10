@@ -148,21 +148,28 @@ export function filterGpsTrack(
     accepted.push(pt);
   }
 
-  // ── 3. Cluster post-filter — drague only ──────────────────────────────
-  // Removes initial positioning transit and isolated GPS jumps by keeping only
-  // points within 4.4 × MAD of the global median center (≈ 3σ for normal dist).
+  // ── 3. Cluster post-filter — drague only (iterative MAD) ─────────────
+  // Removes transit-to-position path and GPS jumps.
+  // Runs up to 3 iterations: each pass re-centres the median on the surviving
+  // cluster, so outliers that survived the first cut get caught on the next.
+  // 3.5 × MAD keeps all real work points (diagonal of a 6×20 m zone ≈ 20 m from
+  // centre) while rejecting stray readings beyond ~2× that distance.
   if (anchorDriftM < Infinity && accepted.length >= 10) {
-    const sortedLat = accepted.map(p => p.lat).sort((a, b) => a - b);
-    const sortedLng = accepted.map(p => p.lng).sort((a, b) => a - b);
-    const mid = Math.floor(accepted.length / 2);
-    const medLat = sortedLat[mid];
-    const medLng = sortedLng[mid];
-    const sortedDists = accepted
-      .map(p => distanceM(p.lat, p.lng, medLat, medLng))
-      .sort((a, b) => a - b);
-    const mad = sortedDists[mid]; // median absolute deviation
-    const clusterRadiusM = Math.max(mad * 4.4, 25); // ≈ 3σ, min 25 m
-    return accepted.filter(p => distanceM(p.lat, p.lng, medLat, medLng) <= clusterRadiusM);
+    let pts = accepted;
+    for (let iter = 0; iter < 3 && pts.length >= 10; iter++) {
+      const mid = Math.floor(pts.length / 2);
+      const sortedLat = pts.map(p => p.lat).sort((a, b) => a - b);
+      const sortedLng = pts.map(p => p.lng).sort((a, b) => a - b);
+      const medLat = sortedLat[mid];
+      const medLng = sortedLng[mid];
+      const sortedDists = pts.map(p => distanceM(p.lat, p.lng, medLat, medLng)).sort((a, b) => a - b);
+      const mad    = sortedDists[mid];
+      const radius = Math.max(mad * 3.5, 20); // 3.5σ, min 20 m
+      const next   = pts.filter(p => distanceM(p.lat, p.lng, medLat, medLng) <= radius);
+      if (next.length === pts.length) break; // converged — no more outliers
+      pts = next;
+    }
+    return pts;
   }
 
   return accepted;
