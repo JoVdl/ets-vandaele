@@ -289,19 +289,24 @@ export default function SuiviMap({
     [smoothed],
   );
 
-  // Historical trails from past sessions — hull for drague, swath rects for surface work
+  // Historical trails from past sessions — hull for drague, swath rects + hull for surface work
   const historicalRendered = useMemo(() => historicalTrails.map(({ points, color, sessionId, volumeM3: vol, profondeurM: depth }) => {
     const sm = smoothPoints(points, smoothAlpha);
     if (isDragage) {
       const hull = convexHull(sm.map(p => ({ lat: p.lat, lng: p.lng })));
       if (hull.length >= 3) {
         const hullArea = areaM2(hull);
-        return { kind: 'hull' as const, color, sessionId, data: hull.map(p => [p.lat, p.lng] as [number, number]), hullArea, vol, depth: depth ?? 0 };
+        return { kind: 'hull' as const, color, sessionId, data: hull.map(p => [p.lat, p.lng] as [number, number]), hullArea, vol, depth: depth ?? 0, hullData: null };
       }
-      return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
+      return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0, hullData: null };
     }
-    if (largeurM > 0) return { kind: 'rects' as const, color, sessionId, data: swathRects(sm, largeurM / 2), hullArea: 0, vol, depth: depth ?? 0 };
-    return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
+    // Non-drague: compute hull so it can be drawn alongside the line/rects
+    const rawHull = convexHull(sm.map(p => ({ lat: p.lat, lng: p.lng })));
+    const hullData = rawHull.length >= 3
+      ? { positions: rawHull.map(p => [p.lat, p.lng] as [number, number]), area: areaM2(rawHull) }
+      : null;
+    if (largeurM > 0) return { kind: 'rects' as const, color, sessionId, data: swathRects(sm, largeurM / 2), hullArea: hullData?.area ?? 0, vol, depth: depth ?? 0, hullData };
+    return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: hullData?.area ?? 0, vol, depth: depth ?? 0, hullData };
   }), [historicalTrails, smoothAlpha, largeurM, isDragage]);
 
   // Convex hull of current drague trail — shows the dredged zone as a filled polygon
@@ -395,19 +400,41 @@ export default function SuiviMap({
             ? { click: (e: L.LeafletMouseEvent) => { L.DomEvent.stopPropagation(e); onHistoricalTrailClick!(h.sessionId!); } }
             : undefined;
           if (h.kind === 'rects') {
-            return h.data.map((rect, i) => (
-              <Polygon
-                key={`h-${si}-${i}`}
-                positions={rect}
-                color={h.color}
-                fillColor={h.color}
-                fillOpacity={clickable ? 0.55 : 0.4}
-                weight={clickable ? 1 : 0}
-                stroke={clickable}
-                eventHandlers={handlers}
-                className={clickable ? 'cursor-pointer' : undefined}
-              />
-            ));
+            return [
+              ...h.data.map((rect, i) => (
+                <Polygon
+                  key={`h-${si}-r-${i}`}
+                  positions={rect}
+                  color={h.color}
+                  fillColor={h.color}
+                  fillOpacity={clickable ? 0.55 : 0.4}
+                  weight={clickable ? 1 : 0}
+                  stroke={clickable}
+                  eventHandlers={handlers}
+                  className={clickable ? 'cursor-pointer' : undefined}
+                />
+              )),
+              h.hullData && (
+                <Polygon
+                  key={`h-${si}-hull`}
+                  positions={h.hullData.positions}
+                  color={h.color}
+                  fillColor={h.color}
+                  fillOpacity={0.10}
+                  weight={2}
+                  opacity={0.70}
+                  dashArray="6 4"
+                  eventHandlers={handlers}
+                  className={clickable ? 'cursor-pointer' : undefined}
+                >
+                  {h.hullData.area >= 50 && (
+                    <Tooltip permanent direction="center" offset={[0, 0]} className="hull-label">
+                      {formatArea(h.hullData.area)}
+                    </Tooltip>
+                  )}
+                </Polygon>
+              ),
+            ].filter(Boolean);
           }
           if (h.kind === 'hull') {
             const hc = viewMode === 'depth' ? depthColor(h.depth, maxDepthM) : h.color;
@@ -435,17 +462,40 @@ export default function SuiviMap({
               </Polygon>
             );
           }
-          return h.data.length > 1 && (
-            <Polyline
-              key={`h-${si}`}
-              positions={h.data}
-              color={h.color}
-              weight={clickable ? 5 : 3}
-              opacity={clickable ? 0.75 : 0.5}
-              eventHandlers={handlers}
-              className={clickable ? 'cursor-pointer' : undefined}
-            />
-          );
+          // kind === 'line': render both the trace and the hull polygon
+          return [
+            h.data.length > 1 && (
+              <Polyline
+                key={`h-${si}-line`}
+                positions={h.data}
+                color={h.color}
+                weight={clickable ? 5 : 3}
+                opacity={clickable ? 0.75 : 0.5}
+                eventHandlers={handlers}
+                className={clickable ? 'cursor-pointer' : undefined}
+              />
+            ),
+            h.hullData && (
+              <Polygon
+                key={`h-${si}-hull`}
+                positions={h.hullData.positions}
+                color={h.color}
+                fillColor={h.color}
+                fillOpacity={0.10}
+                weight={2}
+                opacity={0.70}
+                dashArray="6 4"
+                eventHandlers={handlers}
+                className={clickable ? 'cursor-pointer' : undefined}
+              >
+                {h.hullData.area >= 50 && (
+                  <Tooltip permanent direction="center" offset={[0, 0]} className="hull-label">
+                    {formatArea(h.hullData.area)}
+                  </Tooltip>
+                )}
+              </Polygon>
+            ),
+          ].filter(Boolean);
         })}
 
         {/* Work trail — convex hull (filled zone) for drague, swath rectangles for surface work */}
