@@ -936,7 +936,11 @@ export default function SuiviView({ role, onLogout }: Props) {
           </button>
         )}
         {role === 'patron' && (
-          <button onClick={() => setShowCamera(true)} className="p-1.5 rounded-lg text-slate-400 hover:text-white active:scale-95 transition-all" title="Caméra chantier">
+          <button
+            onClick={() => setShowCamera(c => !c)}
+            className={`p-1.5 rounded-lg active:scale-95 transition-all ${showCamera ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
+            title={showCamera ? 'Masquer la caméra' : 'Afficher la caméra'}
+          >
             <Camera size={16} />
           </button>
         )}
@@ -1116,6 +1120,8 @@ export default function SuiviView({ role, onLogout }: Props) {
                 </button>
               </div>
             )}
+            {/* Inline camera panel — only rendered when visible, no auto-refresh */}
+            {showCamera && <CameraView onClose={() => setShowCamera(false)} />}
           </div>
 
           {/* ── Bottom panel ──────────────────────────────────────────── */}
@@ -1961,7 +1967,6 @@ export default function SuiviView({ role, onLogout }: Props) {
       )}
 
       {/* ── Camera overlay ──────────────────────────────────────────────── */}
-      {showCamera && <CameraView onClose={() => setShowCamera(false)} />}
 
       {/* ── Chantier detail overlay ─────────────────────────────────────── */}
       {showChantierDetail && selectedChantier && chantierDashStats && (
