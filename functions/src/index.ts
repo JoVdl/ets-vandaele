@@ -1,119 +1,100 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
-import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
 
-// ── Reolink camera snapshot proxy ───────────────────────────────────────────
-const REOLINK_EMAIL    = defineSecret('REOLINK_EMAIL');
-const REOLINK_PASSWORD = defineSecret('REOLINK_PASSWORD');
-const REOLINK_CAM_USER = defineSecret('REOLINK_CAM_USER');
-const REOLINK_CAM_PASS = defineSecret('REOLINK_CAM_PASS');
-
-const CAMERA_UID  = '95270000SOYFJBFR';
 const CORS_ORIGIN = 'https://jovdl.github.io';
+const STORAGE_PATH = 'camera/latest.jpg';
 
-interface ReolinkDevice {
-  uid: string;
-  name?: string;
-  publicIp?: string;
-  localIp?: string;
-  httpPort?: number;
-  online?: boolean;
-}
+admin.initializeApp();
 
+// ── Receive snapshot pushed by the camera ───────────────────────────────────
+// The Reolink camera is configured to POST a JPEG to this endpoint.
+// No auth token used: the Cloud Run URL itself is unguessable.
+// Add a ?token= check here once you set up an env var if you want extra security.
+export const receiveCameraSnapshot = onRequest(
+  {
+    region: 'europe-west1',
+    cors: false,
+    timeoutSeconds: 30,
+    maxInstances: 2,
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method Not Allowed' });
+      return;
+    }
+
+    // rawBody is set by the Cloud Functions framework before any body parsing
+    const imgData: Buffer = (req as unknown as { rawBody: Buffer }).rawBody;
+    if (!imgData || imgData.length < 100) {
+      res.status(400).json({ error: 'Empty or malformed body' });
+      return;
+    }
+
+    try {
+      const bucket = admin.storage().bucket();
+      await bucket.file(STORAGE_PATH).save(imgData, {
+        metadata: {
+          contentType: 'image/jpeg',
+          cacheControl: 'no-cache',
+        },
+        resumable: false,
+      });
+      res.json({ ok: true, bytes: imgData.length });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  },
+);
+
+// ── Serve latest snapshot from Firebase Storage ──────────────────────────────
 export const cameraSnapshot = onRequest(
   {
     region: 'europe-west1',
-    secrets: [REOLINK_EMAIL, REOLINK_PASSWORD, REOLINK_CAM_USER, REOLINK_CAM_PASS],
     cors: [CORS_ORIGIN],
-    timeoutSeconds: 20,
+    timeoutSeconds: 10,
   },
   async (req, res) => {
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+
     try {
-      // 1. Login to Reolink cloud
-      const loginResp = await fetch('https://api.reolink.com/api/Login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
-        body: JSON.stringify({ user: { userName: REOLINK_EMAIL.value(), password: REOLINK_PASSWORD.value() } }),
-        signal: AbortSignal.timeout(8000),
-      });
-      const loginText = await loginResp.text();
-      if (!loginText.trim().startsWith('{')) {
-        res.status(503).json({ error: `Reolink API non-JSON (${loginResp.status}): ${loginText.substring(0, 120)}` });
-        return;
-      }
-      const loginJson = JSON.parse(loginText) as { code: number; data?: { token: string } };
-      if (loginJson.code !== 0 || !loginJson.data?.token) {
-        res.status(503).json({ error: `Reolink login failed (code ${loginJson.code})` });
-        return;
-      }
-      const token = loginJson.data.token;
+      const bucket = admin.storage().bucket();
+      const file   = bucket.file(STORAGE_PATH);
 
-      // 2. Get device list to find camera's current IP
-      const devResp = await fetch(`https://api.reolink.com/api/GetDevList?token=${token}`, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        signal: AbortSignal.timeout(8000),
-      });
-      const devText = await devResp.text();
-      if (!devText.trim().startsWith('{') && !devText.trim().startsWith('[')) {
-        res.status(503).json({ error: `Reolink GetDevList non-JSON (${devResp.status}): ${devText.substring(0, 120)}` });
-        return;
-      }
-      const devJson = JSON.parse(devText) as { code: number; data?: { devices?: ReolinkDevice[] } };
-
-      const cam = devJson.data?.devices?.find(d => d.uid === CAMERA_UID);
-      if (!cam) {
-        res.status(503).json({ error: 'Camera not found in Reolink account', uid: CAMERA_UID });
-        return;
-      }
-      if (cam.online === false) {
-        res.status(503).json({ error: 'camera_offline' });
+      const [exists] = await file.exists();
+      if (!exists) {
+        res.status(503).json({ error: 'Aucune image — caméra pas encore configurée pour pousser des snapshots' });
         return;
       }
 
-      // 3. Fetch JPEG snapshot via Reolink cloud proxy (bypasses CGNAT on SIM cards)
-      //    The /api/Preview endpoint relays the request through Reolink's servers.
-      const cloudSnapUrl = `https://api.reolink.com/api/Preview?token=${token}&uid=${CAMERA_UID}&channel=0&type=0`;
-      let snapResp = await fetch(cloudSnapUrl, { signal: AbortSignal.timeout(10000) });
+      const [meta] = await file.getMetadata();
+      const updatedAt = new Date(meta.updated as string);
+      const ageSec    = Math.round((Date.now() - updatedAt.getTime()) / 1000);
 
-      // Fallback: direct camera IP (works when camera is on a routable network)
-      if (!snapResp.ok || !(snapResp.headers.get('content-type') ?? '').startsWith('image/')) {
-        const camIp   = cam.publicIp;
-        const camPort = cam.httpPort ?? 80;
-        if (camIp) {
-          const rand   = Math.random().toString(36).substring(2, 10);
-          const direct = `http://${camIp}:${camPort}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=${rand}` +
-            `&user=${encodeURIComponent(REOLINK_CAM_USER.value())}` +
-            `&password=${encodeURIComponent(REOLINK_CAM_PASS.value())}`;
-          snapResp = await fetch(direct, { signal: AbortSignal.timeout(8000) });
-        }
-      }
-
-      if (!snapResp.ok) {
-        res.status(503).json({ error: `Camera snapshot HTTP ${snapResp.status}` });
+      // Refuse images older than 2 hours (camera probably offline)
+      if (ageSec > 7200) {
+        res.status(503).json({ error: `Image trop ancienne (${Math.round(ageSec / 60)} min) — caméra hors ligne ?` });
         return;
       }
 
-      const imgBuf = await snapResp.arrayBuffer();
-      res.setHeader('Content-Type', snapResp.headers.get('content-type') ?? 'image/jpeg');
+      const [buffer] = await file.download();
+      res.setHeader('Content-Type', 'image/jpeg');
       res.setHeader('Cache-Control', 'no-cache, no-store');
-      res.send(Buffer.from(imgBuf));
+      res.setHeader('X-Image-Age-S', String(ageSec));
+      res.send(buffer);
     } catch (err) {
       res.status(503).json({ error: String(err) });
     }
   },
 );
 
-admin.initializeApp();
-
+// ── Push notification on chantier events ────────────────────────────────────
 export const onChantierEvent = onDocumentCreated(
   { document: 'chantierEvents/{docId}', region: 'europe-west1' },
   async event => {
     const ev = event.data?.data();
     if (!ev) return;
 
-    // Collect FCM tokens of all OTHER devices
     const tokensSnap = await admin.firestore().collection('fcmTokens').get();
     const tokenDocs: Array<{ id: string; token: string }> = [];
     for (const d of tokensSnap.docs) {
@@ -123,7 +104,6 @@ export const onChantierEvent = onDocumentCreated(
     }
     if (!tokenDocs.length) return;
 
-    // Build notification text
     const who: string =
       ev['operateur'] === 'patron'
         ? 'Patron'
@@ -157,7 +137,7 @@ export const onChantierEvent = onDocumentCreated(
         break;
       }
       case 'incident': {
-        const label   = ev['incidentLabel'] as string | undefined;
+        const label    = ev['incidentLabel'] as string | undefined;
         const dureeMin = ev['incidentDureeMin'] as number | undefined;
         title = `⚠️ Incident — ${ev['chantierNom']}`;
         body  = label
@@ -169,7 +149,7 @@ export const onChantierEvent = onDocumentCreated(
         return;
     }
 
-    const tokens = tokenDocs.map(d => d.token);
+    const tokens  = tokenDocs.map(d => d.token);
     const message: admin.messaging.MulticastMessage = {
       notification: { title, body },
       webpush: {
@@ -185,7 +165,6 @@ export const onChantierEvent = onDocumentCreated(
 
     const response = await admin.messaging().sendEachForMulticast(message);
 
-    // Clean up stale tokens
     const toDelete: string[] = [];
     response.responses.forEach((r, i) => {
       if (!r.success) {
@@ -205,5 +184,5 @@ export const onChantierEvent = onDocumentCreated(
       }
       await batch.commit();
     }
-  }
+  },
 );

@@ -13,7 +13,7 @@ export default function CameraView({ onClose }: Props) {
   const [imgSrc, setImgSrc]         = useState<string | null>(null);
   const [state, setState]           = useState<State>('loading');
   const [errorMsg, setErrorMsg]     = useState<string>('');
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [imageAgeSec, setImageAgeSec] = useState<number | null>(null);
 
   const fetchSnapshot = useCallback(async () => {
     setState('loading');
@@ -27,7 +27,7 @@ export default function CameraView({ onClose }: Props) {
           const text = await resp.text();
           if (text.trim().startsWith('{')) {
             const j = JSON.parse(text) as { error?: string };
-            errMsg = j.error ? `${j.error} (${resp.status})` : `${errMsg} — ${text.substring(0, 80)}`;
+            errMsg = j.error ? `${j.error}` : `${errMsg} — ${text.substring(0, 80)}`;
           } else {
             errMsg = `${errMsg} · ${ct || 'no content-type'} · ${text.substring(0, 80)}`;
           }
@@ -37,10 +37,12 @@ export default function CameraView({ onClose }: Props) {
         return;
       }
 
+      const ageHeader = resp.headers.get('x-image-age-s');
+      if (ageHeader) setImageAgeSec(parseInt(ageHeader, 10));
+
       const blob = await resp.blob();
       const url  = URL.createObjectURL(blob);
       setImgSrc(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
-      setLastUpdate(new Date());
       setState('ok');
     } catch (err) {
       setErrorMsg(String(err));
@@ -65,9 +67,11 @@ export default function CameraView({ onClose }: Props) {
       <div className="flex items-center gap-2 px-3 py-1.5 flex-shrink-0 border-b border-white/[0.07]">
         <Camera size={13} className="text-slate-400 flex-shrink-0" />
         <span className="flex-1 text-white text-xs font-semibold">Caméra chantier</span>
-        {lastUpdate && (
+        {imageAgeSec !== null && state === 'ok' && (
           <span className="text-slate-500 text-[10px]">
-            {lastUpdate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            {imageAgeSec < 60
+              ? `il y a ${imageAgeSec}s`
+              : `il y a ${Math.round(imageAgeSec / 60)} min`}
           </span>
         )}
         <button
