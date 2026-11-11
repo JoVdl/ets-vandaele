@@ -54,7 +54,7 @@ export default function CameraView({ onClose }: Props) {
 
   return (
     <div
-      className="absolute bottom-0 left-0 right-0 z-[300] flex flex-col bg-black/92 backdrop-blur-sm border-t border-white/10"
+      className="flex-shrink-0 flex flex-col bg-black/95 border-t border-white/10"
       style={{ height: 'clamp(160px, 45vw, 280px)' }}
     >
       {/* Header */}

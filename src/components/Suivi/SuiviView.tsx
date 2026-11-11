@@ -1120,9 +1120,10 @@ export default function SuiviView({ role, onLogout }: Props) {
                 </button>
               </div>
             )}
-            {/* Inline camera panel — only rendered when visible, no auto-refresh */}
-            {showCamera && <CameraView onClose={() => setShowCamera(false)} />}
           </div>
+
+          {/* Camera panel: sibling of map div so it sits above Leaflet's z-index stacking */}
+          {showCamera && <CameraView onClose={() => setShowCamera(false)} />}
 
           {/* ── Bottom panel ──────────────────────────────────────────── */}
           <div className="flex-shrink-0 bg-slate-900/80 backdrop-blur-xl border-t border-white/[0.07]">

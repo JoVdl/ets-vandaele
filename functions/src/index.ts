@@ -61,22 +61,26 @@ export const cameraSnapshot = onRequest(
         return;
       }
 
-      const camIp   = cam.publicIp;
-      const camPort = cam.httpPort ?? 80;
-      if (!camIp) {
-        res.status(503).json({ error: 'Camera IP unavailable from cloud' });
-        return;
+      // 3. Fetch JPEG snapshot via Reolink cloud proxy (bypasses CGNAT on SIM cards)
+      //    The /api/Preview endpoint relays the request through Reolink's servers.
+      const cloudSnapUrl = `https://api.reolink.com/api/Preview?token=${token}&uid=${CAMERA_UID}&channel=0&type=0`;
+      let snapResp = await fetch(cloudSnapUrl, { signal: AbortSignal.timeout(10000) });
+
+      // Fallback: direct camera IP (works when camera is on a routable network)
+      if (!snapResp.ok || !(snapResp.headers.get('content-type') ?? '').startsWith('image/')) {
+        const camIp   = cam.publicIp;
+        const camPort = cam.httpPort ?? 80;
+        if (camIp) {
+          const rand   = Math.random().toString(36).substring(2, 10);
+          const direct = `http://${camIp}:${camPort}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=${rand}` +
+            `&user=${encodeURIComponent(REOLINK_CAM_USER.value())}` +
+            `&password=${encodeURIComponent(REOLINK_CAM_PASS.value())}`;
+          snapResp = await fetch(direct, { signal: AbortSignal.timeout(8000) });
+        }
       }
 
-      // 3. Fetch JPEG snapshot directly from camera HTTP API
-      const rand    = Math.random().toString(36).substring(2, 10);
-      const snapUrl = `http://${camIp}:${camPort}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=${rand}` +
-        `&user=${encodeURIComponent(REOLINK_CAM_USER.value())}` +
-        `&password=${encodeURIComponent(REOLINK_CAM_PASS.value())}`;
-
-      const snapResp = await fetch(snapUrl, { signal: AbortSignal.timeout(8000) });
       if (!snapResp.ok) {
-        res.status(503).json({ error: `Camera HTTP ${snapResp.status}` });
+        res.status(503).json({ error: `Camera snapshot HTTP ${snapResp.status}` });
         return;
       }
 
