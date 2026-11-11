@@ -422,10 +422,11 @@ export function orientedBoundingBoxM2(
  * All sessions are oriented to the same direction (PCA on the combined cloud)
  * so adjacent work strips align without rotation discrepancies.
  *
- * Along-track: 5th–95th percentile per session (clips positioning moves).
+ * Along-track: 10th–90th percentile per session (clips positioning moves at both ends).
  * Cross-track:
- *   largeurM > 0 → exactly largeurM wide, centred on each session's GPS median.
- *   largeurM = 0 → 5th–95th percentile of that session's cross-track spread.
+ *   largeurM > 0 → sessions sorted by cross-track median and packed side-by-side
+ *                  (each strip = exactly largeurM, no overlap between sessions).
+ *   largeurM = 0 → 10th–90th percentile of that session's cross-track spread.
  */
 export function sessionOBBsAligned(
   sessions: { points: { lat: number; lng: number }[] }[],
@@ -461,39 +462,67 @@ export function sessionOBBsAligned(
   const pctVal = (sorted: number[], pct: number) =>
     sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(pct / 100 * (sorted.length - 1))))];
 
-  return sessions.map(({ points }) => {
+  // Per-session projections onto the shared global axis
+  interface SessionInfo { idx: number; sus: number[]; svs: number[]; vMed: number }
+  const infos: (SessionInfo | null)[] = sessions.map(({ points }, idx) => {
     if (points.length < 4) return null;
     const xy  = points.map(toXY);
     const sus = xy.map(p => p.x * ux + p.y * uy).sort((a, b) => a - b);
     const svs = xy.map(p => p.x * vx + p.y * vy).sort((a, b) => a - b);
+    return { idx, sus, svs, vMed: svs[Math.floor(svs.length / 2)] };
+  });
 
-    const uMin = pctVal(sus, 5);
-    const uMax = pctVal(sus, 95);
+  if (largeurM > 0) {
+    // Sort valid sessions by cross-track median and pack side-by-side.
+    // Each strip is exactly largeurM wide and assigned in cross-track order,
+    // so adjacent strips touch without overlap regardless of GPS scatter.
+    const valid = infos.filter((s): s is SessionInfo => s !== null);
+    valid.sort((a, b) => a.vMed - b.vMed);
 
-    let vMin: number, vMax: number;
-    if (largeurM > 0) {
-      const med = svs[Math.floor(svs.length / 2)]; // median cross-track position
-      vMin = med - largeurM / 2;
-      vMax = med + largeurM / 2;
-    } else {
-      vMin = pctVal(svs, 5);
-      vMax = pctVal(svs, 95);
-    }
+    // Centre the group at the median-of-medians so it sits over the work area
+    const globalMed = valid[Math.floor(valid.length / 2)].vMed;
+    const startV = globalMed - (valid.length / 2) * largeurM;
 
+    const stripMap = new Map<number, { vMin: number; vMax: number }>();
+    valid.forEach((s, i) => {
+      stripMap.set(s.idx, { vMin: startV + i * largeurM, vMax: startV + (i + 1) * largeurM });
+    });
+
+    return infos.map((info, idx) => {
+      if (!info) return null;
+      const strip = stripMap.get(idx);
+      if (!strip) return null;
+      const uMin = pctVal(info.sus, 10);
+      const uMax = pctVal(info.sus, 90);
+      const { vMin, vMax } = strip;
+      const lengthM = uMax - uMin;
+      if (lengthM < 0.5) return null;
+      return {
+        polygon: [
+          toLatLng(uMin, vMin), toLatLng(uMax, vMin),
+          toLatLng(uMax, vMax), toLatLng(uMin, vMax),
+        ],
+        widthM: largeurM, lengthM, areaM2: lengthM * largeurM,
+      };
+    });
+  }
+
+  // No fixed width: 10th–90th percentile on cross-track too
+  return infos.map(info => {
+    if (!info) return null;
+    const uMin = pctVal(info.sus, 10);
+    const uMax = pctVal(info.sus, 90);
+    const vMin = pctVal(info.svs, 10);
+    const vMax = pctVal(info.svs, 90);
     const lengthM = uMax - uMin;
     const widthM  = vMax - vMin;
     if (lengthM < 0.5 || widthM < 0.1) return null;
-
     return {
       polygon: [
-        toLatLng(uMin, vMin),
-        toLatLng(uMax, vMin),
-        toLatLng(uMax, vMax),
-        toLatLng(uMin, vMax),
+        toLatLng(uMin, vMin), toLatLng(uMax, vMin),
+        toLatLng(uMax, vMax), toLatLng(uMin, vMax),
       ],
-      widthM,
-      lengthM,
-      areaM2: lengthM * widthM,
+      widthM, lengthM, areaM2: lengthM * widthM,
     };
   });
 }
