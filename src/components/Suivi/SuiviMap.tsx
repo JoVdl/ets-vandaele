@@ -323,10 +323,13 @@ export default function SuiviMap({
     let selIdx = 0;
     smoothedTrails.forEach((t, i) => { if (t.isSelected) obbByOriginalIndex.set(i, alignedObbs[selIdx++]); });
 
-    return smoothedTrails.map(({ color, sessionId, volumeM3: vol, profondeurM: depth, isSelected, sm }, i) => {
+    return smoothedTrails.map(({ color, sessionId, volumeM3: storedVol, profondeurM: depth, isSelected, sm }, i) => {
       const obb = obbByOriginalIndex.get(i) ?? null;
+      const d = depth ?? 0;
+      // Display-only: selected sessions get volume from the aligned rectangle; stored volumes stay untouched.
+      const vol = isSelected && obb && d > 0 ? obb.areaM2 * d : storedVol;
       if (obb) {
-        return { kind: 'obb' as const, color, sessionId, isSelected, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: depth ?? 0 };
+        return { kind: 'obb' as const, color, sessionId, isSelected, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: d };
       }
       return { kind: 'line' as const, color, sessionId, isSelected, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
     });
@@ -356,9 +359,9 @@ export default function SuiviMap({
     const hull = convexHull(allPts);
     if (hull.length < 3) return null;
     const totalArea = areaM2(hull);
-    const totalVol  = historicalTrails.reduce((s, t) => s + (t.volumeM3 ?? 0), 0);
+    const totalVol  = historicalRendered.reduce((s, h) => s + (h.vol ?? 0), 0);
     return { positions: hull.map(p => [p.lat, p.lng] as [number, number]), totalArea, totalVol };
-  }, [isDragage, historicalRendered, historicalTrails]);
+  }, [isDragage, historicalRendered]);
 
   const activeObbArea = obbResult?.areaM2 ?? 0;
 
