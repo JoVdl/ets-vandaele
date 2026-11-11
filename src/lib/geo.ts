@@ -446,11 +446,28 @@ export function sessionOBBsAligned(
     y: (pt.lat - lat0) * D2R * R,
   });
 
-  // Global PCA on all sessions combined
-  const allXY = all.map(toXY);
-  let sxx = 0, sxy = 0, syy = 0;
-  for (const p of allXY) { sxx += p.x * p.x; sxy += p.x * p.y; syy += p.y * p.y; }
-  const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  // Individual PCA per session → circular-mean angle (handles mod-π periodicity).
+  // Global PCA on the combined cloud is biased by cross-session spread: when N sessions
+  // are arranged side-by-side, the inter-session axis has more variance than any single
+  // session's work direction, so the global PCA picks the WRONG axis.
+  // Per-session PCA centred on each session's own mean, then averaged, gives the typical
+  // work direction regardless of how the sessions are spatially distributed.
+  let sinSum = 0, cosSum = 0;
+  for (const { points } of sessions) {
+    if (points.length < 4) continue;
+    const xy = points.map(toXY);
+    const mx = xy.reduce((s, p) => s + p.x, 0) / xy.length;
+    const my = xy.reduce((s, p) => s + p.y, 0) / xy.length;
+    let sxx = 0, sxy = 0, syy = 0;
+    for (const p of xy) {
+      const dx = p.x - mx, dy = p.y - my;
+      sxx += dx * dx; sxy += dx * dy; syy += dy * dy;
+    }
+    const a = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+    sinSum += Math.sin(2 * a);
+    cosSum += Math.cos(2 * a);
+  }
+  const angle = 0.5 * Math.atan2(sinSum, cosSum);
   const ux = Math.cos(angle), uy = Math.sin(angle);
   const vx = -uy, vy = ux;
 
