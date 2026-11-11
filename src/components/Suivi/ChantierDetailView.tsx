@@ -317,8 +317,17 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                         <p className="text-white text-xs font-bold capitalize">
                           {format(new Date(dayKey), 'EEEE d MMMM', { locale: fr })}
                         </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-slate-400 text-[10px]">
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {/* Time range: start of first session → end of last session */}
+                          <span className="text-slate-400 text-[10px] tabular-nums">
+                            {format(new Date(daySessions[0].dateDebut), 'HH:mm')}
+                            {' → '}
+                            {daySessions[daySessions.length - 1].dateFin
+                              ? format(new Date(daySessions[daySessions.length - 1].dateFin!), 'HH:mm')
+                              : '—'}
+                          </span>
+                          <span className="text-slate-600 text-[10px]">·</span>
+                          <span className="text-slate-500 text-[10px]">
                             {daySessions.length} session{daySessions.length > 1 ? 's' : ''}
                           </span>
                           {dayIncidents > 0 && (
