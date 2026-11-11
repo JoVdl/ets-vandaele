@@ -1,87 +1,133 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
+import { ImapFlow } from 'imapflow';
+import { simpleParser } from 'mailparser';
+
+const GMAIL_USER = defineSecret('CAMERA_EMAIL');
+const GMAIL_PASS = defineSecret('CAMERA_EMAIL_APP_PASSWORD');
 
 const CORS_ORIGIN = 'https://jovdl.github.io';
 const STORAGE_PATH = 'camera/latest.jpg';
+const CACHE_MAX_AGE_S = 300; // 5 min: reuse stored image before hitting IMAP again
 
 admin.initializeApp();
 
-// ── Receive snapshot pushed by the camera ───────────────────────────────────
-// The Reolink camera is configured to POST a JPEG to this endpoint.
-// No auth token used: the Cloud Run URL itself is unguessable.
-// Add a ?token= check here once you set up an env var if you want extra security.
-export const receiveCameraSnapshot = onRequest(
-  {
-    region: 'europe-west1',
-    cors: false,
-    timeoutSeconds: 30,
-    maxInstances: 2,
-  },
-  async (req, res) => {
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: 'Method Not Allowed' });
-      return;
-    }
+// ── Fetch latest Reolink alert email from Gmail via IMAP ─────────────────────
+async function fetchFromGmail(user: string, pass: string): Promise<Buffer | null> {
+  const client = new ImapFlow({
+    host: 'imap.gmail.com',
+    port: 993,
+    secure: true,
+    auth: { user, pass },
+    logger: false,
+  });
 
-    // rawBody is set by the Cloud Functions framework before any body parsing
-    const imgData: Buffer = (req as unknown as { rawBody: Buffer }).rawBody;
-    if (!imgData || imgData.length < 100) {
-      res.status(400).json({ error: 'Empty or malformed body' });
-      return;
-    }
+  await client.connect();
+  try {
+    await client.mailboxOpen('INBOX');
 
-    try {
-      const bucket = admin.storage().bucket();
-      await bucket.file(STORAGE_PATH).save(imgData, {
-        metadata: {
-          contentType: 'image/jpeg',
-          cacheControl: 'no-cache',
-        },
-        resumable: false,
-      });
-      res.json({ ok: true, bytes: imgData.length });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  },
-);
+    // Search last 24 h, pick the most recent 5 messages
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const rawUids = await client.search({ since });
+    const uids = Array.isArray(rawUids) ? rawUids : [];
+    if (!uids.length) return null;
 
-// ── Serve latest snapshot from Firebase Storage ──────────────────────────────
+    for (const uid of [...uids].reverse().slice(0, 5)) {
+      const msg = await client.fetchOne(String(uid), { source: true });
+      if (!msg || !msg.source) continue;
+      const parsed = await simpleParser(msg.source as Buffer);
+      const att = parsed.attachments?.find(a => a.contentType.startsWith('image/'));
+      if (att) return att.content;
+    }
+    return null;
+  } finally {
+    await client.logout().catch(() => undefined);
+  }
+}
+
+// ── Serve camera snapshot ────────────────────────────────────────────────────
+// Flow:
+//   1. Firebase Storage cache < 5 min old → return immediately
+//   2. Otherwise → connect Gmail IMAP, extract JPEG from latest alert email
+//   3. Store to Storage (cache) and return
 export const cameraSnapshot = onRequest(
   {
     region: 'europe-west1',
+    secrets: [GMAIL_USER, GMAIL_PASS],
     cors: [CORS_ORIGIN],
-    timeoutSeconds: 10,
+    timeoutSeconds: 30,
   },
   async (req, res) => {
     if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
 
-    try {
-      const bucket = admin.storage().bucket();
-      const file   = bucket.file(STORAGE_PATH);
+    const bucket = admin.storage().bucket();
+    const file   = bucket.file(STORAGE_PATH);
 
-      const [exists] = await file.exists();
-      if (!exists) {
-        res.status(503).json({ error: 'Aucune image — caméra pas encore configurée pour pousser des snapshots' });
-        return;
-      }
-
-      const [meta] = await file.getMetadata();
-      const updatedAt = new Date(meta.updated as string);
-      const ageSec    = Math.round((Date.now() - updatedAt.getTime()) / 1000);
-
-      // Refuse images older than 2 hours (camera probably offline)
-      if (ageSec > 7200) {
-        res.status(503).json({ error: `Image trop ancienne (${Math.round(ageSec / 60)} min) — caméra hors ligne ?` });
-        return;
-      }
-
+    // Helper: stream Storage file to response
+    const sendFromStorage = async (ageSec: number, source: string) => {
       const [buffer] = await file.download();
       res.setHeader('Content-Type', 'image/jpeg');
       res.setHeader('Cache-Control', 'no-cache, no-store');
       res.setHeader('X-Image-Age-S', String(ageSec));
+      res.setHeader('X-Source', source);
       res.send(buffer);
+    };
+
+    try {
+      // 1. Check Storage cache
+      const [exists] = await file.exists();
+      if (exists) {
+        const [meta] = await file.getMetadata();
+        const ageSec = Math.round((Date.now() - new Date(meta.updated as string).getTime()) / 1000);
+        if (ageSec < CACHE_MAX_AGE_S) {
+          await sendFromStorage(ageSec, 'cache');
+          return;
+        }
+      }
+
+      // 2. Fetch from Gmail IMAP
+      let jpegBuf: Buffer | null = null;
+      try {
+        jpegBuf = await fetchFromGmail(GMAIL_USER.value(), GMAIL_PASS.value());
+      } catch (imapErr) {
+        // IMAP failed — if we have a stale cached image, return it with a warning
+        if (exists) {
+          const [meta] = await file.getMetadata();
+          const ageSec = Math.round((Date.now() - new Date(meta.updated as string).getTime()) / 1000);
+          await sendFromStorage(ageSec, 'cache-stale');
+          return;
+        }
+        res.status(503).json({ error: `Gmail IMAP: ${String(imapErr)}` });
+        return;
+      }
+
+      if (!jpegBuf) {
+        // No recent email found — serve stale cache or error
+        if (exists) {
+          const [meta] = await file.getMetadata();
+          const ageSec = Math.round((Date.now() - new Date(meta.updated as string).getTime()) / 1000);
+          await sendFromStorage(ageSec, 'cache-stale');
+          return;
+        }
+        res.status(503).json({
+          error: 'Aucune image — configurez les alertes email de la caméra avec SMTP Gmail',
+        });
+        return;
+      }
+
+      // 3. Store to Firebase Storage as cache
+      await file.save(jpegBuf, {
+        metadata: { contentType: 'image/jpeg', cacheControl: 'no-cache' },
+        resumable: false,
+      });
+
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'no-cache, no-store');
+      res.setHeader('X-Image-Age-S', '0');
+      res.setHeader('X-Source', 'gmail-fresh');
+      res.send(jpegBuf);
     } catch (err) {
       res.status(503).json({ error: String(err) });
     }
