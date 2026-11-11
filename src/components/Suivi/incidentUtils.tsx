@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { format } from 'date-fns';
 import type { SuiviSession, IncidentType } from '../../types/suivi';
 
 export const INCIDENT_LABELS: Record<IncidentType, string> = {
@@ -31,10 +32,10 @@ export function SessionTimeline({ session }: { session: SuiviSession }) {
   const sessionStartMs = new Date(session.dateDebut).getTime();
 
   const segments = (session.incidents ?? []).map((inc, i) => {
-    const incEndMs   = new Date(inc.ts).getTime();
-    const incStartMs = incEndMs - inc.dureeMinutes * 60_000;
-    const startPct   = Math.max(0, ((incStartMs - sessionStartMs) / (totalMin * 60_000)) * 100);
-    const widthPct   = Math.min(100 - startPct, (inc.dureeMinutes / totalMin) * 100);
+    const incStartMs = new Date(inc.ts).getTime();
+    const rawStart   = ((incStartMs - sessionStartMs) / (totalMin * 60_000)) * 100;
+    const widthPct   = (inc.dureeMinutes / totalMin) * 100;
+    const startPct   = Math.min(Math.max(0, rawStart), Math.max(0, 100 - widthPct));
     return { inc, startPct, widthPct, i };
   });
 
@@ -67,6 +68,8 @@ export function SessionTimeline({ session }: { session: SuiviSession }) {
           <span className="font-semibold">{INCIDENT_LABELS[segments[activeIdx].inc.type]}</span>
           <span className="text-slate-400">·</span>
           <span>{segments[activeIdx].inc.dureeMinutes} min</span>
+          <span className="text-slate-400">·</span>
+          <span className="tabular-nums text-slate-400">{format(new Date(segments[activeIdx].inc.ts), 'HH:mm')}</span>
         </div>
       )}
     </div>
@@ -94,17 +97,19 @@ export function GlobalTimeline({ sessions }: { sessions: SuiviSession[] }) {
     const sessionStartMs = new Date(s.dateDebut).getTime();
 
     for (const inc of (s.incidents ?? [])) {
-      const incEndMs   = new Date(inc.ts).getTime();
-      const incStartMs = incEndMs - inc.dureeMinutes * 60_000;
+      const incStartMs = new Date(inc.ts).getTime();
       const offsetMin  = Math.max(0, (incStartMs - sessionStartMs) / 60_000);
-      const startPct   = ((cursor + offsetMin) / totalMin) * 100;
-      const widthPct   = (inc.dureeMinutes / totalMin) * 100;
+      const rawStart   = ((cursor + offsetMin) / totalMin) * 100;
+      const widthPct   = Math.max((inc.dureeMinutes / totalMin) * 100, 0.5);
+      // clamp within this session's slice
+      const sliceEnd   = ((cursor + s.dureeMinutes) / totalMin) * 100;
+      const startPct   = Math.min(rawStart, Math.max(sliceEnd - widthPct, rawStart));
       overlays.push({
         key:      `${s.id}-${inc.ts}`,
         color:    INCIDENT_COLORS[inc.type],
-        startPct: Math.min(startPct, ((cursor + s.dureeMinutes) / totalMin) * 100 - 0.5),
-        widthPct: Math.max(widthPct, 0.5),
-        label:    `${INCIDENT_LABELS[inc.type]} · ${inc.dureeMinutes} min`,
+        startPct,
+        widthPct,
+        label:    `${INCIDENT_LABELS[inc.type]} · ${inc.dureeMinutes} min · ${format(new Date(inc.ts), 'HH:mm')}`,
       });
     }
 
