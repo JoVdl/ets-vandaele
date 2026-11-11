@@ -311,12 +311,20 @@ export default function SuiviMap({
       ...t,
       sm: smoothPoints(t.points, smoothAlpha),
     }));
-    const alignedObbs = sessionOBBsAligned(
-      smoothedTrails.map(t => ({ points: t.sm })),
-      largeurM,
-    );
+
+    // Aligned OBBs only for the selected chantier — mixing sessions from different chantiers
+    // (hundreds of km apart) breaks the shared-axis packing logic (globalMed ends up at the
+    // wrong chantier, displacing rectangles to the wrong geographic location).
+    const selectedTrails = smoothedTrails.filter(t => t.isSelected);
+    const alignedObbs = selectedTrails.length > 0
+      ? sessionOBBsAligned(selectedTrails.map(t => ({ points: t.sm })), largeurM)
+      : [];
+    const obbByOriginalIndex = new Map<number, typeof alignedObbs[0]>();
+    let selIdx = 0;
+    smoothedTrails.forEach((t, i) => { if (t.isSelected) obbByOriginalIndex.set(i, alignedObbs[selIdx++]); });
+
     return smoothedTrails.map(({ color, sessionId, volumeM3: vol, profondeurM: depth, isSelected, sm }, i) => {
-      const obb = alignedObbs[i];
+      const obb = obbByOriginalIndex.get(i) ?? null;
       if (obb) {
         return { kind: 'obb' as const, color, sessionId, isSelected, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: depth ?? 0 };
       }
