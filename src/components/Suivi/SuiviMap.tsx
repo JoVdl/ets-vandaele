@@ -246,7 +246,7 @@ interface Props {
   jumpToPos:                [number, number] | null;
   liveSessions:             LiveSession[];
   mySessionId:              string;
-  historicalTrails:         { points: GpsPoint[]; color: string; sessionId?: string; volumeM3?: number; profondeurM?: number }[];
+  historicalTrails:         { points: GpsPoint[]; color: string; sessionId?: string; volumeM3?: number; profondeurM?: number; isSelected?: boolean }[];
   currentVolumeM3?:         number;
   isDragage?:               boolean;
   onHistoricalTrailClick?:  (sessionId: string) => void;
@@ -315,12 +315,12 @@ export default function SuiviMap({
       smoothedTrails.map(t => ({ points: t.sm })),
       largeurM,
     );
-    return smoothedTrails.map(({ color, sessionId, volumeM3: vol, profondeurM: depth, sm }, i) => {
+    return smoothedTrails.map(({ color, sessionId, volumeM3: vol, profondeurM: depth, isSelected, sm }, i) => {
       const obb = alignedObbs[i];
       if (obb) {
-        return { kind: 'obb' as const, color, sessionId, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: depth ?? 0 };
+        return { kind: 'obb' as const, color, sessionId, isSelected, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: depth ?? 0 };
       }
-      return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
+      return { kind: 'line' as const, color, sessionId, isSelected, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
     });
   }, [historicalTrails, smoothAlpha, largeurM]);
 
@@ -380,7 +380,7 @@ export default function SuiviMap({
         <AutoCenter pos={currentPos ? [currentPos.lat, currentPos.lng] : null} follow={followGps} />
         <JumpTo pos={jumpToPos} />
         <FitWorkArea
-          data={historicalRendered.filter(h => h.kind === 'obb').map(h => h.data as [number,number][])}
+          data={historicalRendered.filter(h => h.kind === 'obb' && h.isSelected).map(h => h.data as [number,number][])}
           active={sessionActive}
         />
         <DrawHandler active={drawMode} onPoint={onDrawPoint} onDrag={onDisableFollow} />
