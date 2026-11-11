@@ -1,8 +1,8 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ArrowLeft, AlertTriangle, Clock } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Clock, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { SuiviSession } from '../../types/suivi';
@@ -55,7 +55,6 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
   const totalIncidentMin = sessions.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
   const totalIncidentCnt = sessions.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
 
-  // Recalculate rendement/debit on net time (dureeMinutes minus incidents) so old saved values don't skew averages
   const netDebits = sessions
     .filter(s => (s.volumeM3 ?? 0) > 0)
     .map(s => {
@@ -76,11 +75,10 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
     .filter(r => r > 0);
   const avgRendM2h = netRendements.length > 0 ? netRendements.reduce((a, b) => a + b, 0) / netRendements.length : 0;
 
-  // Hours-budget progress
-  const totalH          = totalMinutes / 60;
-  const budgetH         = chantier.dureeEstimeeH ?? 0;
-  const budgetPct       = budgetH > 0 ? Math.min(100, (totalH / budgetH) * 100) : null;
-  const remainingH      = budgetH > 0 ? Math.max(0, budgetH - totalH) : null;
+  const totalH     = totalMinutes / 60;
+  const budgetH    = chantier.dureeEstimeeH ?? 0;
+  const budgetPct  = budgetH > 0 ? Math.min(100, (totalH / budgetH) * 100) : null;
+  const remainingH = budgetH > 0 ? Math.max(0, budgetH - totalH) : null;
 
   const trails = useMemo(() => ordered.map((s, i) => {
     const filtered = filterGpsTrack(
@@ -105,11 +103,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
     };
   }), [ordered, isDragage]);
 
-  // Map data — use trails (already filtered) to avoid outliers skewing FitAll bounds
-  const allPositions = useMemo(
-    () => trails.flatMap(t => t.positions),
-    [trails],
-  );
+  const allPositions = useMemo(() => trails.flatMap(t => t.positions), [trails]);
 
   const mapCenter = useMemo<[number, number]>(() => {
     if (chantier.polygon && chantier.polygon.length > 0) {
@@ -118,8 +112,46 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
     }
     if (chantier.latitude && chantier.longitude) return [chantier.latitude, chantier.longitude];
     if (allPositions.length > 0) return allPositions[0];
-    return [43.7, -0.26]; // fallback SW France
+    return [43.7, -0.26];
   }, [chantier, allPositions]);
+
+  // Assign stable color index per session (preserves map legend matching)
+  const sessionColorMap = useMemo(() => {
+    const m = new Map<string, number>();
+    ordered.forEach((s, i) => m.set(s.id, i));
+    return m;
+  }, [ordered]);
+
+  // Group sessions by calendar day
+  const byDay = useMemo(() => {
+    const map = new Map<string, SuiviSession[]>();
+    for (const s of ordered) {
+      const key = s.dateDebut.slice(0, 10);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(s);
+    }
+    return map;
+  }, [ordered]);
+
+  const dayKeys = useMemo(() => [...byDay.keys()].sort(), [byDay]);
+
+  // Default: last day expanded
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(() => {
+    const sortedKeys = [...sessions]
+      .sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime())
+      .map(s => s.dateDebut.slice(0, 10));
+    const last = sortedKeys[sortedKeys.length - 1];
+    return last ? new Set([last]) : new Set();
+  });
+
+  function toggleDay(key: string) {
+    setExpandedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   return (
     <div className="fixed inset-0 z-[300] bg-slate-950 flex flex-col">
@@ -139,7 +171,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
 
       <div className="flex-1 overflow-y-auto">
 
-        {/* Map — always shown; FitAll fits GPS traces when available, else zoom on mapCenter */}
+        {/* Map */}
         <div className="h-56 relative flex-shrink-0">
           <MapContainer center={mapCenter} zoom={16} className="w-full h-full" zoomControl={false} preferCanvas>
             <TileLayer
@@ -183,7 +215,6 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
               ),
             ])}
           </MapContainer>
-          {/* Session color legend */}
           {trails.length > 0 && (
             <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm rounded-lg px-2 py-1.5 flex flex-col gap-1 max-h-32 overflow-y-auto z-[1000]">
               {trails.map((t) => (
@@ -206,9 +237,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                 <p className="text-slate-400 text-xs font-semibold">Avancement — heures</p>
               </div>
               <div className="flex items-end justify-between mb-1.5">
-                <span className="text-white text-xl font-bold tabular-nums">
-                  {totalH.toFixed(1)} h
-                </span>
+                <span className="text-white text-xl font-bold tabular-nums">{totalH.toFixed(1)} h</span>
                 <span className="text-slate-500 text-xs">/ {budgetH} h vendues</span>
               </div>
               <div className="h-3 bg-slate-800 rounded-full overflow-hidden mb-1.5">
@@ -223,12 +252,8 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                 <span className={budgetPct! >= 90 ? 'text-red-400' : budgetPct! >= 70 ? 'text-amber-400' : 'text-green-400'}>
                   {budgetPct!.toFixed(0)} %
                 </span>
-                {remainingH! > 0 && (
-                  <span className="text-slate-500">{remainingH!.toFixed(1)} h restantes</span>
-                )}
-                {remainingH === 0 && (
-                  <span className="text-red-400 font-semibold">Budget atteint</span>
-                )}
+                {remainingH! > 0 && <span className="text-slate-500">{remainingH!.toFixed(1)} h restantes</span>}
+                {remainingH === 0 && <span className="text-red-400 font-semibold">Budget atteint</span>}
               </div>
             </div>
           )}
@@ -264,75 +289,141 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
             {isDragage && ordered.length > 0 && <GlobalTimeline sessions={ordered} />}
           </div>
 
-          {/* Sessions list */}
+          {/* Sessions grouped by day */}
           <div>
-            <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2">Sessions</p>
+            <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-2">
+              Sessions — {dayKeys.length} jour{dayKeys.length > 1 ? 's' : ''}
+            </p>
+
             <div className="space-y-2">
-              {ordered.map((s, i) => {
-                const incMin  = s.incidents?.reduce((a, inc) => a + inc.dureeMinutes, 0) ?? 0;
-                const netH    = Math.max(0, s.dureeMinutes - incMin) / 60;
-                const netDebit    = netH > 0 && (s.volumeM3 ?? 0) > 0 ? s.volumeM3! / netH : 0;
-                const netRendement = netH > 0 && s.surfaceCoveredM2 > 0 ? s.surfaceCoveredM2 / netH : 0;
-                const color   = HIST_PALETTE[i % HIST_PALETTE.length];
-                const card = (
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                    <p className="text-slate-300 text-xs font-semibold flex-1">
-                      {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
-                    </p>
-                    {onSessionClick && (
-                      <span className="text-slate-600 text-[9px] mr-1">›</span>
-                    )}
-                    <p className="text-slate-500 text-[10px] flex-shrink-0">
-                      {s.operateur === 'patron' ? 'Patron' : salarieName}
-                    </p>
-                  </div>
-                );
+              {dayKeys.map(dayKey => {
+                const daySessions   = byDay.get(dayKey)!;
+                const dayTotal      = daySessions.reduce((a, s) => a + s.dureeMinutes, 0);
+                const dayIncidents  = daySessions.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
+                const dayIncMin     = daySessions.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
+                const dayVolume     = daySessions.reduce((a, s) => a + (s.volumeM3 ?? 0), 0);
+                const daySurface    = daySessions.reduce((a, s) => a + s.surfaceCoveredM2, 0);
+                const isExpanded    = expandedDays.has(dayKey);
+
                 return (
-                  <div key={s.id} className={`bg-white/[0.05] border border-white/[0.08] rounded-xl overflow-hidden ${onSessionClick ? 'cursor-pointer active:scale-[0.99] transition-transform' : ''}`}
-                    onClick={onSessionClick ? () => onSessionClick(s) : undefined}
-                    role={onSessionClick ? 'button' : undefined}
-                  >
-                    <div className={`p-3 ${onSessionClick ? 'hover:bg-white/[0.05]' : ''}`}>
-                    {card}
-                    {isDragage ? (
-                      <div className="grid grid-cols-4 gap-1">
-                        <StatTile small label="Durée"  value={formatDuration(s.dureeMinutes)} />
-                        <StatTile small label="Perdu"  value={incMin > 0 ? `${incMin} min` : '—'} accent={incMin > 0 ? 'amber' : undefined} />
-                        <StatTile small label="Volume" value={(s.volumeM3 ?? 0) > 0 ? `${s.volumeM3!.toFixed(1)} m³` : '—'} />
-                        <StatTile small label="Rend."  value={netDebit > 0 ? `${netDebit.toFixed(1)} m³/h` : '—'} />
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-4 gap-1">
-                        <StatTile small label="Durée"   value={formatDuration(s.dureeMinutes)} />
-                        <StatTile small label="Surface" value={formatArea(s.surfaceCoveredM2)} />
-                        <StatTile small label="Rend."   value={netRendement > 0 ? `${Math.round(netRendement)} m²/h` : '—'} />
-                        <StatTile small label="Vit."    value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)} km/h` : '—'} />
-                      </div>
-                    )}
-                    {isDragage && s.incidents && s.incidents.length > 0 && (
-                      <>
-                        <SessionTimeline session={s} />
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {s.incidents.map((inc, ii) => (
-                            <span key={ii}
-                              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] border"
-                              style={{
-                                backgroundColor: INCIDENT_COLORS[inc.type] + '22',
-                                borderColor:     INCIDENT_COLORS[inc.type] + '55',
-                                color:           INCIDENT_COLORS[inc.type],
-                              }}>
-                              <AlertTriangle size={8} />
-                              {INCIDENT_LABELS[inc.type]} · {inc.dureeMinutes} min
+                  <div key={dayKey} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden">
+                    {/* Day header — always visible */}
+                    <button
+                      onClick={() => toggleDay(dayKey)}
+                      className="w-full flex items-center gap-3 px-3 py-3 hover:bg-white/[0.04] active:bg-white/[0.07] transition-colors text-left"
+                    >
+                      {/* Date */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-xs font-bold capitalize">
+                          {format(new Date(dayKey), 'EEEE d MMMM', { locale: fr })}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-slate-400 text-[10px]">
+                            {daySessions.length} session{daySessions.length > 1 ? 's' : ''}
+                          </span>
+                          {dayIncidents > 0 && (
+                            <span className="flex items-center gap-0.5 text-amber-400 text-[10px]">
+                              <AlertTriangle size={9} />
+                              {dayIncidents} incident{dayIncidents > 1 ? 's' : ''} · {dayIncMin} min
                             </span>
-                          ))}
+                          )}
                         </div>
-                      </>
+                      </div>
+
+                      {/* Daily stats */}
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-white text-sm font-bold tabular-nums">{formatDuration(dayTotal)}</p>
+                        {isDragage && dayVolume > 0 && (
+                          <p className="text-cyan-400 text-[10px] tabular-nums">{dayVolume.toFixed(1)} m³</p>
+                        )}
+                        {!isDragage && daySurface > 0 && (
+                          <p className="text-green-400 text-[10px] tabular-nums">{formatArea(daySurface)}</p>
+                        )}
+                      </div>
+
+                      <ChevronDown
+                        size={15}
+                        className={`text-slate-500 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+
+                    {/* Expanded: individual sessions */}
+                    {isExpanded && (
+                      <div className="border-t border-white/[0.06] divide-y divide-white/[0.04]">
+                        {daySessions.map((s) => {
+                          const colorIdx     = sessionColorMap.get(s.id) ?? 0;
+                          const color        = HIST_PALETTE[colorIdx % HIST_PALETTE.length];
+                          const incMin       = s.incidents?.reduce((a, inc) => a + inc.dureeMinutes, 0) ?? 0;
+                          const netH         = Math.max(0, s.dureeMinutes - incMin) / 60;
+                          const netDebit     = netH > 0 && (s.volumeM3 ?? 0) > 0 ? s.volumeM3! / netH : 0;
+                          const netRendement = netH > 0 && s.surfaceCoveredM2 > 0 ? s.surfaceCoveredM2 / netH : 0;
+
+                          return (
+                            <div
+                              key={s.id}
+                              className={`px-3 py-3 ${onSessionClick ? 'cursor-pointer hover:bg-white/[0.04] active:bg-white/[0.07] transition-colors' : ''}`}
+                              onClick={onSessionClick ? () => onSessionClick(s) : undefined}
+                              role={onSessionClick ? 'button' : undefined}
+                            >
+                              {/* Session header */}
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                                <p className="text-slate-300 text-xs font-semibold flex-1">
+                                  {format(new Date(s.dateDebut), 'HH:mm', { locale: fr })}
+                                  {s.dateFin && ` → ${format(new Date(s.dateFin), 'HH:mm', { locale: fr })}`}
+                                </p>
+                                <p className="text-slate-500 text-[10px] flex-shrink-0">
+                                  {s.operateur === 'patron' ? 'Patron' : salarieName}
+                                </p>
+                                {onSessionClick && <span className="text-slate-600 text-[10px]">›</span>}
+                              </div>
+
+                              {/* Stats */}
+                              {isDragage ? (
+                                <div className="grid grid-cols-4 gap-1">
+                                  <StatTile small label="Durée"  value={formatDuration(s.dureeMinutes)} />
+                                  <StatTile small label="Perdu"  value={incMin > 0 ? `${incMin} min` : '—'} accent={incMin > 0 ? 'amber' : undefined} />
+                                  <StatTile small label="Volume" value={(s.volumeM3 ?? 0) > 0 ? `${s.volumeM3!.toFixed(1)} m³` : '—'} />
+                                  <StatTile small label="Rend."  value={netDebit > 0 ? `${netDebit.toFixed(1)} m³/h` : '—'} />
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-4 gap-1">
+                                  <StatTile small label="Durée"   value={formatDuration(s.dureeMinutes)} />
+                                  <StatTile small label="Surface" value={formatArea(s.surfaceCoveredM2)} />
+                                  <StatTile small label="Rend."   value={netRendement > 0 ? `${Math.round(netRendement)} m²/h` : '—'} />
+                                  <StatTile small label="Vit."    value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)} km/h` : '—'} />
+                                </div>
+                              )}
+
+                              {/* Incidents */}
+                              {isDragage && s.incidents && s.incidents.length > 0 && (
+                                <>
+                                  <SessionTimeline session={s} />
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {s.incidents.map((inc, ii) => (
+                                      <span key={ii}
+                                        className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] border"
+                                        style={{
+                                          backgroundColor: INCIDENT_COLORS[inc.type] + '22',
+                                          borderColor:     INCIDENT_COLORS[inc.type] + '55',
+                                          color:           INCIDENT_COLORS[inc.type],
+                                        }}>
+                                        <AlertTriangle size={8} />
+                                        {INCIDENT_LABELS[inc.type]} · {inc.dureeMinutes} min
+                                      </span>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
-                    </div>{/* /p-3 */}
                   </div>
                 );
               })}
+
               {ordered.length === 0 && (
                 <p className="text-slate-600 text-xs text-center py-4">Aucune session enregistrée</p>
               )}
