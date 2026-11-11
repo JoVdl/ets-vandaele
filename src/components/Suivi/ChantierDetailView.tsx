@@ -37,30 +37,31 @@ interface Props {
   chantier:        Chantier;
   sessions:        SuiviSession[];
   isDragage:       boolean;
+  volumeOf:        (s: SuiviSession) => number;
   salarieName?:    string;
   onClose:         () => void;
   onSessionClick?: (session: SuiviSession) => void;
 }
 
-export default function ChantierDetailView({ chantier, sessions, isDragage, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
+export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
   const ordered = useMemo(
     () => [...sessions].sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime()),
     [sessions],
   );
 
   // Cumul stats
-  const totalVolumeM3    = sessions.reduce((a, s) => a + (s.volumeM3 ?? 0), 0);
+  const totalVolumeM3    = sessions.reduce((a, s) => a + volumeOf(s), 0);
   const totalMinutes     = sessions.reduce((a, s) => a + s.dureeMinutes, 0);
   const totalSurfaceM2   = sessions.reduce((a, s) => a + s.surfaceCoveredM2, 0);
   const totalIncidentMin = sessions.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
   const totalIncidentCnt = sessions.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
 
   const netDebits = sessions
-    .filter(s => (s.volumeM3 ?? 0) > 0)
+    .filter(s => volumeOf(s) > 0)
     .map(s => {
       const incMin = s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0;
       const netH = Math.max(0, s.dureeMinutes - incMin) / 60;
-      return netH > 0 ? s.volumeM3! / netH : 0;
+      return netH > 0 ? volumeOf(s) / netH : 0;
     })
     .filter(d => d > 0);
   const avgDebitM3h = netDebits.length > 0 ? netDebits.reduce((a, b) => a + b, 0) / netDebits.length : 0;
@@ -301,7 +302,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                 const dayTotal      = daySessions.reduce((a, s) => a + s.dureeMinutes, 0);
                 const dayIncidents  = daySessions.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
                 const dayIncMin     = daySessions.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
-                const dayVolume     = daySessions.reduce((a, s) => a + (s.volumeM3 ?? 0), 0);
+                const dayVolume     = daySessions.reduce((a, s) => a + volumeOf(s), 0);
                 const daySurface    = daySessions.reduce((a, s) => a + s.surfaceCoveredM2, 0);
                 const isExpanded    = expandedDays.has(dayKey);
 
@@ -364,7 +365,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                           const color        = HIST_PALETTE[colorIdx % HIST_PALETTE.length];
                           const incMin       = s.incidents?.reduce((a, inc) => a + inc.dureeMinutes, 0) ?? 0;
                           const netH         = Math.max(0, s.dureeMinutes - incMin) / 60;
-                          const netDebit     = netH > 0 && (s.volumeM3 ?? 0) > 0 ? s.volumeM3! / netH : 0;
+                          const netDebit     = netH > 0 && volumeOf(s) > 0 ? volumeOf(s) / netH : 0;
                           const netRendement = netH > 0 && s.surfaceCoveredM2 > 0 ? s.surfaceCoveredM2 / netH : 0;
 
                           return (
@@ -392,7 +393,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                                 <div className="grid grid-cols-4 gap-1">
                                   <StatTile small label="Durée"  value={formatDuration(s.dureeMinutes)} />
                                   <StatTile small label="Perdu"  value={incMin > 0 ? `${incMin} min` : '—'} accent={incMin > 0 ? 'amber' : undefined} />
-                                  <StatTile small label="Volume" value={(s.volumeM3 ?? 0) > 0 ? `${s.volumeM3!.toFixed(1)} m³` : '—'} />
+                                  <StatTile small label="Volume" value={volumeOf(s) > 0 ? `${volumeOf(s).toFixed(1)} m³` : '—'} />
                                   <StatTile small label="Rend."  value={netDebit > 0 ? `${netDebit.toFixed(1)} m³/h` : '—'} />
                                 </div>
                               ) : (

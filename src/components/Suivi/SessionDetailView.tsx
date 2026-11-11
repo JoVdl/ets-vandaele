@@ -67,6 +67,7 @@ interface Props {
   chantierCumul?: Record<string, { totalCoveredM2: number; sessionCount: number; totalMinutes: number; rendementSum: number; rendementCount: number }>;
   chantierZones: ChantierZone[];
   machineParams?: { largeurTravailM: number; vitesseMaxKmh: number; recouvrementPct: number };
+  alignedVolumeM3?: number;
   workColor:     string;
   salarieName?:  string;
   onUpdateIncidents?: (incidents: SuiviIncident[]) => Promise<void>;
@@ -278,7 +279,7 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedVolumeM3, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose }: Props) {
   const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
 
   // Local incidents state — reflects Firestore changes via updated session prop
@@ -334,6 +335,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
     : [43.7, -0.26];
 
   // Corrected metrics: recompute from filtered GPS (speed × width) using machine params
+  const netDureeH = Math.max(0, session.dureeMinutes - (session.incidents?.reduce((a, i) => a + i.dureeMinutes, 0) ?? 0)) / 60;
   const { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3, correctedDebitM3h } = (() => {
     if (!machineParams || machineParams.largeurTravailM <= 0 || session.dureeMinutes <= 0)
       return { workSpeedKmh: null, correctedSurfaceM2: null, correctedRendement: null, correctedVolumeM3: null, correctedDebitM3h: null };
@@ -355,6 +357,12 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
     const debitM3h   = volM3 != null && durationH > 0 ? volM3 / durationH : null;
     return { workSpeedKmh: speedKmh, correctedSurfaceM2: surfaceM2, correctedRendement: rendt, correctedVolumeM3: volM3, correctedDebitM3h: debitM3h };
   })();
+
+  // Volume shown everywhere: aligned rectangle × depth when available, else the GPS-strip correction, else stored
+  const displayVolumeM3 = alignedVolumeM3 ?? correctedVolumeM3 ?? session.volumeM3 ?? 0;
+  const displayDebitM3h = alignedVolumeM3 != null && netDureeH > 0
+    ? alignedVolumeM3 / netDureeH
+    : (correctedDebitM3h ?? session.debitM3h ?? 0);
 
   // Use corrected surface for progress % when available
   const surface        = chantier?.surface ?? 0;
@@ -424,7 +432,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
           onClick={() => openPrintRecap(
             session, chantier, thisPct, cumulPct, rendMoyen, workColor,
             chantierZones.flatMap(z => z.polygons.filter(p => p.length >= 3)),
-            { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3, correctedDebitM3h },
+            { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3: displayVolumeM3, correctedDebitM3h: displayDebitM3h },
             salarieName,
           )}
           title="Récap client (PDF)"
@@ -511,9 +519,9 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
           <StatCard label="Durée"     value={formatDuration(session.dureeMinutes)} />
           {isDragageSession ? (
             <>
-              <StatCard label="Volume dragué" value={`${(correctedVolumeM3 ?? session.volumeM3 ?? 0).toFixed(1)} m³`} />
+              <StatCard label="Volume dragué" value={`${displayVolumeM3.toFixed(1)} m³`} />
               <StatCard label="Surface"       value={formatArea(displaySurface)} />
-              <StatCard label="Débit"         value={(correctedDebitM3h ?? session.debitM3h ?? 0) > 0 ? `${(correctedDebitM3h ?? session.debitM3h!).toFixed(1)} m³/h` : '—'} />
+              <StatCard label="Débit"         value={displayDebitM3h > 0 ? `${displayDebitM3h.toFixed(1)} m³/h` : '—'} />
             </>
           ) : (
             <>

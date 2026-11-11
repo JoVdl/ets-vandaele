@@ -323,13 +323,10 @@ export default function SuiviMap({
     let selIdx = 0;
     smoothedTrails.forEach((t, i) => { if (t.isSelected) obbByOriginalIndex.set(i, alignedObbs[selIdx++]); });
 
-    return smoothedTrails.map(({ color, sessionId, volumeM3: storedVol, profondeurM: depth, isSelected, sm }, i) => {
+    return smoothedTrails.map(({ color, sessionId, volumeM3: vol, profondeurM: depth, isSelected, sm }, i) => {
       const obb = obbByOriginalIndex.get(i) ?? null;
-      const d = depth ?? 0;
-      // Display-only: selected sessions get volume from the aligned rectangle; stored volumes stay untouched.
-      const vol = isSelected && obb && d > 0 ? obb.areaM2 * d : storedVol;
       if (obb) {
-        return { kind: 'obb' as const, color, sessionId, isSelected, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: d };
+        return { kind: 'obb' as const, color, sessionId, isSelected, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: depth ?? 0 };
       }
       return { kind: 'line' as const, color, sessionId, isSelected, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
     });

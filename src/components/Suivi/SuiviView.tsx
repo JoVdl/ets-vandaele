@@ -15,6 +15,7 @@ import {
   areaM2, formatArea, formatDistance, formatDuration, centroid,
   avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, orientedBoundingBoxM2, filterGpsTrack,
 } from '../../lib/geo';
+import { alignedVolumesBySession } from '../../lib/alignedVolumes';
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
 } from '../../lib/machineParams';
@@ -621,6 +622,21 @@ export default function SuiviView({ role, onLogout }: Props) {
     return null;
   }, [selectedChantierId, chantiers, sessions]);
 
+  // Display volumes/débits: aligned rectangle × depth; falls back to stored values.
+  const displayVolumes = useMemo(() => alignedVolumesBySession(sessions, chantiers, {
+    vitesseMaxKmh: machineParams.vitesseMaxKmh,
+    largeurM:      machineParams.largeurTravailM,
+    smoothAlpha:   machineParams.smoothAlpha,
+  }), [sessions, chantiers, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
+  const volOf = useCallback(
+    (s: SuiviSession) => displayVolumes.get(s.id) ?? s.volumeM3 ?? 0,
+    [displayVolumes],
+  );
+  const debitOf = useCallback(
+    (s: SuiviSession) => (s.debitM3h && s.volumeM3 ? s.debitM3h * volOf(s) / s.volumeM3 : (s.debitM3h ?? 0)),
+    [volOf],
+  );
+
   // Historical GPS trails for all chantiers — selected chantier gets distinct colors + sessionId
   const historicalTrails = useMemo(() => {
     const chanMap: Record<string, Chantier> = {};
@@ -643,12 +659,12 @@ export default function SuiviView({ role, onLogout }: Props) {
         if (s.chantierId === selectedChantierId) {
           const idx   = selIdxMap.get(s.id) ?? 0;
           const color = HIST_PALETTE[idx % HIST_PALETTE.length];
-          return { points: pts, color, sessionId: s.id, volumeM3: s.volumeM3, profondeurM, isSelected: true };
+          return { points: pts, color, sessionId: s.id, volumeM3: volOf(s), profondeurM, isSelected: true };
         }
         const color = c ? (CHANTIER_TYPES[c.type]?.color ?? '#22c55e') : '#22c55e';
-        return { points: pts, color, sessionId: s.id, volumeM3: s.volumeM3, profondeurM, isSelected: false };
+        return { points: pts, color, sessionId: s.id, volumeM3: volOf(s), profondeurM, isSelected: false };
       });
-  }, [sessions, chantiers, selectedChantierId, machineParams.vitesseMaxKmh]);
+  }, [sessions, chantiers, selectedChantierId, machineParams.vitesseMaxKmh, volOf]);
 
   const chantierZones = useMemo<ChantierZone[]>(() =>
     chantiers
@@ -669,15 +685,15 @@ export default function SuiviView({ role, onLogout }: Props) {
     const ss = sessions.filter(s => s.chantierId === selectedChantierId);
     if (ss.length === 0) return { sessions: ss, totalVolumeM3: 0, totalMinutes: 0, avgDebitM3h: 0, totalIncidentMin: 0, totalIncidentCount: 0 };
 
-    const totalVolumeM3    = ss.reduce((a, s) => a + (s.volumeM3 ?? 0), 0);
+    const totalVolumeM3    = ss.reduce((a, s) => a + volOf(s), 0);
     const totalMinutes     = ss.reduce((a, s) => a + s.dureeMinutes, 0);
     const totalIncidentMin = ss.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
     const totalIncidentCount = ss.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
-    const debits = ss.filter(s => (s.debitM3h ?? 0) > 0).map(s => s.debitM3h!);
+    const debits = ss.map(debitOf).filter(d => d > 0);
     const avgDebitM3h = debits.length > 0 ? debits.reduce((a, b) => a + b, 0) / debits.length : 0;
 
     return { sessions: ss, totalVolumeM3, totalMinutes, avgDebitM3h, totalIncidentMin, totalIncidentCount };
-  }, [sessions, selectedChantierId]);
+  }, [sessions, selectedChantierId, volOf, debitOf]);
 
   // ── Analytics ─────────────────────────────────────────────────────────
   const analytics = useMemo(() => {
@@ -1605,7 +1621,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                       {chanDayKeys.map((dayKey, dayIdx) => {
                         const daySessions  = byChanDay.get(dayKey)!;
                         const dayTotal     = daySessions.reduce((a, s) => a + s.dureeMinutes, 0);
-                        const dayVolume    = daySessions.reduce((a, s) => a + (s.volumeM3 ?? 0), 0);
+                        const dayVolume    = daySessions.reduce((a, s) => a + volOf(s), 0);
                         const daySurface   = daySessions.reduce((a, s) => a + s.surfaceCoveredM2, 0);
                         const dayIncCount  = daySessions.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
                         const dayIncMin    = daySessions.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
@@ -1704,8 +1720,8 @@ export default function SuiviView({ role, onLogout }: Props) {
                                           <div className="grid grid-cols-4 gap-1">
                                             <SmallStat label="Durée" value={formatDuration(s.dureeMinutes)} />
                                             <SmallStat label="Perdu" value={incMin > 0 ? `${incMin} min` : '—'} />
-                                            <SmallStat label="Volume" value={s.volumeM3 != null && s.volumeM3 > 0 ? `${s.volumeM3.toFixed(1)} m³` : '—'} />
-                                            <SmallStat label="Rend." value={s.debitM3h != null && s.debitM3h > 0 ? `${s.debitM3h.toFixed(1)}` : '—'} sub="m³/h" />
+                                            <SmallStat label="Volume" value={volOf(s) > 0 ? `${volOf(s).toFixed(1)} m³` : '—'} />
+                                            <SmallStat label="Rend." value={debitOf(s) > 0 ? `${debitOf(s).toFixed(1)}` : '—'} sub="m³/h" />
                                           </div>
                                         ) : (
                                           <div className="grid grid-cols-4 gap-1">
@@ -1792,7 +1808,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                       {dayKeys.map((dayKey, dayIdx) => {
                         const daySessions   = byDayMap.get(dayKey)!;
                         const dayTotal      = daySessions.reduce((a, s) => a + s.dureeMinutes, 0);
-                        const dayVolume     = daySessions.reduce((a, s) => a + (s.volumeM3 ?? 0), 0);
+                        const dayVolume     = daySessions.reduce((a, s) => a + volOf(s), 0);
                         const daySurface    = daySessions.reduce((a, s) => a + s.surfaceCoveredM2, 0);
                         const dayIncidents  = daySessions.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
                         const dayIncMin     = daySessions.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
@@ -1889,10 +1905,10 @@ export default function SuiviView({ role, onLogout }: Props) {
                                         </div>
                                         <div className="grid grid-cols-4 gap-1 mb-1.5">
                                           <SmallStat label="Durée" value={formatDuration(s.dureeMinutes)} />
-                                          {s.volumeM3 != null && s.volumeM3 > 0 ? (
+                                          {volOf(s) > 0 ? (
                                             <>
-                                              <SmallStat label="Volume" value={`${s.volumeM3.toFixed(1)} m³`} />
-                                              <SmallStat label="Débit" value={s.debitM3h != null && s.debitM3h > 0 ? `${s.debitM3h.toFixed(1)}` : '—'} sub="m³/h" />
+                                              <SmallStat label="Volume" value={`${volOf(s).toFixed(1)} m³`} />
+                                              <SmallStat label="Débit" value={debitOf(s) > 0 ? `${debitOf(s).toFixed(1)}` : '—'} sub="m³/h" />
                                             </>
                                           ) : (
                                             <>
@@ -2151,6 +2167,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           sessions={sessions}
           chantiers={chantiers}
           salarieName={salarieName}
+          volumeOf={volOf}
           onSessionClick={s => setSelectedSession(s)}
         />
       )}
@@ -2178,6 +2195,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           chantier={selectedChantier}
           sessions={chantierDashStats.sessions}
           isDragage={isDragage}
+          volumeOf={volOf}
           salarieName={salarieName}
           onClose={() => setShowChantierDetail(false)}
           onSessionClick={s => { setShowChantierDetail(false); setSelectedSession(s); }}
@@ -2192,6 +2210,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           chantierCumul={chantierCumul}
           chantierZones={chantierZones}
           machineParams={machineParams}
+          alignedVolumeM3={displayVolumes.get(selectedSession.id)}
           workColor={selectedSession.chantierId === selectedChantierId
             ? workColor
             : '#22c55e'}

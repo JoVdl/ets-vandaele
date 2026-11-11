@@ -13,6 +13,7 @@ interface Props {
   sessions:    SuiviSession[];
   chantiers:   Chantier[];
   salarieName?: string;
+  volumeOf?:    (s: SuiviSession) => number;
   onSessionClick: (s: SuiviSession) => void;
 }
 
@@ -27,7 +28,7 @@ const JOURS_LONG  = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
 type ViewMode = 'month' | 'week';
 
-export default function CalendarView({ sessions, chantiers, salarieName = 'Hugo', onSessionClick }: Props) {
+export default function CalendarView({ sessions, chantiers, salarieName = 'Hugo', volumeOf = s => s.volumeM3 ?? 0, onSessionClick }: Props) {
   const [cursor, setCursor] = useState(() => {
     const last = [...sessions].sort((a, b) =>
       new Date(b.dateDebut).getTime() - new Date(a.dateDebut).getTime())[0];
@@ -335,7 +336,8 @@ export default function CalendarView({ sessions, chantiers, salarieName = 'Hugo'
             .map(s => {
               const color       = chantierColor.get(s.chantierId) ?? '#64748b';
               const incidentMin = s.incidents?.reduce((a, i) => a + i.dureeMinutes, 0) ?? 0;
-              const isDragSess  = (s.volumeM3 ?? 0) > 0;
+              const sVol        = volumeOf(s);
+              const isDragSess  = sVol > 0;
               return (
                 <button
                   key={s.id}
@@ -358,7 +360,7 @@ export default function CalendarView({ sessions, chantiers, salarieName = 'Hugo'
                       {formatDuration(s.dureeMinutes)}
                     </span>
                     {isDragSess && (
-                      <span className="text-cyan-400 text-[10px] tabular-nums">{s.volumeM3!.toFixed(1)} m³</span>
+                      <span className="text-cyan-400 text-[10px] tabular-nums">{sVol.toFixed(1)} m³</span>
                     )}
                     {!isDragSess && s.surfaceCoveredM2 > 0 && (
                       <span className="text-green-400 text-[10px] tabular-nums">
