@@ -422,6 +422,7 @@ export default function SuiviView({ role, onLogout }: Props) {
         paused:       sessionPaused,
         recentTrack:  track,
         ...(sessionIncidents.length > 0 && { incidents: sessionIncidents }),
+        dateDebut: sessionStart?.toISOString(),
       });
     };
     livePushRef.current = push;
@@ -452,6 +453,7 @@ export default function SuiviView({ role, onLogout }: Props) {
       dureeMinutes: 0,
       paused:       false,
       recentTrack:  [],
+      dateDebut:    sessionStart?.toISOString() ?? new Date().toISOString(),
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionActive]);
@@ -1240,9 +1242,16 @@ export default function SuiviView({ role, onLogout }: Props) {
                           {otherLive.operateur === 'salarie' ? salarieName : 'Patron'} — session en cours
                           {otherLive.paused && ' (pause)'}
                         </span>
-                        <span className="text-slate-500 text-[10px]">
-                          {minsAgo > 0 ? `màj il y a ${minsAgo} min` : 'maintenant'}
-                        </span>
+                        <div className="flex flex-col items-end gap-0.5">
+                          {otherLive.dateDebut && (
+                            <span className="text-slate-400 text-[10px]">
+                              déb. {format(new Date(otherLive.dateDebut), 'HH:mm', { locale: fr })}
+                            </span>
+                          )}
+                          <span className="text-slate-500 text-[10px]">
+                            {minsAgo > 0 ? `màj il y a ${minsAgo} min` : 'maintenant'}
+                          </span>
+                        </div>
                       </div>
                       {isDragage ? (
                         <div className="grid grid-cols-4 gap-1">
@@ -1753,7 +1762,8 @@ export default function SuiviView({ role, onLogout }: Props) {
                             <p className="text-white text-sm font-semibold truncate">{s.chantierNom}</p>
                             <p className="text-slate-400 text-[10px]">
                               {s.operateur === 'salarie' ? salarieName : 'Patron'}
-                              {minsAgo > 0 ? ` · il y a ${minsAgo} min` : ' · maintenant'}
+                              {s.dateDebut ? ` · déb. ${format(new Date(s.dateDebut), 'HH:mm', { locale: fr })}` : ''}
+                              {minsAgo > 0 ? ` · màj il y a ${minsAgo} min` : ' · maintenant'}
                             </p>
                           </div>
                           {s.progressPct != null && (

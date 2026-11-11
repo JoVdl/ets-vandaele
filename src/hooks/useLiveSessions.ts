@@ -27,6 +27,7 @@ export interface LiveSession {
   paused?:        boolean;
   recentTrack?:   { lat: number; lng: number }[];
   incidents?:     SuiviIncident[];
+  dateDebut?:     string; // ISO — session start time
   lastUpdate:     string; // ISO
 }
 
