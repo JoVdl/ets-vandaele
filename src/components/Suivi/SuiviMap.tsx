@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Polyline, Polygon, Marker, Tooltip, useMap, us
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { GpsPoint } from '../../types/suivi';
-import { areaM2, formatArea, centroid, smoothPoints, distanceM, convexHull, orientedBoundingBoxM2 } from '../../lib/geo';
+import { areaM2, formatArea, centroid, smoothPoints, distanceM, convexHull, orientedBoundingBoxM2, sessionOBBsAligned } from '../../lib/geo';
 import type { LiveSession } from '../../hooks/useLiveSessions';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -284,15 +284,25 @@ export default function SuiviMap({
     [smoothed],
   );
 
-  // Historical trails from past sessions — OBB rectangle for all, polyline fallback
-  const historicalRendered = useMemo(() => historicalTrails.map(({ points, color, sessionId, volumeM3: vol, profondeurM: depth }) => {
-    const sm  = smoothPoints(points, smoothAlpha);
-    const obb = orientedBoundingBoxM2(sm);
-    if (obb) {
-      return { kind: 'obb' as const, color, sessionId, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: depth ?? 0 };
-    }
-    return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
-  }), [historicalTrails, smoothAlpha]);
+  // Historical trails — all sessions share one global axis (no rotation discrepancies),
+  // width = largeurM so adjacent strips are exactly side-by-side without overlap.
+  const historicalRendered = useMemo(() => {
+    const smoothedTrails = historicalTrails.map(t => ({
+      ...t,
+      sm: smoothPoints(t.points, smoothAlpha),
+    }));
+    const alignedObbs = sessionOBBsAligned(
+      smoothedTrails.map(t => ({ points: t.sm })),
+      largeurM,
+    );
+    return smoothedTrails.map(({ color, sessionId, volumeM3: vol, profondeurM: depth, sm }, i) => {
+      const obb = alignedObbs[i];
+      if (obb) {
+        return { kind: 'obb' as const, color, sessionId, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: depth ?? 0 };
+      }
+      return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
+    });
+  }, [historicalTrails, smoothAlpha, largeurM]);
 
   // OBB of current GPS cloud — clean rectangle for display of active work zone
   const obbResult = useMemo(() => {
