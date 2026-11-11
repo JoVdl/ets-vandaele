@@ -3,6 +3,7 @@ import {
   collection, doc, onSnapshot, setDoc, deleteDoc, Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import type { SuiviIncident } from '../types/suivi';
 
 const COL = 'suivi_live';
 
@@ -25,6 +26,7 @@ export interface LiveSession {
   debitM3h?:      number;
   paused?:        boolean;
   recentTrack?:   { lat: number; lng: number }[];
+  incidents?:     SuiviIncident[];
   lastUpdate:     string; // ISO
 }
 

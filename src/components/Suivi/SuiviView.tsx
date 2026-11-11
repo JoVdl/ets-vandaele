@@ -393,6 +393,7 @@ export default function SuiviView({ role, onLogout }: Props) {
 
   // ── Live Firestore streaming (every 30s during active session) ─────────
   const liveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const livePushRef     = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!sessionActive || sessionPaused || !currentPos) {
       if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
@@ -420,13 +421,59 @@ export default function SuiviView({ role, onLogout }: Props) {
         ...(isDragage && volumeM3 > 0 && { volumeM3, debitM3h }),
         paused:       sessionPaused,
         recentTrack:  track,
+        ...(sessionIncidents.length > 0 && { incidents: sessionIncidents }),
       });
     };
+    livePushRef.current = push;
     push(); // push immediately
     liveIntervalRef.current = setInterval(push, 30_000);
     return () => { if (liveIntervalRef.current) clearInterval(liveIntervalRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionActive, sessionPaused, currentPos]);
+
+  // Push immédiat au démarrage de session (avant que le GPS soit prêt)
+  // — le patron voit la session apparaître sans attendre le premier fix GPS
+  useEffect(() => {
+    if (!sessionActive || !selectedChantier) return;
+    const ch = selectedChantier;
+    const lat = currentPos?.lat ?? ch.latitude ?? 0;
+    const lng = currentPos?.lng ?? ch.longitude ?? 0;
+    pushLiveSession(sessionIdRef.current, {
+      operateur:    role,
+      chantierId:   ch.id,
+      chantierNom:  ch.nom,
+      lat, lng,
+      accuracy:     currentPos?.acc ?? null,
+      speedKmh:     0,
+      areaM:        0,
+      distM:        0,
+      rendementM2h: 0,
+      progressPct:  null,
+      dureeMinutes: 0,
+      paused:       false,
+      recentTrack:  [],
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionActive]);
+
+  // Push immédiat quand un incident est ajouté — pas d'attente des 30s
+  useEffect(() => {
+    if (sessionIncidents.length > 0 && livePushRef.current) {
+      livePushRef.current();
+    }
+  }, [sessionIncidents]);
+
+  // Auto-sélectionner le chantier du salarié quand le patron ouvre l'appli
+  // sans chantier sélectionné et qu'une session live est en cours
+  useEffect(() => {
+    if (role !== 'patron' || sessionActive || selectedChantierId) return;
+    const ls = liveSessions.find(s => s.sessionId !== sessionIdRef.current);
+    if (ls) {
+      setSelectedChantierId(ls.chantierId);
+      setFollowGps(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveSessions]);
 
   // ── Dragage mode (drague aspiratrice) ────────────────────────────────────
   const isDragage = !!selectedChantier?.drague;
@@ -1212,6 +1259,24 @@ export default function SuiviView({ role, onLogout }: Props) {
                           <Metric label="Avancement" value={otherLive.progressPct != null ? `${Math.round(otherLive.progressPct)} %` : '—'} small />
                         </div>
                       )}
+                      {otherLive.incidents && otherLive.incidents.length > 0 && (
+                        <div className="mt-2 px-1">
+                          <div className="flex items-center gap-1 mb-1">
+                            <AlertTriangle size={10} className="text-amber-400 flex-shrink-0" />
+                            <span className="text-amber-400 text-[9px] font-semibold">
+                              {otherLive.incidents.length} incident{otherLive.incidents.length > 1 ? 's' : ''} · {otherLive.incidents.reduce((a, i) => a + i.dureeMinutes, 0)} min perdues
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {otherLive.incidents.map((inc, i) => (
+                              <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] border border-amber-700/40">
+                                <AlertTriangle size={8} />
+                                {format(new Date(inc.ts), 'HH:mm', { locale: fr })} · {INCIDENT_LABELS[inc.type]} · {inc.dureeMinutes} min
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
@@ -1731,12 +1796,32 @@ export default function SuiviView({ role, onLogout }: Props) {
                         </div>
 
                         {/* GPS accuracy & distance */}
-                        <div className="flex items-center gap-3 px-3 pb-3 text-[10px] text-slate-500">
+                        <div className="flex items-center gap-3 px-3 pb-2 text-[10px] text-slate-500">
                           {s.accuracy != null && (
                             <span>GPS ±{Math.round(s.accuracy)} m</span>
                           )}
                           <span>Distance : {formatDistance(s.distM)}</span>
                         </div>
+
+                        {/* Incidents */}
+                        {s.incidents && s.incidents.length > 0 && (
+                          <div className="border-t border-slate-700/60 px-3 pb-3 pt-2">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <AlertTriangle size={11} className="text-amber-400 flex-shrink-0" />
+                              <span className="text-amber-400 text-[10px] font-semibold">
+                                {s.incidents.length} incident{s.incidents.length > 1 ? 's' : ''} · {s.incidents.reduce((a, i) => a + i.dureeMinutes, 0)} min perdues
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {s.incidents.map((inc, i) => (
+                                <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] border border-amber-700/40">
+                                  <AlertTriangle size={8} />
+                                  {format(new Date(inc.ts), 'HH:mm', { locale: fr })} · {INCIDENT_LABELS[inc.type]} · {inc.dureeMinutes} min
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
