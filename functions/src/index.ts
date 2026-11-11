@@ -34,22 +34,33 @@ export const cameraSnapshot = onRequest(
       // 1. Login to Reolink cloud
       const loginResp = await fetch('https://api.reolink.com/api/Login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
         body: JSON.stringify({ user: { userName: REOLINK_EMAIL.value(), password: REOLINK_PASSWORD.value() } }),
         signal: AbortSignal.timeout(8000),
       });
-      const loginJson = await loginResp.json() as { code: number; data?: { token: string } };
+      const loginText = await loginResp.text();
+      if (!loginText.trim().startsWith('{')) {
+        res.status(503).json({ error: `Reolink API non-JSON (${loginResp.status}): ${loginText.substring(0, 120)}` });
+        return;
+      }
+      const loginJson = JSON.parse(loginText) as { code: number; data?: { token: string } };
       if (loginJson.code !== 0 || !loginJson.data?.token) {
-        res.status(503).json({ error: 'Reolink login failed', code: loginJson.code });
+        res.status(503).json({ error: `Reolink login failed (code ${loginJson.code})` });
         return;
       }
       const token = loginJson.data.token;
 
       // 2. Get device list to find camera's current IP
       const devResp = await fetch(`https://api.reolink.com/api/GetDevList?token=${token}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
         signal: AbortSignal.timeout(8000),
       });
-      const devJson = await devResp.json() as { code: number; data?: { devices?: ReolinkDevice[] } };
+      const devText = await devResp.text();
+      if (!devText.trim().startsWith('{') && !devText.trim().startsWith('[')) {
+        res.status(503).json({ error: `Reolink GetDevList non-JSON (${devResp.status}): ${devText.substring(0, 120)}` });
+        return;
+      }
+      const devJson = JSON.parse(devText) as { code: number; data?: { devices?: ReolinkDevice[] } };
 
       const cam = devJson.data?.devices?.find(d => d.uid === CAMERA_UID);
       if (!cam) {
