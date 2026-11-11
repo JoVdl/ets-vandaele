@@ -795,7 +795,7 @@ export default function SuiviView({ role, onLogout }: Props) {
     setSessionStart(null);
     setSessionIncidents([]);
     setDepthSegments([]);
-  }, [selectedChantier, saveSession, role, sessionStart, elapsed, gpsPoints, resetPoints, areaM, rendement, deviceId]);
+  }, [selectedChantier, saveSession, role, sessionStart, elapsed, gpsPoints, resetPoints, areaM, rendement, deviceId, sessionIncidents]);
 
   // ── Draw mode ──────────────────────────────────────────────────────────
   const handleDrawPoint = useCallback((lat: number, lng: number) => {
