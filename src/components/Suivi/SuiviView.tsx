@@ -1961,6 +1961,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           isDragage={isDragage}
           salarieName={salarieName}
           onClose={() => setShowChantierDetail(false)}
+          onSessionClick={s => { setShowChantierDetail(false); setSelectedSession(s); }}
         />
       )}
 

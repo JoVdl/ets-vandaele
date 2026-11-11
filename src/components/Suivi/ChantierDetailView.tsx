@@ -1,5 +1,5 @@
 import { useMemo, useEffect } from 'react';
-import { MapContainer, TileLayer, Polyline, Polygon, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, Polygon, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ArrowLeft, AlertTriangle, Clock } from 'lucide-react';
@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { SuiviSession } from '../../types/suivi';
 import type { Chantier } from '../../types';
-import { formatDuration, formatArea, smoothPoints, centroid, filterGpsTrack } from '../../lib/geo';
+import { formatDuration, formatArea, smoothPoints, centroid, filterGpsTrack, convexHull, areaM2 } from '../../lib/geo';
 import { INCIDENT_LABELS, INCIDENT_COLORS, HIST_PALETTE, GlobalTimeline, SessionTimeline } from './incidentUtils';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -34,14 +34,15 @@ function FitAll({ positions, fallback }: { positions: [number, number][]; fallba
 }
 
 interface Props {
-  chantier:    Chantier;
-  sessions:    SuiviSession[];
-  isDragage:   boolean;
-  salarieName?: string;
-  onClose:     () => void;
+  chantier:        Chantier;
+  sessions:        SuiviSession[];
+  isDragage:       boolean;
+  salarieName?:    string;
+  onClose:         () => void;
+  onSessionClick?: (session: SuiviSession) => void;
 }
 
-export default function ChantierDetailView({ chantier, sessions, isDragage, salarieName = 'Hugo', onClose }: Props) {
+export default function ChantierDetailView({ chantier, sessions, isDragage, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
   const ordered = useMemo(
     () => [...sessions].sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime()),
     [sessions],
@@ -88,11 +89,19 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
       isDragage ? 1.6 : 2.0,
       isDragage ? 150 : Infinity,
     );
+    const smoothed = smoothPoints(filtered, 0.3);
+    const rawHull = convexHull(smoothed.map(p => ({ lat: p.lat, lng: p.lng })));
+    const hullPositions: [number, number][] = rawHull.length >= 3
+      ? rawHull.map(p => [p.lat, p.lng] as [number, number])
+      : [];
+    const hullArea = hullPositions.length >= 3 ? areaM2(rawHull) : 0;
     return {
-      id:        s.id,
-      color:     HIST_PALETTE[i % HIST_PALETTE.length],
-      positions: smoothPoints(filtered, 0.3).map(p => [p.lat, p.lng] as [number, number]),
-      date:      s.dateDebut,
+      id:            s.id,
+      color:         HIST_PALETTE[i % HIST_PALETTE.length],
+      positions:     smoothed.map(p => [p.lat, p.lng] as [number, number]),
+      hullPositions,
+      hullArea,
+      date:          s.dateDebut,
     };
   }), [ordered, isDragage]);
 
@@ -147,9 +156,32 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                 />,
               ] : []
             )}
-            {trails.map(t => t.positions.length > 1 && (
-              <Polyline key={t.id} positions={t.positions} color={t.color} weight={3.5} opacity={0.9} />
-            ))}
+            {trails.map(t => [
+              t.positions.length > 1 && (
+                <Polyline key={`line-${t.id}`} positions={t.positions} color={t.color} weight={3.5} opacity={0.9} />
+              ),
+              t.hullPositions.length >= 3 && (
+                <Polygon key={`hull-${t.id}`}
+                  positions={t.hullPositions}
+                  color={t.color}
+                  fillColor={t.color}
+                  fillOpacity={0.10}
+                  weight={1.5}
+                  opacity={0.70}
+                  dashArray="6 4"
+                >
+                  {t.hullArea > 0 && (
+                    <Tooltip permanent direction="center" className="bg-transparent border-0 shadow-none">
+                      <span className="text-[9px] font-semibold opacity-80" style={{ color: t.color }}>
+                        {t.hullArea >= 10000
+                          ? `${(t.hullArea / 10000).toFixed(2)} ha`
+                          : `${Math.round(t.hullArea)} m²`}
+                      </span>
+                    </Tooltip>
+                  )}
+                </Polygon>
+              ),
+            ])}
           </MapContainer>
           {/* Session color legend */}
           {trails.length > 0 && (
@@ -242,17 +274,27 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                 const netDebit    = netH > 0 && (s.volumeM3 ?? 0) > 0 ? s.volumeM3! / netH : 0;
                 const netRendement = netH > 0 && s.surfaceCoveredM2 > 0 ? s.surfaceCoveredM2 / netH : 0;
                 const color   = HIST_PALETTE[i % HIST_PALETTE.length];
+                const card = (
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                    <p className="text-slate-300 text-xs font-semibold flex-1">
+                      {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
+                    </p>
+                    {onSessionClick && (
+                      <span className="text-slate-600 text-[9px] mr-1">›</span>
+                    )}
+                    <p className="text-slate-500 text-[10px] flex-shrink-0">
+                      {s.operateur === 'patron' ? 'Patron' : salarieName}
+                    </p>
+                  </div>
+                );
                 return (
-                  <div key={s.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                      <p className="text-slate-300 text-xs font-semibold flex-1">
-                        {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
-                      </p>
-                      <p className="text-slate-500 text-[10px] flex-shrink-0">
-                        {s.operateur === 'patron' ? 'Patron' : salarieName}
-                      </p>
-                    </div>
+                  <div key={s.id} className={`bg-white/[0.05] border border-white/[0.08] rounded-xl overflow-hidden ${onSessionClick ? 'cursor-pointer active:scale-[0.99] transition-transform' : ''}`}
+                    onClick={onSessionClick ? () => onSessionClick(s) : undefined}
+                    role={onSessionClick ? 'button' : undefined}
+                  >
+                    <div className={`p-3 ${onSessionClick ? 'hover:bg-white/[0.05]' : ''}`}>
+                    {card}
                     {isDragage ? (
                       <div className="grid grid-cols-4 gap-1">
                         <StatTile small label="Durée"  value={formatDuration(s.dureeMinutes)} />
@@ -287,6 +329,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, sala
                         </div>
                       </>
                     )}
+                    </div>{/* /p-3 */}
                   </div>
                 );
               })}
