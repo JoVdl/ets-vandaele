@@ -2,7 +2,7 @@
   "name": "functions",
   "description": "Cloud Functions — ETS Vandaele",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "lib/index.js",
   "scripts": {
