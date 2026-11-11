@@ -19,19 +19,24 @@ export default function CameraView({ onClose }: Props) {
     setState('loading');
     try {
       const resp = await fetch(`${SNAPSHOT_URL}?_t=${Date.now()}`);
-      if (!resp.ok) {
+      const ct = resp.headers.get('content-type') ?? '';
+
+      if (!resp.ok || !ct.startsWith('image/')) {
         let errMsg = `HTTP ${resp.status}`;
         try {
           const text = await resp.text();
           if (text.trim().startsWith('{')) {
             const j = JSON.parse(text) as { error?: string };
-            errMsg = j.error ?? errMsg;
+            errMsg = j.error ? `${j.error} (${resp.status})` : `${errMsg} — ${text.substring(0, 80)}`;
+          } else {
+            errMsg = `${errMsg} · ${ct || 'no content-type'} · ${text.substring(0, 80)}`;
           }
         } catch {}
         setErrorMsg(errMsg);
         setState('error');
         return;
       }
+
       const blob = await resp.blob();
       const url  = URL.createObjectURL(blob);
       setImgSrc(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
