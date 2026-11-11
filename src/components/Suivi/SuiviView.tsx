@@ -643,7 +643,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           return { points: pts, color, sessionId: s.id, volumeM3: s.volumeM3, profondeurM };
         }
         const color = c ? (CHANTIER_TYPES[c.type]?.color ?? '#22c55e') : '#22c55e';
-        return { points: pts, color, volumeM3: s.volumeM3, profondeurM };
+        return { points: pts, color, sessionId: s.id, volumeM3: s.volumeM3, profondeurM };
       });
   }, [sessions, chantiers, selectedChantierId, machineParams.vitesseMaxKmh]);
 

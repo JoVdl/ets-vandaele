@@ -168,7 +168,7 @@ function dragueIcon(bearing: number, color: string) {
 function AutoCenter({ pos, follow }: { pos: [number, number] | null; follow: boolean }) {
   const map = useMap();
   useEffect(() => {
-    if (follow && pos) map.setView(pos, map.getZoom(), { animate: true });
+    if (follow && pos) map.panTo(pos, { animate: true });
   }, [pos, follow, map]);
   return null;
 }
