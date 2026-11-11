@@ -13,7 +13,7 @@ import { useChantiers } from '../../hooks/useChantiers';
 import { CHANTIER_TYPES } from '../../lib/constants';
 import {
   areaM2, formatArea, formatDistance, formatDuration, centroid,
-  avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, stripAreaM2, stripVolumeM3WithSegments, filterGpsTrack,
+  avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, orientedBoundingBoxM2, filterGpsTrack,
 } from '../../lib/geo';
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
@@ -348,11 +348,12 @@ export default function SuiviView({ role, onLogout }: Props) {
     return filterGpsTrack(gpsPoints, machineParams.vitesseMaxKmh, speedTol, driftM);
   }, [gpsPoints, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, chantiers, selectedChantierId]);
 
+  // ── OBB: principal-axis bounding rectangle of filtered GPS cloud ────────
+  const obb = useMemo(() => orientedBoundingBoxM2(filteredPoints), [filteredPoints]);
+
   // ── Computed metrics ───────────────────────────────────────────────────
   const distM    = totalDistanceM(filteredPoints);
-  const areaM    = machineParams.largeurTravailM > 0
-    ? stripAreaM2(filteredPoints, machineParams.largeurTravailM, machineParams.recouvrementPct)
-    : 0;
+  const areaM    = obb?.areaM2 ?? 0;
   const speedNow = filteredPoints.length >= 2
     ? instantSpeedKmh(filteredPoints[filteredPoints.length - 2], filteredPoints[filteredPoints.length - 1])
     : 0;
@@ -487,10 +488,8 @@ export default function SuiviView({ role, onLogout }: Props) {
   // ── Dragage: volume and débit (papillonnage: depth-weighted per GPS segment) ─
   const profondeur = machineParams.profondeurDragageM;
   const nbPasses   = Math.max(1, machineParams.nbPassesParPosition ?? 1);
-  const volumeM3   = isDragage && profondeur > 0
-    ? (depthSegments.length > 0
-        ? stripVolumeM3WithSegments(filteredPoints, machineParams.largeurTravailM, machineParams.recouvrementPct, depthSegments)
-        : areaM * profondeur * nbPasses)
+  const volumeM3   = isDragage && profondeur > 0 && obb
+    ? obb.areaM2 * profondeur * nbPasses
     : 0;
   const debitM3h   = netElapsedH > 0 && volumeM3 > 0 ? volumeM3 / netElapsedH : 0;
 
@@ -777,7 +776,7 @@ export default function SuiviView({ role, onLogout }: Props) {
       gpsPoints,
       notes:                '',
       // Pass pre-computed values so the save uses the same formula as the live display
-      // (stripAreaM2 on filtered points, not shoelace on raw gpsPoints)
+      // (OBB area on filtered points, not shoelace on raw gpsPoints)
       surfaceCoveredM2:     areaM > 0 ? areaM : undefined,
       rendementM2h:         rendement > 0 ? rendement : undefined,
       // Dragage fields

@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Polyline, Polygon, Marker, Tooltip, useMap, us
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { GpsPoint } from '../../types/suivi';
-import { areaM2, formatArea, centroid, swathRects, smoothPoints, distanceM, convexHull } from '../../lib/geo';
+import { areaM2, formatArea, centroid, smoothPoints, distanceM, convexHull, orientedBoundingBoxM2 } from '../../lib/geo';
 import type { LiveSession } from '../../hooks/useLiveSessions';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -279,42 +279,26 @@ export default function SuiviMap({
     [gpsPoints, smoothAlpha],
   );
 
-  const rects = useMemo(
-    () => swathRects(smoothed, largeurM / 2),
-    [smoothed, largeurM],
-  );
-
   const trail = useMemo(
     () => smoothed.map(p => [p.lat, p.lng] as [number, number]),
     [smoothed],
   );
 
-  // Historical trails from past sessions — hull for drague, swath rects + hull for surface work
+  // Historical trails from past sessions — OBB rectangle for all, polyline fallback
   const historicalRendered = useMemo(() => historicalTrails.map(({ points, color, sessionId, volumeM3: vol, profondeurM: depth }) => {
-    const sm = smoothPoints(points, smoothAlpha);
-    if (isDragage) {
-      const hull = convexHull(sm.map(p => ({ lat: p.lat, lng: p.lng })));
-      if (hull.length >= 3) {
-        const hullArea = areaM2(hull);
-        return { kind: 'hull' as const, color, sessionId, data: hull.map(p => [p.lat, p.lng] as [number, number]), hullArea, vol, depth: depth ?? 0, hullData: null };
-      }
-      return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0, hullData: null };
+    const sm  = smoothPoints(points, smoothAlpha);
+    const obb = orientedBoundingBoxM2(sm);
+    if (obb) {
+      return { kind: 'obb' as const, color, sessionId, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: depth ?? 0 };
     }
-    // Non-drague: compute hull so it can be drawn alongside the line/rects
-    const rawHull = convexHull(sm.map(p => ({ lat: p.lat, lng: p.lng })));
-    const hullData = rawHull.length >= 3
-      ? { positions: rawHull.map(p => [p.lat, p.lng] as [number, number]), area: areaM2(rawHull) }
-      : null;
-    if (largeurM > 0) return { kind: 'rects' as const, color, sessionId, data: swathRects(sm, largeurM / 2), hullArea: hullData?.area ?? 0, vol, depth: depth ?? 0, hullData };
-    return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: hullData?.area ?? 0, vol, depth: depth ?? 0, hullData };
-  }), [historicalTrails, smoothAlpha, largeurM, isDragage]);
+    return { kind: 'line' as const, color, sessionId, data: sm.map(p => [p.lat, p.lng] as [number, number]), hullArea: 0, vol, depth: depth ?? 0 };
+  }), [historicalTrails, smoothAlpha]);
 
-  // Convex hull of current drague trail — shows the dredged zone as a filled polygon
-  const hullPositions = useMemo(() => {
-    if (!isDragage || smoothed.length < 3) return null;
-    const hull = convexHull(smoothed.map(p => ({ lat: p.lat, lng: p.lng })));
-    return hull.length >= 3 ? hull.map(p => [p.lat, p.lng] as [number, number]) : null;
-  }, [isDragage, smoothed]);
+  // OBB of current GPS cloud — clean rectangle for display of active work zone
+  const obbResult = useMemo(() => {
+    if (smoothed.length < 4) return null;
+    return orientedBoundingBoxM2(smoothed);
+  }, [smoothed]);
 
   // ── View mode (Sessions / Total hull / Depth gradient) ───────────────
   const [viewMode, setViewMode] = useState<'sessions' | 'total' | 'depth'>('sessions');
@@ -326,8 +310,9 @@ export default function SuiviMap({
 
   const totalHullData = useMemo(() => {
     if (!isDragage) return null;
+    // Use OBB corners (already clean rectangles) → convexHull gives the combined outline
     const allPts = historicalRendered
-      .filter(h => h.kind === 'hull' && h.sessionId) // only the selected chantier's sessions
+      .filter(h => h.kind === 'obb')
       .flatMap(h => (h.data as [number, number][]).map(([lat, lng]) => ({ lat, lng })));
     if (allPts.length < 3) return null;
     const hull = convexHull(allPts);
@@ -337,10 +322,7 @@ export default function SuiviMap({
     return { positions: hull.map(p => [p.lat, p.lng] as [number, number]), totalArea, totalVol };
   }, [isDragage, historicalRendered, historicalTrails]);
 
-  const activeHullArea = useMemo(() => {
-    if (!hullPositions || hullPositions.length < 3) return 0;
-    return areaM2(hullPositions.map(([lat, lng]) => ({ lat, lng })));
-  }, [hullPositions]);
+  const activeObbArea = obbResult?.areaM2 ?? 0;
 
   // Bearing of the machine: angle from the last two smoothed GPS points
   const lastBearingRef = useRef(0);
@@ -393,52 +375,15 @@ export default function SuiviMap({
           ];
         })}
 
-        {/* Historical trails from past sessions */}
+        {/* Historical trails from past sessions — OBB rectangles or polyline fallback */}
         {viewMode !== 'total' && historicalRendered.map((h, si) => {
           const clickable = !!(h.sessionId && onHistoricalTrailClick);
           const handlers = clickable
             ? { click: (e: L.LeafletMouseEvent) => { L.DomEvent.stopPropagation(e); onHistoricalTrailClick!(h.sessionId!); } }
             : undefined;
-          if (h.kind === 'rects') {
-            return [
-              ...h.data.map((rect, i) => (
-                <Polygon
-                  key={`h-${si}-r-${i}`}
-                  positions={rect}
-                  color={h.color}
-                  fillColor={h.color}
-                  fillOpacity={clickable ? 0.55 : 0.4}
-                  weight={clickable ? 1 : 0}
-                  stroke={clickable}
-                  eventHandlers={handlers}
-                  className={clickable ? 'cursor-pointer' : undefined}
-                />
-              )),
-              h.hullData && (
-                <Polygon
-                  key={`h-${si}-hull`}
-                  positions={h.hullData.positions}
-                  color={h.color}
-                  fillColor={h.color}
-                  fillOpacity={0.10}
-                  weight={2}
-                  opacity={0.70}
-                  dashArray="6 4"
-                  eventHandlers={handlers}
-                  className={clickable ? 'cursor-pointer' : undefined}
-                >
-                  {h.hullData.area >= 50 && (
-                    <Tooltip permanent direction="center" offset={[0, 0]} className="hull-label">
-                      {formatArea(h.hullData.area)}
-                    </Tooltip>
-                  )}
-                </Polygon>
-              ),
-            ].filter(Boolean);
-          }
-          if (h.kind === 'hull') {
+          if (h.kind === 'obb') {
             const hc = viewMode === 'depth' ? depthColor(h.depth, maxDepthM) : h.color;
-            return h.data.length >= 3 && (
+            return (
               <Polygon
                 key={`h-${si}`}
                 positions={h.data}
@@ -462,58 +407,36 @@ export default function SuiviMap({
               </Polygon>
             );
           }
-          // kind === 'line': render both the trace and the hull polygon
-          return [
-            h.data.length > 1 && (
-              <Polyline
-                key={`h-${si}-line`}
-                positions={h.data}
-                color={h.color}
-                weight={clickable ? 5 : 3}
-                opacity={clickable ? 0.75 : 0.5}
-                eventHandlers={handlers}
-                className={clickable ? 'cursor-pointer' : undefined}
-              />
-            ),
-            h.hullData && (
-              <Polygon
-                key={`h-${si}-hull`}
-                positions={h.hullData.positions}
-                color={h.color}
-                fillColor={h.color}
-                fillOpacity={0.10}
-                weight={2}
-                opacity={0.70}
-                dashArray="6 4"
-                eventHandlers={handlers}
-                className={clickable ? 'cursor-pointer' : undefined}
-              >
-                {h.hullData.area >= 50 && (
-                  <Tooltip permanent direction="center" offset={[0, 0]} className="hull-label">
-                    {formatArea(h.hullData.area)}
-                  </Tooltip>
-                )}
-              </Polygon>
-            ),
-          ].filter(Boolean);
+          // kind === 'line': fallback polyline when OBB cannot be computed (< 4 pts)
+          return h.data.length > 1 && (
+            <Polyline
+              key={`h-${si}-line`}
+              positions={h.data as [number, number][]}
+              color={h.color}
+              weight={clickable ? 5 : 3}
+              opacity={clickable ? 0.75 : 0.5}
+              eventHandlers={handlers}
+              className={clickable ? 'cursor-pointer' : undefined}
+            />
+          );
         })}
 
-        {/* Work trail — convex hull (filled zone) for drague, swath rectangles for surface work */}
+        {/* Work trail — OBB rectangle (clean zone) + dashed GPS trace */}
         {isDragage
           ? <>
-              {hullPositions && (
+              {obbResult && (
                 <Polygon
-                  positions={hullPositions}
+                  positions={obbResult.polygon.map(p => [p.lat, p.lng] as [number, number])}
                   color={workColor}
                   fillColor={workColor}
                   fillOpacity={0.35}
                   weight={2}
                   opacity={0.80}
                 >
-                  {activeHullArea >= 50 && (
+                  {activeObbArea >= 50 && (
                     <Tooltip permanent direction="center" offset={[0, 0]} className="hull-label">
                       <div style={{ textAlign: 'center', lineHeight: 1.4 }}>
-                        {formatArea(activeHullArea)}
+                        {formatArea(activeObbArea)}
                         {(currentVolumeM3 ?? 0) > 0 && <><br />{currentVolumeM3!.toFixed(1)} m³</>}
                       </div>
                     </Tooltip>
@@ -524,18 +447,26 @@ export default function SuiviMap({
                 <Polyline positions={trail} color={workColor} weight={1.5} opacity={0.40} dashArray="3 6" />
               )}
             </>
-          : largeurM > 0
-            ? rects.map((rect, i) => (
+          : obbResult && largeurM > 0
+            ? <>
                 <Polygon
-                  key={i}
-                  positions={rect}
+                  positions={obbResult.polygon.map(p => [p.lat, p.lng] as [number, number])}
                   color={workColor}
                   fillColor={workColor}
-                  fillOpacity={0.55}
-                  weight={0}
-                  stroke={false}
-                />
-              ))
+                  fillOpacity={0.45}
+                  weight={1.5}
+                  opacity={0.75}
+                >
+                  {activeObbArea >= 50 && (
+                    <Tooltip permanent direction="center" offset={[0, 0]} className="hull-label">
+                      {formatArea(activeObbArea)}
+                    </Tooltip>
+                  )}
+                </Polygon>
+                {trail.length > 1 && (
+                  <Polyline positions={trail} color={workColor} weight={1.5} opacity={0.35} dashArray="3 6" />
+                )}
+              </>
             : trail.length > 1 && (
                 <Polyline positions={trail} color={workColor} weight={4} opacity={0.85} />
               )

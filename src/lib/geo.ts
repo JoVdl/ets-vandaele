@@ -342,6 +342,91 @@ export function centroid(points: { lat: number; lng: number }[]): { lat: number;
   };
 }
 
+/**
+ * Oriented Bounding Box via 2-D PCA.
+ *
+ * Finds the principal travel axis of a GPS track, projects all points onto
+ * (along-track, cross-track) coordinates, and builds a clean rectangle:
+ *   - along-track: full range  [min … max]  (start-to-end extent)
+ *   - cross-track: percentile  [5 … 95]     (working width, outliers clipped)
+ *
+ * Returns the 4-corner polygon in lat/lng + widthM + lengthM + areaM2.
+ * Returns null for degenerate clouds (< 4 points or zero extent).
+ */
+export function orientedBoundingBoxM2(
+  points: { lat: number; lng: number }[],
+  crossPctLow  = 5,
+  crossPctHigh = 95,
+): {
+  polygon: { lat: number; lng: number }[];
+  widthM:  number;
+  lengthM: number;
+  areaM2:  number;
+} | null {
+  if (points.length < 4) return null;
+
+  // ── 1. Local flat-earth projection (metres) centred on the cloud centroid ──
+  const lat0   = points.reduce((s, p) => s + p.lat, 0) / points.length;
+  const lng0   = points.reduce((s, p) => s + p.lng, 0) / points.length;
+  const lat0R  = lat0 * Math.PI / 180;
+  const cosLat = Math.cos(lat0R);
+  const D2R    = Math.PI / 180;
+
+  const xy = points.map(p => ({
+    x: (p.lng - lng0) * D2R * cosLat * R,  // east  (metres)
+    y: (p.lat - lat0) * D2R * R,            // north (metres)
+  }));
+
+  // ── 2. 2×2 covariance → principal axis (direction of max variance) ─────────
+  let sxx = 0, sxy = 0, syy = 0;
+  for (const p of xy) { sxx += p.x * p.x; sxy += p.x * p.y; syy += p.y * p.y; }
+
+  // Angle of dominant eigenvector
+  const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const ux = Math.cos(angle), uy = Math.sin(angle); // along-track unit vector
+  const vx = -uy,             vy =  ux;              // cross-track unit vector
+
+  // ── 3. Project all points ──────────────────────────────────────────────────
+  const us: number[] = [];
+  const vs: number[] = [];
+  for (const p of xy) {
+    us.push(p.x * ux + p.y * uy);
+    vs.push(p.x * vx + p.y * vy);
+  }
+
+  // Along-track: full extent
+  let uMin = Infinity, uMax = -Infinity;
+  for (const u of us) { if (u < uMin) uMin = u; if (u > uMax) uMax = u; }
+
+  // Cross-track: percentile range to clip GPS outliers
+  const sortedV = vs.slice().sort((a, b) => a - b);
+  const n       = sortedV.length;
+  const vMin    = sortedV[Math.floor(crossPctLow  / 100 * (n - 1))];
+  const vMax    = sortedV[Math.ceil( crossPctHigh / 100 * (n - 1))];
+
+  const lengthM = uMax - uMin;
+  const widthM  = vMax - vMin;
+  if (lengthM < 0.5 || widthM < 0.1) return null;
+
+  // ── 4. Build the 4-corner polygon back in lat/lng ─────────────────────────
+  const toLatLng = (u: number, v: number) => ({
+    lat: lat0 + ((u * uy + v * vy) / R) * (180 / Math.PI),
+    lng: lng0 + ((u * ux + v * vx) / (R * cosLat)) * (180 / Math.PI),
+  });
+
+  return {
+    polygon: [
+      toLatLng(uMin, vMin),
+      toLatLng(uMax, vMin),
+      toLatLng(uMax, vMax),
+      toLatLng(uMin, vMax),
+    ],
+    widthM,
+    lengthM,
+    areaM2: lengthM * widthM,
+  };
+}
+
 export function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
