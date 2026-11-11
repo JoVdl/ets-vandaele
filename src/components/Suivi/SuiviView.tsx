@@ -66,6 +66,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [autoPausedByZone, setAutoPausedByZone] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [expandedHistoDays, setExpandedHistoDays] = useState<Set<string>>(new Set());
+  const [expandedChantierDays, setExpandedChantierDays] = useState<Set<string>>(new Set());
   const [showChantierDetail, setShowChantierDetail] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [salarieName, setSalarieName] = useState('Hugo');
@@ -1575,90 +1576,192 @@ export default function SuiviView({ role, onLogout }: Props) {
                 });
               })()}
 
-              {/* ── Sessions passées ── */}
-              {chantierDashStats && (
-                <>
-                  <p className="text-slate-500 text-[10px] uppercase tracking-wide px-1">
-                    {chantierDashStats.sessions.length === 0 ? 'Aucune session passée' : `${chantierDashStats.sessions.length} session${chantierDashStats.sessions.length > 1 ? 's' : ''} passée${chantierDashStats.sessions.length > 1 ? 's' : ''}`}
-                  </p>
-                  <div className="space-y-2">
-                    {chantierDashStats.sessions.map(s => {
-                      const incMin = s.incidents?.reduce((a, i) => a + i.dureeMinutes, 0) ?? 0;
-                      return (
-                        <div key={s.id} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden">
-                          <button onClick={() => setSelectedSession(s)}
-                            className="w-full text-left p-3 hover:bg-white/[0.05] transition-colors active:scale-[0.99]">
-                            <div className="flex items-start justify-between gap-2 mb-2">
-                              <div className="min-w-0 flex-1">
-                                <p className="text-slate-300 text-xs font-semibold">
-                                  {format(new Date(s.dateDebut), 'dd MMM yyyy – HH:mm', { locale: fr })}
-                                </p>
-                                <p className="text-slate-500 text-[10px] mt-0.5">
-                                  {s.operateur === 'patron' ? 'Patron' : salarieName}
-                                  {s.profondeurDragageM != null ? ` · ${s.profondeurDragageM.toFixed(2)} m prof.` : ''}
-                                </p>
-                              </div>
-                              {s.pendingSync && (
-                                <span className="flex-shrink-0 text-[10px] px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">Hors-ligne</span>
-                              )}
-                            </div>
+              {/* ── Sessions passées groupées par jour ── */}
+              {chantierDashStats && (() => {
+                const sortedSess = [...chantierDashStats.sessions].sort(
+                  (a, b) => new Date(b.dateDebut).getTime() - new Date(a.dateDebut).getTime(),
+                );
+                const byChanDay = new Map<string, typeof sortedSess>();
+                for (const s of sortedSess) {
+                  const key = s.dateDebut.slice(0, 10);
+                  if (!byChanDay.has(key)) byChanDay.set(key, []);
+                  byChanDay.get(key)!.push(s);
+                }
+                const chanDayKeys = [...byChanDay.keys()];
 
-                            {isDragage ? (
-                              <div className="grid grid-cols-4 gap-1">
-                                <SmallStat label="Durée" value={formatDuration(s.dureeMinutes)} />
-                                <SmallStat label="Perdu" value={incMin > 0 ? `${incMin} min` : '—'} />
-                                <SmallStat label="Volume" value={s.volumeM3 != null && s.volumeM3 > 0 ? `${s.volumeM3.toFixed(1)} m³` : '—'} />
-                                <SmallStat label="Rend." value={s.debitM3h != null && s.debitM3h > 0 ? `${s.debitM3h.toFixed(1)}` : '—'} sub="m³/h" />
-                              </div>
-                            ) : (
-                              <div className="grid grid-cols-4 gap-1">
-                                <SmallStat label="Durée" value={formatDuration(s.dureeMinutes)} />
-                                <SmallStat label="Surface" value={formatArea(s.surfaceCoveredM2)} />
-                                <SmallStat label="Rend." value={`${Math.round(s.rendementM2h)}`} sub="m²/h" />
-                                <SmallStat label="Vit. moy" value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)}` : '—'} sub="km/h" />
-                              </div>
-                            )}
+                if (chanDayKeys.length === 0) {
+                  return (
+                    <p className="text-slate-500 text-[10px] uppercase tracking-wide px-1">
+                      Aucune session passée
+                    </p>
+                  );
+                }
 
-                            {s.incidents && s.incidents.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {s.incidents.map((inc, i) => (
-                                  <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] border border-amber-700/40">
-                                    <AlertTriangle size={8} /> {INCIDENT_LABELS[inc.type] ?? inc.type} · {inc.dureeMinutes} min
+                return (
+                  <>
+                    <p className="text-slate-500 text-[10px] uppercase tracking-wide px-1">
+                      {chantierDashStats.sessions.length} session{chantierDashStats.sessions.length > 1 ? 's' : ''} passée{chantierDashStats.sessions.length > 1 ? 's' : ''}
+                    </p>
+                    <div className="space-y-2">
+                      {chanDayKeys.map((dayKey, dayIdx) => {
+                        const daySessions  = byChanDay.get(dayKey)!;
+                        const dayTotal     = daySessions.reduce((a, s) => a + s.dureeMinutes, 0);
+                        const dayVolume    = daySessions.reduce((a, s) => a + (s.volumeM3 ?? 0), 0);
+                        const daySurface   = daySessions.reduce((a, s) => a + s.surfaceCoveredM2, 0);
+                        const dayIncCount  = daySessions.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
+                        const dayIncMin    = daySessions.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
+                        const hasPending   = daySessions.some(s => s.pendingSync);
+                        const firstS       = daySessions[daySessions.length - 1];
+                        const lastS        = daySessions[0];
+                        const isExpanded   = expandedChantierDays.has(dayKey) || (dayIdx === 0 && !expandedChantierDays.has('__collapsed_' + dayKey));
+
+                        function toggleChanDay() {
+                          setExpandedChantierDays(prev => {
+                            const next = new Set(prev);
+                            if (isExpanded) {
+                              next.add('__collapsed_' + dayKey);
+                              next.delete(dayKey);
+                            } else {
+                              next.delete('__collapsed_' + dayKey);
+                              next.add(dayKey);
+                            }
+                            return next;
+                          });
+                        }
+
+                        return (
+                          <div key={dayKey} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden">
+                            {/* Day header */}
+                            <button
+                              onClick={toggleChanDay}
+                              className="w-full flex items-center gap-3 px-3 py-3 hover:bg-white/[0.04] active:bg-white/[0.07] transition-colors text-left"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-white text-xs font-bold capitalize">
+                                  {format(new Date(dayKey), 'EEEE d MMMM', { locale: fr })}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  <span className="text-slate-400 text-[10px] tabular-nums">
+                                    {format(new Date(firstS.dateDebut), 'HH:mm')}
+                                    {' → '}
+                                    {lastS.dateFin ? format(new Date(lastS.dateFin), 'HH:mm') : '—'}
                                   </span>
-                                ))}
+                                  <span className="text-slate-600 text-[10px]">·</span>
+                                  <span className="text-slate-500 text-[10px]">
+                                    {daySessions.length} session{daySessions.length > 1 ? 's' : ''}
+                                  </span>
+                                  {hasPending && (
+                                    <span className="text-[9px] px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">Hors-ligne</span>
+                                  )}
+                                  {dayIncCount > 0 && (
+                                    <span className="flex items-center gap-0.5 text-amber-400 text-[10px]">
+                                      <AlertTriangle size={9} />
+                                      {dayIncCount} incident{dayIncCount > 1 ? 's' : ''} · {dayIncMin} min
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            )}
-                            {isDragage && <SessionTimeline session={s} />}
-                            {isDragage && incMin > 0 && (
-                              <div className="flex items-center gap-1.5 mt-1.5">
-                                <AlertTriangle size={10} className="text-amber-400 flex-shrink-0" />
-                                <span className="text-amber-400 text-[10px]">
-                                  {s.incidents!.length} incident{s.incidents!.length > 1 ? 's' : ''} · {incMin} min perdues
-                                </span>
+                              <div className="text-right flex-shrink-0">
+                                <p className="text-white text-sm font-bold tabular-nums">{formatDuration(dayTotal)}</p>
+                                {isDragage && dayVolume > 0 && (
+                                  <p className="text-cyan-400 text-[10px] tabular-nums">{dayVolume.toFixed(1)} m³</p>
+                                )}
+                                {!isDragage && daySurface > 0 && (
+                                  <p className="text-green-400 text-[10px] tabular-nums">{formatArea(daySurface)}</p>
+                                )}
                               </div>
-                            )}
-                          </button>
-
-                          {/* Delete row */}
-                          {confirmDeleteId === s.id ? (
-                            <div className="flex items-center justify-between gap-2 px-3 py-2 bg-red-950/60 border-t border-red-800/40">
-                              <span className="text-red-400 text-xs">Supprimer cette session ?</span>
-                              <div className="flex gap-2">
-                                <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-1 rounded-lg bg-white/[0.08] text-slate-300 text-xs">Annuler</button>
-                                <button onClick={async () => { await deleteSession(s.id); setConfirmDeleteId(null); }} className="px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold">Confirmer</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <button onClick={() => setConfirmDeleteId(s.id)} className="w-full flex items-center justify-center gap-1.5 py-1.5 text-slate-600 hover:text-red-400 text-xs border-t border-white/[0.05] transition-colors">
-                              <Trash2 size={11} /> Supprimer
+                              <ChevronDown
+                                size={15}
+                                className={`text-slate-500 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                              />
                             </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
+
+                            {/* Expanded: individual sessions */}
+                            {isExpanded && (
+                              <div className="border-t border-white/[0.06] divide-y divide-white/[0.04]">
+                                {daySessions.map(s => {
+                                  const incMin = s.incidents?.reduce((a, i) => a + i.dureeMinutes, 0) ?? 0;
+                                  return (
+                                    <div key={s.id}>
+                                      <button onClick={() => setSelectedSession(s)}
+                                        className="w-full text-left px-3 py-3 hover:bg-white/[0.04] transition-colors active:scale-[0.99]">
+                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-slate-300 text-xs font-semibold tabular-nums">
+                                              {format(new Date(s.dateDebut), 'HH:mm')}
+                                              {s.dateFin ? ` → ${format(new Date(s.dateFin), 'HH:mm')}` : ''}
+                                            </p>
+                                            <p className="text-slate-500 text-[10px] mt-0.5">
+                                              {s.operateur === 'patron' ? 'Patron' : salarieName}
+                                              {s.profondeurDragageM != null ? ` · ${s.profondeurDragageM.toFixed(2)} m prof.` : ''}
+                                            </p>
+                                          </div>
+                                          {s.pendingSync && (
+                                            <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">Hors-ligne</span>
+                                          )}
+                                        </div>
+
+                                        {isDragage ? (
+                                          <div className="grid grid-cols-4 gap-1">
+                                            <SmallStat label="Durée" value={formatDuration(s.dureeMinutes)} />
+                                            <SmallStat label="Perdu" value={incMin > 0 ? `${incMin} min` : '—'} />
+                                            <SmallStat label="Volume" value={s.volumeM3 != null && s.volumeM3 > 0 ? `${s.volumeM3.toFixed(1)} m³` : '—'} />
+                                            <SmallStat label="Rend." value={s.debitM3h != null && s.debitM3h > 0 ? `${s.debitM3h.toFixed(1)}` : '—'} sub="m³/h" />
+                                          </div>
+                                        ) : (
+                                          <div className="grid grid-cols-4 gap-1">
+                                            <SmallStat label="Durée" value={formatDuration(s.dureeMinutes)} />
+                                            <SmallStat label="Surface" value={formatArea(s.surfaceCoveredM2)} />
+                                            <SmallStat label="Rend." value={`${Math.round(s.rendementM2h)}`} sub="m²/h" />
+                                            <SmallStat label="Vit. moy" value={s.vitesseMoyenneKmh > 0 ? `${s.vitesseMoyenneKmh.toFixed(1)}` : '—'} sub="km/h" />
+                                          </div>
+                                        )}
+
+                                        {s.incidents && s.incidents.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mt-2">
+                                            {s.incidents.map((inc, i) => (
+                                              <span key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] border border-amber-700/40">
+                                                <AlertTriangle size={8} /> {INCIDENT_LABELS[inc.type] ?? inc.type} · {inc.dureeMinutes} min
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {isDragage && <SessionTimeline session={s} />}
+                                        {isDragage && incMin > 0 && (
+                                          <div className="flex items-center gap-1.5 mt-1.5">
+                                            <AlertTriangle size={10} className="text-amber-400 flex-shrink-0" />
+                                            <span className="text-amber-400 text-[10px]">
+                                              {s.incidents!.length} incident{s.incidents!.length > 1 ? 's' : ''} · {incMin} min perdues
+                                            </span>
+                                          </div>
+                                        )}
+                                      </button>
+
+                                      {confirmDeleteId === s.id ? (
+                                        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-red-950/60 border-t border-red-800/40">
+                                          <span className="text-red-400 text-xs">Supprimer cette session ?</span>
+                                          <div className="flex gap-2">
+                                            <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-1 rounded-lg bg-white/[0.08] text-slate-300 text-xs">Annuler</button>
+                                            <button onClick={async () => { await deleteSession(s.id); setConfirmDeleteId(null); }} className="px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold">Confirmer</button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <button onClick={() => setConfirmDeleteId(s.id)} className="w-full flex items-center justify-center gap-1.5 py-1.5 text-slate-600 hover:text-red-400 text-xs border-t border-white/[0.05] transition-colors">
+                                          <Trash2 size={11} /> Supprimer
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           ) : (
             /* ── All sessions list grouped by day ── */
