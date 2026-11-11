@@ -165,6 +165,26 @@ function dragueIcon(bearing: number, color: string) {
   });
 }
 
+/** Fit the map to cover all historical OBB polygons on first load (only when no active session). */
+function FitWorkArea({ data, active }: { data: [number, number][][]; active: boolean }) {
+  const map = useMap();
+  const fittedRef = useRef(false);
+  useEffect(() => {
+    if (active || fittedRef.current || data.length === 0) return;
+    const allPts = data.flat();
+    if (allPts.length < 2) return;
+    const lats = allPts.map(p => p[0]);
+    const lngs = allPts.map(p => p[1]);
+    const bounds: [[number, number], [number, number]] = [
+      [Math.min(...lats), Math.min(...lngs)],
+      [Math.max(...lats), Math.max(...lngs)],
+    ];
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 19, animate: false });
+    fittedRef.current = true;
+  }, [data, active, map]);
+  return null;
+}
+
 function AutoCenter({ pos, follow }: { pos: [number, number] | null; follow: boolean }) {
   const map = useMap();
   useEffect(() => {
@@ -359,6 +379,10 @@ export default function SuiviMap({
 
         <AutoCenter pos={currentPos ? [currentPos.lat, currentPos.lng] : null} follow={followGps} />
         <JumpTo pos={jumpToPos} />
+        <FitWorkArea
+          data={historicalRendered.filter(h => h.kind === 'obb').map(h => h.data as [number,number][])}
+          active={sessionActive}
+        />
         <DrawHandler active={drawMode} onPoint={onDrawPoint} onDrag={onDisableFollow} />
 
         {/* Chantier zones */}

@@ -494,6 +494,7 @@ export function sessionOBBsAligned(
     // Each strip is exactly largeurM wide and assigned in cross-track order,
     // so adjacent strips touch without overlap regardless of GPS scatter.
     const valid = infos.filter((s): s is SessionInfo => s !== null);
+    if (valid.length === 0) return sessions.map(() => null);
     valid.sort((a, b) => a.vMed - b.vMed);
 
     // Centre the group at the median-of-medians so it sits over the work area
