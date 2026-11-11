@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, RefreshCw, Camera, WifiOff } from 'lucide-react';
 
-const SNAPSHOT_URL =
-  'https://europe-west1-ets-vandaele.cloudfunctions.net/cameraSnapshot';
+const SNAPSHOT_URL = 'https://camerasnapshot-fh3lbsjeka-ew.a.run.app';
 
 type State = 'loading' | 'ok' | 'error';
 
