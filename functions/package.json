@@ -1,7 +1,9 @@
 {
   "name": "functions",
   "description": "Cloud Functions — ETS Vandaele",
-  "engines": { "node": "20" },
+  "engines": {
+    "node": "20"
+  },
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc"
@@ -11,6 +13,7 @@
     "firebase-functions": "^6.0.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "typescript": "^5.0.0"
   },
   "private": true

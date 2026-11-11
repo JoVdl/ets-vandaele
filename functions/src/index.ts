@@ -1,5 +1,94 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { onRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
+
+// ── Reolink camera snapshot proxy ───────────────────────────────────────────
+const REOLINK_EMAIL    = defineSecret('REOLINK_EMAIL');
+const REOLINK_PASSWORD = defineSecret('REOLINK_PASSWORD');
+const REOLINK_CAM_USER = defineSecret('REOLINK_CAM_USER');
+const REOLINK_CAM_PASS = defineSecret('REOLINK_CAM_PASS');
+
+const CAMERA_UID  = '95270000SOYFJBFR';
+const CORS_ORIGIN = 'https://jovdl.github.io';
+
+interface ReolinkDevice {
+  uid: string;
+  name?: string;
+  publicIp?: string;
+  localIp?: string;
+  httpPort?: number;
+  online?: boolean;
+}
+
+export const cameraSnapshot = onRequest(
+  {
+    region: 'europe-west1',
+    secrets: [REOLINK_EMAIL, REOLINK_PASSWORD, REOLINK_CAM_USER, REOLINK_CAM_PASS],
+    cors: [CORS_ORIGIN],
+    timeoutSeconds: 20,
+  },
+  async (req, res) => {
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+    try {
+      // 1. Login to Reolink cloud
+      const loginResp = await fetch('https://api.reolink.com/api/Login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: { userName: REOLINK_EMAIL.value(), password: REOLINK_PASSWORD.value() } }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const loginJson = await loginResp.json() as { code: number; data?: { token: string } };
+      if (loginJson.code !== 0 || !loginJson.data?.token) {
+        res.status(503).json({ error: 'Reolink login failed', code: loginJson.code });
+        return;
+      }
+      const token = loginJson.data.token;
+
+      // 2. Get device list to find camera's current IP
+      const devResp = await fetch(`https://api.reolink.com/api/GetDevList?token=${token}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      const devJson = await devResp.json() as { code: number; data?: { devices?: ReolinkDevice[] } };
+
+      const cam = devJson.data?.devices?.find(d => d.uid === CAMERA_UID);
+      if (!cam) {
+        res.status(503).json({ error: 'Camera not found in Reolink account', uid: CAMERA_UID });
+        return;
+      }
+      if (cam.online === false) {
+        res.status(503).json({ error: 'camera_offline' });
+        return;
+      }
+
+      const camIp   = cam.publicIp;
+      const camPort = cam.httpPort ?? 80;
+      if (!camIp) {
+        res.status(503).json({ error: 'Camera IP unavailable from cloud' });
+        return;
+      }
+
+      // 3. Fetch JPEG snapshot directly from camera HTTP API
+      const rand    = Math.random().toString(36).substring(2, 10);
+      const snapUrl = `http://${camIp}:${camPort}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=${rand}` +
+        `&user=${encodeURIComponent(REOLINK_CAM_USER.value())}` +
+        `&password=${encodeURIComponent(REOLINK_CAM_PASS.value())}`;
+
+      const snapResp = await fetch(snapUrl, { signal: AbortSignal.timeout(8000) });
+      if (!snapResp.ok) {
+        res.status(503).json({ error: `Camera HTTP ${snapResp.status}` });
+        return;
+      }
+
+      const imgBuf = await snapResp.arrayBuffer();
+      res.setHeader('Content-Type', snapResp.headers.get('content-type') ?? 'image/jpeg');
+      res.setHeader('Cache-Control', 'no-cache, no-store');
+      res.send(Buffer.from(imgBuf));
+    } catch (err) {
+      res.status(503).json({ error: String(err) });
+    }
+  },
+);
 
 admin.initializeApp();
 

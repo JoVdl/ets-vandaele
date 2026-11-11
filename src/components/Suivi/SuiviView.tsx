@@ -3,7 +3,7 @@ import {
   Play, Pause, Square, MapPin, Wifi, WifiOff, LocateFixed,
   ChevronUp, ChevronDown, History, Settings, Ruler, Trash2, Check, X, LogOut,
   BarChart2, Home, Navigation, Satellite, Map as MapIcon, Layers, SlidersHorizontal, Radio, Wrench,
-  AlertTriangle, CalendarDays,
+  AlertTriangle, CalendarDays, Camera,
 } from 'lucide-react';
 import SuiviMap, { type ChantierZone } from './SuiviMap';
 import SessionDetailView from './SessionDetailView';
@@ -34,6 +34,7 @@ import type { Chantier } from '../../types';
 import { INCIDENT_LABELS, HIST_PALETTE, SessionTimeline, GlobalTimeline } from './incidentUtils';
 import ChantierDetailView from './ChantierDetailView';
 import CalendarView from './CalendarView';
+import CameraView from './CameraView';
 
 interface Props {
   role: PinRole;
@@ -65,6 +66,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [autoPausedByZone, setAutoPausedByZone] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showChantierDetail, setShowChantierDetail] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
   const [salarieName, setSalarieName] = useState('Hugo');
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [sessionIncidents, setSessionIncidents]   = useState<SuiviIncident[]>([]);
@@ -931,6 +933,11 @@ export default function SuiviView({ role, onLogout }: Props) {
           <button onClick={() => setView(v => v === 'settings' ? 'map' : 'settings')}
             className={`p-1.5 rounded-lg ${view === 'settings' ? 'bg-slate-700 text-white' : 'text-slate-400'}`}>
             <Settings size={16} />
+          </button>
+        )}
+        {role === 'patron' && (
+          <button onClick={() => setShowCamera(true)} className="p-1.5 rounded-lg text-slate-400 hover:text-white active:scale-95 transition-all" title="Caméra chantier">
+            <Camera size={16} />
           </button>
         )}
         <button onClick={handleLogout} className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300">
@@ -1952,6 +1959,9 @@ export default function SuiviView({ role, onLogout }: Props) {
           onChange={p => { setMachineParamsState(p); saveMachineParams(p); saveChantierParams(p); }}
         />
       )}
+
+      {/* ── Camera overlay ──────────────────────────────────────────────── */}
+      {showCamera && <CameraView onClose={() => setShowCamera(false)} />}
 
       {/* ── Chantier detail overlay ─────────────────────────────────────── */}
       {showChantierDetail && selectedChantier && chantierDashStats && (
