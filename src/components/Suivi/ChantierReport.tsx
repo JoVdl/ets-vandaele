@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Chantier } from '../../types';
@@ -251,8 +252,8 @@ export default function ChantierReport({ chantier, machineParams, onClose }: {
     </span>
   );
 
-  return (
-    <div className="fixed inset-0 z-[400] bg-slate-950 flex flex-col">
+  return createPortal(
+    <div className="fixed inset-0 z-[500] bg-slate-950 flex flex-col">
       <div className="flex items-center gap-3 px-3 py-2.5 border-b border-white/[0.07] flex-shrink-0">
         <button onClick={onClose} className="p-1.5 -ml-1 text-slate-400 hover:text-white active:scale-95 transition-all">
           <ArrowLeft size={20} />
@@ -263,7 +264,7 @@ export default function ChantierReport({ chantier, machineParams, onClose }: {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-5" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
         {error && <p className="text-red-400 text-sm">{error}</p>}
         {!sessions && !error && <p className="text-slate-500 text-sm">Chargement de toutes les sessions…</p>}
 
@@ -304,6 +305,7 @@ export default function ChantierReport({ chantier, machineParams, onClose }: {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
