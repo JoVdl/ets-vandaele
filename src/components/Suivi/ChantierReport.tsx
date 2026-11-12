@@ -7,6 +7,7 @@ import type { SuiviSession } from '../../types/suivi';
 import { fetchAllChantierSessions } from '../../hooks/useSuiviSessions';
 import { alignedRectsBySession, type AlignedRect } from '../../lib/alignedVolumes';
 import { formatDuration } from '../../lib/geo';
+import { CHANTIER_TYPES } from '../../lib/constants';
 import { INCIDENT_LABELS, HIST_PALETTE } from './incidentUtils';
 
 type MachineParams = { vitesseMaxKmh: number; largeurTravailM: number; smoothAlpha: number };
@@ -90,8 +91,6 @@ function planMap(sessions: SuiviSession[], rectMap: Map<string, AlignedRect>): s
   if (zones.length === 0) return '';
   const json = JSON.stringify(zones).replace(/</g, '\\u003c');
   return `<div id="plan" style="height:440px;border-radius:8px;overflow:hidden"></div>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (function(){
   var zones = ${json};
@@ -125,6 +124,7 @@ export function buildHtml(args: {
   const budgetH = chantier.dureeEstimeeH ?? 0;
 
   const parts: string[] = [];
+  const h2 = (t: string) => `<p class="label">${t}</p>`;
 
   if (sections.has('summary')) {
     const kpi = (label: string, value: string) =>
@@ -141,12 +141,12 @@ export function buildHtml(args: {
     const dates = summaryItems.has('dates')
       ? `<p class="muted">Première session : ${first ? esc(format(new Date(first.dateDebut), 'dd/MM/yyyy')) : '—'} · Dernière : ${last ? esc(format(new Date(last.dateDebut), 'dd/MM/yyyy')) : '—'}</p>`
       : '';
-    parts.push(`<h2>Synthèse</h2>${cards.length ? `<div class="kpis">${cards.join('')}</div>` : ''}${dates}`);
+    parts.push(`${h2('Synthèse')}${cards.length ? `<div class="kpis">${cards.join('')}</div>` : ''}${dates}`);
   }
 
   if (sections.has('plan')) {
     const map = planMap(sessions, rects);
-    parts.push(`<h2>Plan des zones travaillées</h2>${map || '<p class="muted">Aucune zone calculée (chantier non drague ou sessions sans trace GPS).</p>'}`);
+    parts.push(`${h2('Plan des zones travaillées')}${map || '<p class="muted">Aucune zone calculée (chantier non drague ou sessions sans trace GPS).</p>'}`);
   }
 
   if (sections.has('daily')) {
@@ -164,7 +164,7 @@ export function buildHtml(args: {
       return `<tr><td>${esc(format(new Date(k), 'dd/MM/yyyy'))}</td><td>${list.length}</td><td>${formatDuration(dur)}</td>
         <td>${fmt1(vol)}</td><td>${w != null ? fmt1(w) : '—'}</td><td>${adv > 0 ? adv.toFixed(0) : '—'}</td></tr>`;
     }).join('');
-    parts.push(`<h2>Récapitulatif par journée</h2><table><thead><tr><th>Jour</th><th>Sessions</th><th>Durée</th><th>Volume (m³)</th><th>Largeur (m)</th><th>Avancement (m)</th></tr></thead><tbody>${lines}</tbody></table>`);
+    parts.push(`${h2('Récapitulatif par journée')}<table><thead><tr><th>Jour</th><th>Sessions</th><th>Durée</th><th>Volume (m³)</th><th>Largeur (m)</th><th>Avancement (m)</th></tr></thead><tbody>${lines}</tbody></table>`);
   }
 
   if (sections.has('sessions')) {
@@ -185,7 +185,7 @@ export function buildHtml(args: {
       }).join('');
       return `<tr>${cells}</tr>`;
     }).join('');
-    parts.push(`<h2>Tableau des sessions</h2><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`);
+    parts.push(`${h2('Tableau des sessions')}<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`);
   }
 
   if (sections.has('incidents')) {
@@ -195,30 +195,67 @@ export function buildHtml(args: {
       ? '<p class="muted">Aucun incident.</p>'
       : `<table><thead><tr><th>Date / heure</th><th>Type</th><th>Durée</th><th>Note</th></tr></thead><tbody>${items.map(({ i }) =>
           `<tr><td>${esc(format(new Date(i.ts), 'dd/MM/yy HH:mm'))}</td><td>${esc((INCIDENT_LABELS as Record<string, string>)[i.type] ?? i.type)}</td><td>${i.dureeMinutes} min</td><td>${esc(i.note ?? '')}</td></tr>`).join('')}</tbody></table>`;
-    parts.push(`<h2>Incidents</h2>${lines}`);
+    parts.push(`${h2('Incidents')}${lines}`);
   }
 
+  const BRAND_TEAL = '#266E7B', BRAND_GREEN = '#56B57A';
+  const typeLabel = CHANTIER_TYPES[chantier.type]?.label ?? chantier.type;
+  const period = first && last
+    ? `${format(new Date(first.dateDebut), 'dd/MM/yyyy')} → ${format(new Date(last.dateDebut), 'dd/MM/yyyy')}`
+    : '—';
+  const logoUrl = `${window.location.origin}${import.meta.env.BASE_URL}logo-vandaele.svg`;
+
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rapport — ${esc(chantier.nom)}</title>
+<title>Rapport de chantier · ${esc(chantier.nom)}</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>
 <style>
-  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a;margin:0;padding:24px;background:#fff}
-  h1{font-size:22px;margin:0 0 4px} h2{font-size:15px;margin:24px 0 8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px}
-  .muted{color:#64748b;font-size:12px}
-  .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
-  .kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px}
-  .kpi .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums} .kpi .l{font-size:11px;color:#64748b}
-  table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
-  th,td{border-bottom:1px solid #e2e8f0;padding:5px 6px;text-align:left} th{background:#f8fafc;font-weight:600}
-  .wrap{overflow-x:auto}
-  @media print{ .noprint{display:none} body{padding:0} }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, Arial, sans-serif; color: #1e293b; background: #fff; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  th, td { border-bottom: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; }
+  th { background: #f8fafc; font-weight: 600; color: #475569; }
+  .label { font-size: 11px; font-weight: 700; color: ${BRAND_TEAL}; text-transform: uppercase; letter-spacing: .08em; margin: 20px 0 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+  .muted { color: #64748b; font-size: 12px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .kpi { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
+  .kpi .v { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; } .kpi .l { font-size: 11px; color: #64748b; }
+  .wrap { overflow-x: auto; }
+  @media print {
+    .no-print { display: none !important; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .leaflet-control-container { display: none; }
+  }
 </style></head><body>
-<div class="noprint" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">
-  <span class="muted">Sur iPhone : Partager → Imprimer → PDF</span>
-  <button onclick="window.print()" style="padding:8px 14px;border-radius:8px;border:0;background:#0891b2;color:#fff;font-weight:600">Imprimer / PDF</button>
+<div style="background:${BRAND_TEAL};padding:16px 24px;display:flex;justify-content:space-between;align-items:center">
+  <img src="${logoUrl}" alt="ETS Vandaele" style="height:52px;display:block" onerror="this.style.display='none'">
+  <div style="text-align:right;color:rgba(255,255,255,.9);font-size:12px;line-height:1.7">
+    <div style="font-weight:700;color:#fff;letter-spacing:.04em;text-transform:uppercase;font-size:11px">Rapport de chantier</div>
+    <div>${esc(period)}</div>
+    <div>${sessions.length} session${sessions.length > 1 ? 's' : ''}</div>
+  </div>
 </div>
-<h1>${esc(chantier.nom)}</h1>
-<p class="muted">${chantier.lieu ? esc(chantier.lieu) + ' · ' : ''}Rapport généré le ${esc(format(new Date(), 'dd/MM/yyyy'))}</p>
-${parts.map(p => `<div class="wrap">${p}</div>`).join('\n')}
+
+<div style="max-width:720px;margin:auto;padding:20px 24px 40px">
+  <p class="label" style="margin-top:0">Chantier</p>
+  <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 16px;font-size:13px">
+    <span style="color:#64748b">Intitulé</span><span style="font-weight:600">${esc(chantier.nom)}</span>
+    ${chantier.client ? `<span style="color:#64748b">Client</span><span style="font-weight:600">${esc(chantier.client)}</span>` : ''}
+    ${chantier.lieu ? `<span style="color:#64748b">Lieu</span><span style="font-weight:600">${esc(chantier.lieu)}</span>` : ''}
+    <span style="color:#64748b">Type de prestation</span><span style="font-weight:600">${esc(typeLabel)}</span>
+  </div>
+
+  ${parts.map(p => `<div class="wrap">${p}</div>`).join('\n')}
+
+  <div class="no-print" style="margin-top:24px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+    <span class="muted">Sur iPhone : Partager → Imprimer → PDF</span>
+    <button onclick="window.print()" style="padding:10px 24px;background:${BRAND_GREEN};color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Imprimer / PDF</button>
+  </div>
+
+  <p style="margin-top:28px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center">
+    Document généré le ${esc(format(new Date(), 'dd/MM/yyyy à HH:mm'))} · ETS Vandaele Marcel &amp; Fils
+  </p>
+</div>
 </body></html>`;
 }
 
