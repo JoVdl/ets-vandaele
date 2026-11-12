@@ -30,7 +30,20 @@ const COLUMNS = [
   { key: 'incidents',  label: 'Incidents' },
 ] as const;
 
+const SUMMARY_ITEMS = [
+  { key: 'sessions',  label: 'Nombre de sessions' },
+  { key: 'heures',    label: 'Heures effectives' },
+  { key: 'volume',    label: 'Volume total' },
+  { key: 'debit',     label: 'Débit moyen' },
+  { key: 'largeur',   label: 'Largeur moyenne' },
+  { key: 'avancement', label: 'Avancement cumulé' },
+  { key: 'incidents', label: 'Incidents' },
+  { key: 'budget',    label: 'Budget (si défini)' },
+  { key: 'dates',     label: 'Dates première / dernière session' },
+] as const;
+
 type SectionKey = typeof SECTIONS[number]['key'];
+type SummaryKey = typeof SUMMARY_ITEMS[number]['key'];
 type ColumnKey = typeof COLUMNS[number]['key'];
 
 const esc = (v: unknown) => String(v ?? '')
@@ -96,9 +109,9 @@ function planMap(sessions: SuiviSession[], rectMap: Map<string, AlignedRect>): s
 
 export function buildHtml(args: {
   chantier: Chantier; sessions: SuiviSession[]; rows: Row[]; rects: Map<string, AlignedRect>;
-  sections: Set<SectionKey>; columns: Set<ColumnKey>;
+  sections: Set<SectionKey>; columns: Set<ColumnKey>; summaryItems: Set<SummaryKey>;
 }): string {
-  const { chantier, sessions, rows, rects, sections, columns } = args;
+  const { chantier, sessions, rows, rects, sections, columns, summaryItems } = args;
   const total = rows.reduce((a, r) => a + r.vol, 0);
   const totalMin = sessions.reduce((a, s) => a + s.dureeMinutes, 0);
   const incMin = rows.reduce((a, r) => a + r.incMin, 0);
@@ -116,17 +129,19 @@ export function buildHtml(args: {
   if (sections.has('summary')) {
     const kpi = (label: string, value: string) =>
       `<div class="kpi"><div class="v">${value}</div><div class="l">${esc(label)}</div></div>`;
-    parts.push(`<h2>Synthèse</h2><div class="kpis">
-      ${kpi('Sessions', String(sessions.length))}
-      ${kpi('Heures effectives', formatDuration(totalMin))}
-      ${kpi('Volume total', `${fmt1(total)} m³`)}
-      ${kpi('Débit moyen', debitMoy != null ? `${fmt1(debitMoy)} m³/h` : '—')}
-      ${kpi('Largeur moyenne', largeurMoy != null ? `${fmt1(largeurMoy)} m` : '—')}
-      ${kpi('Avancement cumulé', advTotal > 0 ? `${advTotal.toFixed(0)} m` : '—')}
-      ${kpi('Incidents', `${incCount} · ${incMin} min`)}
-      ${budgetH > 0 ? kpi('Budget', `${formatDuration(totalMin)} / ${budgetH} h`) : ''}
-    </div>
-    <p class="muted">Première session : ${first ? esc(format(new Date(first.dateDebut), 'dd/MM/yyyy')) : '—'} · Dernière : ${last ? esc(format(new Date(last.dateDebut), 'dd/MM/yyyy')) : '—'}</p>`);
+    const cards: string[] = [];
+    if (summaryItems.has('sessions'))   cards.push(kpi('Sessions', String(sessions.length)));
+    if (summaryItems.has('heures'))     cards.push(kpi('Heures effectives', formatDuration(totalMin)));
+    if (summaryItems.has('volume'))     cards.push(kpi('Volume total', `${fmt1(total)} m³`));
+    if (summaryItems.has('debit'))      cards.push(kpi('Débit moyen', debitMoy != null ? `${fmt1(debitMoy)} m³/h` : '—'));
+    if (summaryItems.has('largeur'))    cards.push(kpi('Largeur moyenne', largeurMoy != null ? `${fmt1(largeurMoy)} m` : '—'));
+    if (summaryItems.has('avancement')) cards.push(kpi('Avancement cumulé', advTotal > 0 ? `${advTotal.toFixed(0)} m` : '—'));
+    if (summaryItems.has('incidents'))  cards.push(kpi('Incidents', `${incCount} · ${incMin} min`));
+    if (summaryItems.has('budget') && budgetH > 0) cards.push(kpi('Budget', `${formatDuration(totalMin)} / ${budgetH} h`));
+    const dates = summaryItems.has('dates')
+      ? `<p class="muted">Première session : ${first ? esc(format(new Date(first.dateDebut), 'dd/MM/yyyy')) : '—'} · Dernière : ${last ? esc(format(new Date(last.dateDebut), 'dd/MM/yyyy')) : '—'}</p>`
+      : '';
+    parts.push(`<h2>Synthèse</h2>${cards.length ? `<div class="kpis">${cards.join('')}</div>` : ''}${dates}`);
   }
 
   if (sections.has('plan')) {
@@ -197,7 +212,10 @@ export function buildHtml(args: {
   .wrap{overflow-x:auto}
   @media print{ .noprint{display:none} body{padding:0} }
 </style></head><body>
-<div class="noprint" style="text-align:right;margin-bottom:8px"><button onclick="window.print()">Imprimer / PDF</button></div>
+<div class="noprint" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+  <span class="muted">Sur iPhone : Partager → Imprimer → PDF</span>
+  <button onclick="window.print()" style="padding:8px 14px;border-radius:8px;border:0;background:#0891b2;color:#fff;font-weight:600">Imprimer / PDF</button>
+</div>
 <h1>${esc(chantier.nom)}</h1>
 <p class="muted">${chantier.lieu ? esc(chantier.lieu) + ' · ' : ''}Rapport généré le ${esc(format(new Date(), 'dd/MM/yyyy'))}</p>
 ${parts.map(p => `<div class="wrap">${p}</div>`).join('\n')}
@@ -213,6 +231,7 @@ export default function ChantierReport({ chantier, machineParams, onClose }: {
   const [error, setError] = useState<string | null>(null);
   const [sections, setSections] = useState<Set<SectionKey>>(() => new Set(SECTIONS.map(s => s.key)));
   const [columns, setColumns] = useState<Set<ColumnKey>>(() => new Set(COLUMNS.map(c => c.key)));
+  const [summaryItems, setSummaryItems] = useState<Set<SummaryKey>>(() => new Set(SUMMARY_ITEMS.map(i => i.key)));
 
   useEffect(() => {
     let cancelled = false;
@@ -238,17 +257,22 @@ export default function ChantierReport({ chantier, machineParams, onClose }: {
     setter(next);
   };
 
+  // Written straight into a same-origin window opened by the tap: printing works from it on iOS
   const generate = () => {
     if (!sessions) return;
-    const html = buildHtml({ chantier, sessions, rows, rects, sections, columns });
-    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
-    const w = window.open(url, '_blank');
-    if (!w) {
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `rapport-${chantier.nom.replace(/\s+/g, '-')}.html`;
-      a.click();
+    const html = buildHtml({ chantier, sessions, rows, rects, sections, columns, summaryItems });
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      return;
     }
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rapport-${chantier.nom.replace(/\s+/g, '-')}.html`;
+    a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
@@ -291,6 +315,20 @@ export default function ChantierReport({ chantier, machineParams, onClose }: {
                 ))}
               </div>
             </section>
+
+            {sections.has('summary') && (
+              <section>
+                <h3 className="text-slate-300 text-xs font-semibold uppercase tracking-wide mb-2">Éléments de la synthèse</h3>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {SUMMARY_ITEMS.map(item => (
+                    <button key={item.key} onClick={() => toggle(summaryItems, item.key, setSummaryItems)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] text-left text-xs text-slate-200">
+                      {check(summaryItems.has(item.key))}{item.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section>
               <h3 className="text-slate-300 text-xs font-semibold uppercase tracking-wide mb-2">Colonnes du tableau des sessions</h3>
