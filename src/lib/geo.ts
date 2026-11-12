@@ -428,6 +428,61 @@ export function orientedBoundingBoxM2(
  *                  (each strip = exactly largeurM, no overlap between sessions).
  *   largeurM = 0 → 10th–90th percentile of that session's cross-track spread.
  */
+type XY = { x: number; y: number };
+
+function convexHullXY(pts: XY[]): XY[] {
+  const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (p.length < 3) return p;
+  const cross = (o: XY, a: XY, b: XY) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower: XY[] = [];
+  for (const q of p) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop();
+    lower.push(q);
+  }
+  const upper: XY[] = [];
+  for (let i = p.length - 1; i >= 0; i--) {
+    const q = p[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop();
+    upper.push(q);
+  }
+  lower.pop(); upper.pop();
+  return lower.concat(upper);
+}
+
+// Minimum-area rectangle around the points: returns the direction of its long side (radians).
+function longSideAngle(pts: XY[]): { angle: number; area: number } | null {
+  const hull = convexHullXY(pts);
+  if (hull.length < 3) return null;
+  let best: { area: number; angle: number } | null = null;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i + 1) % hull.length];
+    const th = Math.atan2(b.y - a.y, b.x - a.x);
+    const c = Math.cos(th), s = Math.sin(th);
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    for (const q of hull) {
+      const u = q.x * c + q.y * s, v = -q.x * s + q.y * c;
+      if (u < u0) u0 = u;
+      if (u > u1) u1 = u;
+      if (v < v0) v0 = v;
+      if (v > v1) v1 = v;
+    }
+    const area = (u1 - u0) * (v1 - v0);
+    if (!best || area < best.area) {
+      best = { area, angle: (u1 - u0) >= (v1 - v0) ? th : th + Math.PI / 2 };
+    }
+  }
+  return best;
+}
+
+// Drops points far from the session's median position (positioning moves, GPS jumps).
+function trimFarPoints(xy: XY[]): XY[] {
+  const mx = [...xy.map(p => p.x)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
+  const my = [...xy.map(p => p.y)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
+  const d = xy.map(p => Math.hypot(p.x - mx, p.y - my));
+  const cut = [...d].sort((a, b) => a - b)[Math.floor(0.95 * (d.length - 1))];
+  return xy.filter((_, i) => d[i] <= cut);
+}
+
 export function sessionOBBsAligned(
   sessions: { points: { lat: number; lng: number }[] }[],
   largeurM = 0,
@@ -446,19 +501,15 @@ export function sessionOBBsAligned(
     y: (pt.lat - lat0) * D2R * R,
   });
 
-  // Work axis = distance-weighted mean heading over every consecutive GPS segment of all
-  // sessions. Angles are doubled so that reverse passes (θ and θ+π) reinforce each other.
+  // Shared work axis: area-weighted mean of each session's min-area-rectangle long side.
+  // Angles are doubled so that θ and θ+π (reverse direction) reinforce each other.
   let sinSum = 0, cosSum = 0;
   for (const { points } of sessions) {
-    const xy = points.map(toXY);
-    for (let i = 1; i < xy.length; i++) {
-      const dx = xy[i].x - xy[i - 1].x, dy = xy[i].y - xy[i - 1].y;
-      const len = Math.hypot(dx, dy);
-      if (len < 0.5) continue;
-      const th = Math.atan2(dy, dx);
-      sinSum += len * Math.sin(2 * th);
-      cosSum += len * Math.cos(2 * th);
-    }
+    if (points.length < 4) continue;
+    const r = longSideAngle(trimFarPoints(points.map(toXY)));
+    if (!r) continue;
+    sinSum += r.area * Math.sin(2 * r.angle);
+    cosSum += r.area * Math.cos(2 * r.angle);
   }
   const angle = 0.5 * Math.atan2(sinSum, cosSum);
   const ux = Math.cos(angle), uy = Math.sin(angle);
@@ -472,50 +523,51 @@ export function sessionOBBsAligned(
   const pctVal = (sorted: number[], pct: number) =>
     sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(pct / 100 * (sorted.length - 1))))];
 
-  // Per-session projections onto the shared global axis
-  interface SessionInfo { idx: number; sus: number[]; svs: number[]; vMed: number }
+  // 5th–95th percentile spans 90% of a uniform spread: divide by 0.9 to recover the full extent
+  interface SessionInfo { idx: number; sus: number[]; svs: number[]; vMed: number; width: number }
   const infos: (SessionInfo | null)[] = sessions.map(({ points }, idx) => {
     if (points.length < 4) return null;
     const xy  = points.map(toXY);
     const sus = xy.map(p => p.x * ux + p.y * uy).sort((a, b) => a - b);
     const svs = xy.map(p => p.x * vx + p.y * vy).sort((a, b) => a - b);
-    return { idx, sus, svs, vMed: svs[Math.floor(svs.length / 2)] };
+    return { idx, sus, svs, vMed: svs[Math.floor(svs.length / 2)], width: (pctVal(svs, 95) - pctVal(svs, 5)) / 0.9 };
   });
 
   if (largeurM > 0) {
-    // Sort valid sessions by cross-track median and pack side-by-side.
-    // Each strip is exactly largeurM wide and assigned in cross-track order,
-    // so adjacent strips touch without overlap regardless of GPS scatter.
+    // Each session keeps its measured width. Sessions are placed in cross-track order and
+    // pushed apart when they would overlap, so adjacent rectangles touch but never intersect.
     const valid = infos.filter((s): s is SessionInfo => s !== null);
     if (valid.length === 0) return sessions.map(() => null);
     valid.sort((a, b) => a.vMed - b.vMed);
 
-    // Centre the group at the median-of-medians so it sits over the work area
-    const globalMed = valid[Math.floor(valid.length / 2)].vMed;
-    const startV = globalMed - (valid.length / 2) * largeurM;
-
-    const stripMap = new Map<number, { vMin: number; vMax: number }>();
-    valid.forEach((s, i) => {
-      stripMap.set(s.idx, { vMin: startV + i * largeurM, vMax: startV + (i + 1) * largeurM });
-    });
+    const placed = new Map<number, { vMin: number; vMax: number; w: number }>();
+    let prevEnd = -Infinity;
+    for (const s of valid) {
+      const w = s.width >= 0.5 ? s.width : largeurM;
+      const c = Math.max(s.vMed, prevEnd + w / 2);
+      placed.set(s.idx, { vMin: c - w / 2, vMax: c + w / 2, w });
+      prevEnd = c + w / 2;
+    }
+    // Keep the group centred on where the sessions actually were
+    const meanMed = valid.reduce((a, s) => a + s.vMed, 0) / valid.length;
+    const meanC   = valid.reduce((a, s) => { const p = placed.get(s.idx)!; return a + (p.vMin + p.vMax) / 2; }, 0) / valid.length;
+    const shift = meanMed - meanC;
 
     return infos.map((info, idx) => {
       if (!info) return null;
-      const strip = stripMap.get(idx);
+      const strip = placed.get(idx);
       if (!strip) return null;
-      const uMin = pctVal(info.sus, 10);
-      const uMax = pctVal(info.sus, 90);
-      const { vMin, vMax } = strip;
-      const lengthM = uMax - uMin;
-      if (lengthM < 0.5) return null;
+      const L = (pctVal(info.sus, 95) - pctVal(info.sus, 5)) / 0.9;
+      if (L < 0.5) return null;
+      const uc = (pctVal(info.sus, 95) + pctVal(info.sus, 5)) / 2;
+      const uMin = uc - L / 2, uMax = uc + L / 2;
+      const vMin = strip.vMin + shift, vMax = strip.vMax + shift;
       return {
         polygon: [
           toLatLng(uMin, vMin), toLatLng(uMax, vMin),
           toLatLng(uMax, vMax), toLatLng(uMin, vMax),
         ],
-        widthM: largeurM,
-        measuredWidthM: (pctVal(info.svs, 90) - pctVal(info.svs, 10)) / 0.8,
-        lengthM, areaM2: lengthM * largeurM,
+        widthM: strip.w, measuredWidthM: strip.w, lengthM: L, areaM2: L * strip.w,
       };
     });
   }
