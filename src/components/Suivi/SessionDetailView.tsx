@@ -11,6 +11,7 @@ import type { Chantier } from '../../types';
 import type { ChantierZone } from './SuiviMap';
 import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM, filterGpsTrack, stripVolumeM3WithSegments, convexHull } from '../../lib/geo';
 import { CHANTIER_TYPES } from '../../lib/constants';
+import type { AlignedRect } from '../../lib/alignedVolumes';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -67,7 +68,8 @@ interface Props {
   chantierCumul?: Record<string, { totalCoveredM2: number; sessionCount: number; totalMinutes: number; rendementSum: number; rendementCount: number }>;
   chantierZones: ChantierZone[];
   machineParams?: { largeurTravailM: number; vitesseMaxKmh: number; recouvrementPct: number };
-  alignedVolumeM3?: number;
+  alignedRect?: AlignedRect;
+  machineWidthM?: number;
   workColor:     string;
   salarieName?:  string;
   onUpdateIncidents?: (incidents: SuiviIncident[]) => Promise<void>;
@@ -111,6 +113,8 @@ interface RecapExtras {
   correctedRendement: number | null;
   correctedVolumeM3:  number | null;
   correctedDebitM3h:  number | null;
+  machineWidthM:      number | null;
+  advanceM:           number | null;
 }
 
 function openPrintRecap(
@@ -148,6 +152,8 @@ function openPrintRecap(
       ['Volume dragué',        `${displayVolumeM3.toFixed(1)} m³`] as [string, string],
       ['Surface draguée',      formatArea(displaySurface)] as [string, string],
       ['Débit de dragage',     displayDebitM3h > 0 ? `${displayDebitM3h.toFixed(1)} m³/h` : '—'] as [string, string],
+      ['Largeur de travail',   extras.machineWidthM ? `${extras.machineWidthM.toFixed(1)} m` : '—'] as [string, string],
+      ['Avancement',           extras.advanceM && extras.advanceM > 0 ? `${extras.advanceM.toFixed(0)} m` : '—'] as [string, string],
       ...(session.profondeurDragageM != null ? [[
         'Profondeur par passe',
         session.nbPassesParPosition != null && session.nbPassesParPosition > 1
@@ -279,7 +285,7 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedVolumeM3, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, machineWidthM, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose }: Props) {
   const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
 
   // Local incidents state — reflects Firestore changes via updated session prop
@@ -324,7 +330,10 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
     isDragageSession ? Math.max((machineParams?.largeurTravailM ?? 6) * 10, 150) : Infinity,
   );
   const trail = filteredGps.map(p => [p.lat, p.lng] as [number, number]);
-  const hullPositions: [number, number][] | null = isDragageSession && filteredGps.length >= 3
+  const alignedVolumeM3 = alignedRect?.volumeM3;
+  const hullPositions: [number, number][] | null = isDragageSession && alignedRect
+    ? alignedRect.polygon
+    : isDragageSession && filteredGps.length >= 3
     ? (() => {
         const h = convexHull(filteredGps.map(p => ({ lat: p.lat, lng: p.lng })));
         return h.length >= 3 ? h.map(p => [p.lat, p.lng] as [number, number]) : null;
@@ -432,7 +441,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
           onClick={() => openPrintRecap(
             session, chantier, thisPct, cumulPct, rendMoyen, workColor,
             chantierZones.flatMap(z => z.polygons.filter(p => p.length >= 3)),
-            { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3: displayVolumeM3, correctedDebitM3h: displayDebitM3h },
+            { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3: displayVolumeM3, correctedDebitM3h: displayDebitM3h, machineWidthM: machineWidthM ?? null, advanceM: alignedRect?.lengthM ?? null },
             salarieName,
           )}
           title="Récap client (PDF)"
@@ -531,6 +540,12 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
             </>
           )}
         </div>
+        {isDragageSession && (
+          <div className="grid grid-cols-4 gap-1 mb-2">
+            <StatCard label="Largeur de travail" value={machineWidthM ? `${machineWidthM.toFixed(1)} m` : '—'} />
+            <StatCard label="Avancement"         value={alignedRect && alignedRect.lengthM > 0 ? `${alignedRect.lengthM.toFixed(0)} m` : '—'} />
+          </div>
+        )}
 
         {/* Secondary metrics */}
         <div className="grid grid-cols-4 gap-1 mb-2">

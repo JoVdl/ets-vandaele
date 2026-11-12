@@ -7,7 +7,8 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { SuiviSession } from '../../types/suivi';
 import type { Chantier } from '../../types';
-import { formatDuration, formatArea, smoothPoints, centroid, filterGpsTrack, convexHull, areaM2 } from '../../lib/geo';
+import { formatDuration, formatArea, smoothPoints, centroid, filterGpsTrack } from '../../lib/geo';
+import type { AlignedRect } from '../../lib/alignedVolumes';
 import { INCIDENT_LABELS, INCIDENT_COLORS, HIST_PALETTE, GlobalTimeline, SessionTimeline } from './incidentUtils';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
@@ -38,16 +39,20 @@ interface Props {
   sessions:        SuiviSession[];
   isDragage:       boolean;
   volumeOf:        (s: SuiviSession) => number;
+  rectOf:          (s: SuiviSession) => AlignedRect | undefined;
+  machineWidthM:   number;
   salarieName?:    string;
   onClose:         () => void;
   onSessionClick?: (session: SuiviSession) => void;
 }
 
-export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
+export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, rectOf, machineWidthM, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
   const ordered = useMemo(
     () => [...sessions].sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime()),
     [sessions],
   );
+
+  const advanceM = (s: SuiviSession) => rectOf(s)?.lengthM ?? 0;
 
   // Cumul stats
   const totalVolumeM3    = sessions.reduce((a, s) => a + volumeOf(s), 0);
@@ -89,20 +94,16 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
       isDragage ? 150 : Infinity,
     );
     const smoothed = smoothPoints(filtered, 0.3);
-    const rawHull = convexHull(smoothed.map(p => ({ lat: p.lat, lng: p.lng })));
-    const hullPositions: [number, number][] = rawHull.length >= 3
-      ? rawHull.map(p => [p.lat, p.lng] as [number, number])
-      : [];
-    const hullArea = hullPositions.length >= 3 ? areaM2(rawHull) : 0;
+    const rect = rectOf(s);
     return {
       id:            s.id,
       color:         HIST_PALETTE[i % HIST_PALETTE.length],
       positions:     smoothed.map(p => [p.lat, p.lng] as [number, number]),
-      hullPositions,
-      hullArea,
+      hullPositions: rect?.polygon ?? [],
+      hullArea:      rect?.areaM2 ?? 0,
       date:          s.dateDebut,
     };
-  }), [ordered, isDragage]);
+  }), [ordered, isDragage, rectOf]);
 
   const allPositions = useMemo(() => trails.flatMap(t => t.positions), [trails]);
 
@@ -303,6 +304,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
                 const dayIncidents  = daySessions.reduce((a, s) => a + (s.incidents?.length ?? 0), 0);
                 const dayIncMin     = daySessions.reduce((a, s) => a + (s.incidents?.reduce((b, i) => b + i.dureeMinutes, 0) ?? 0), 0);
                 const dayVolume     = daySessions.reduce((a, s) => a + volumeOf(s), 0);
+                const dayAdvance    = daySessions.reduce((a, s) => a + advanceM(s), 0);
                 const daySurface    = daySessions.reduce((a, s) => a + s.surfaceCoveredM2, 0);
                 const isExpanded    = expandedDays.has(dayKey);
 
@@ -345,6 +347,9 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
                         <p className="text-white text-sm font-bold tabular-nums">{formatDuration(dayTotal)}</p>
                         {isDragage && dayVolume > 0 && (
                           <p className="text-cyan-400 text-[10px] tabular-nums">{dayVolume.toFixed(1)} m³</p>
+                        )}
+                        {isDragage && dayAdvance > 0 && (
+                          <p className="text-slate-400 text-[10px] tabular-nums">larg. {machineWidthM.toFixed(1)} m · avance {dayAdvance.toFixed(0)} m</p>
                         )}
                         {!isDragage && daySurface > 0 && (
                           <p className="text-green-400 text-[10px] tabular-nums">{formatArea(daySurface)}</p>
@@ -395,6 +400,8 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
                                   <StatTile small label="Perdu"  value={incMin > 0 ? `${incMin} min` : '—'} accent={incMin > 0 ? 'amber' : undefined} />
                                   <StatTile small label="Volume" value={volumeOf(s) > 0 ? `${volumeOf(s).toFixed(1)} m³` : '—'} />
                                   <StatTile small label="Rend."  value={netDebit > 0 ? `${netDebit.toFixed(1)} m³/h` : '—'} />
+                                  <StatTile small label="Largeur" value={`${machineWidthM.toFixed(1)} m`} />
+                                  <StatTile small label="Avancement" value={advanceM(s) > 0 ? `${advanceM(s).toFixed(0)} m` : '—'} />
                                 </div>
                               ) : (
                                 <div className="grid grid-cols-4 gap-1">

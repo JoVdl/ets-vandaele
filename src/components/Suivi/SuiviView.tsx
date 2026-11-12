@@ -15,7 +15,7 @@ import {
   areaM2, formatArea, formatDistance, formatDuration, centroid,
   avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, orientedBoundingBoxM2, filterGpsTrack,
 } from '../../lib/geo';
-import { alignedVolumesBySession } from '../../lib/alignedVolumes';
+import { alignedRectsBySession } from '../../lib/alignedVolumes';
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
 } from '../../lib/machineParams';
@@ -623,14 +623,15 @@ export default function SuiviView({ role, onLogout }: Props) {
   }, [selectedChantierId, chantiers, sessions]);
 
   // Display volumes/débits: aligned rectangle × depth; falls back to stored values.
-  const displayVolumes = useMemo(() => alignedVolumesBySession(sessions, chantiers, {
+  const alignedRects = useMemo(() => alignedRectsBySession(sessions, chantiers, {
     vitesseMaxKmh: machineParams.vitesseMaxKmh,
     largeurM:      machineParams.largeurTravailM,
     smoothAlpha:   machineParams.smoothAlpha,
   }), [sessions, chantiers, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
+  const rectOf = useCallback((s: SuiviSession) => alignedRects.get(s.id), [alignedRects]);
   const volOf = useCallback(
-    (s: SuiviSession) => displayVolumes.get(s.id) ?? s.volumeM3 ?? 0,
-    [displayVolumes],
+    (s: SuiviSession) => rectOf(s)?.volumeM3 ?? s.volumeM3 ?? 0,
+    [rectOf],
   );
   const debitOf = useCallback(
     (s: SuiviSession) => (s.debitM3h && s.volumeM3 ? s.debitM3h * volOf(s) / s.volumeM3 : (s.debitM3h ?? 0)),
@@ -1681,6 +1682,9 @@ export default function SuiviView({ role, onLogout }: Props) {
                                 {isDragage && dayVolume > 0 && (
                                   <p className="text-cyan-400 text-[10px] tabular-nums">{dayVolume.toFixed(1)} m³</p>
                                 )}
+                                {isDragage && (
+                                  <p className="text-slate-400 text-[10px] tabular-nums">larg. {machineParams.largeurTravailM.toFixed(1)} m · avance {daySessions.reduce((a, x) => a + (rectOf(x)?.lengthM ?? 0), 0).toFixed(0)} m</p>
+                                )}
                                 {!isDragage && daySurface > 0 && (
                                   <p className="text-green-400 text-[10px] tabular-nums">{formatArea(daySurface)}</p>
                                 )}
@@ -1722,6 +1726,8 @@ export default function SuiviView({ role, onLogout }: Props) {
                                             <SmallStat label="Perdu" value={incMin > 0 ? `${incMin} min` : '—'} />
                                             <SmallStat label="Volume" value={volOf(s) > 0 ? `${volOf(s).toFixed(1)} m³` : '—'} />
                                             <SmallStat label="Rend." value={debitOf(s) > 0 ? `${debitOf(s).toFixed(1)}` : '—'} sub="m³/h" />
+                                            <SmallStat label="Largeur" value={`${machineParams.largeurTravailM.toFixed(1)} m`} />
+                                            <SmallStat label="Avancement" value={(rectOf(s)?.lengthM ?? 0) > 0 ? `${rectOf(s)!.lengthM.toFixed(0)} m` : '—'} />
                                           </div>
                                         ) : (
                                           <div className="grid grid-cols-4 gap-1">
@@ -1870,6 +1876,9 @@ export default function SuiviView({ role, onLogout }: Props) {
                                 {dayVolume > 0 && (
                                   <p className="text-cyan-400 text-[10px] tabular-nums">{dayVolume.toFixed(1)} m³</p>
                                 )}
+                                {isDragage && (
+                                  <p className="text-slate-400 text-[10px] tabular-nums">larg. {machineParams.largeurTravailM.toFixed(1)} m · avance {daySessions.reduce((a, x) => a + (rectOf(x)?.lengthM ?? 0), 0).toFixed(0)} m</p>
+                                )}
                                 {dayVolume === 0 && daySurface > 0 && (
                                   <p className="text-green-400 text-[10px] tabular-nums">{formatArea(daySurface)}</p>
                                 )}
@@ -1909,6 +1918,8 @@ export default function SuiviView({ role, onLogout }: Props) {
                                             <>
                                               <SmallStat label="Volume" value={`${volOf(s).toFixed(1)} m³`} />
                                               <SmallStat label="Débit" value={debitOf(s) > 0 ? `${debitOf(s).toFixed(1)}` : '—'} sub="m³/h" />
+                                              <SmallStat label="Largeur" value={`${machineParams.largeurTravailM.toFixed(1)} m`} />
+                                              <SmallStat label="Avancement" value={(rectOf(s)?.lengthM ?? 0) > 0 ? `${rectOf(s)!.lengthM.toFixed(0)} m` : '—'} />
                                             </>
                                           ) : (
                                             <>
@@ -2196,6 +2207,8 @@ export default function SuiviView({ role, onLogout }: Props) {
           sessions={chantierDashStats.sessions}
           isDragage={isDragage}
           volumeOf={volOf}
+          rectOf={rectOf}
+          machineWidthM={machineParams.largeurTravailM}
           salarieName={salarieName}
           onClose={() => setShowChantierDetail(false)}
           onSessionClick={s => { setShowChantierDetail(false); setSelectedSession(s); }}
@@ -2210,7 +2223,8 @@ export default function SuiviView({ role, onLogout }: Props) {
           chantierCumul={chantierCumul}
           chantierZones={chantierZones}
           machineParams={machineParams}
-          alignedVolumeM3={displayVolumes.get(selectedSession.id)}
+          alignedRect={rectOf(selectedSession)}
+          machineWidthM={machineParams.largeurTravailM}
           workColor={selectedSession.chantierId === selectedChantierId
             ? workColor
             : '#22c55e'}
