@@ -2243,6 +2243,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           isDragage={isDragage}
           volumeOf={volOf}
           rectOf={rectOf}
+          machineParams={machineParams}
           salarieName={salarieName}
           onClose={() => setShowChantierDetail(false)}
           onSessionClick={s => { setShowChantierDetail(false); setSelectedSession(s); }}

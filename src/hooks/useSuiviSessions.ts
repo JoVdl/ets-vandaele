@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy,
+  collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, where, getDocs,
   limit, Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -27,6 +27,15 @@ function sessionFromFirestore(id: string, data: Record<string, unknown>): SuiviS
     dateFin:   data.dateFin ? (data.dateFin as Timestamp).toDate().toISOString() : undefined,
     pendingSync: false,
   } as SuiviSession;
+}
+
+// Toutes les sessions d'un chantier (sans la limite de la liste en direct), hors corbeille
+export async function fetchAllChantierSessions(chantierId: string): Promise<SuiviSession[]> {
+  const snap = await getDocs(query(collection(db, COL), where('chantierId', '==', chantierId)));
+  return snap.docs
+    .map(d => sessionFromFirestore(d.id, d.data() as Record<string, unknown>))
+    .filter(s => !s.deletedAt)
+    .sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime());
 }
 
 export function useSuiviSessions() {
