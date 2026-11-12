@@ -59,7 +59,10 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function SuiviView({ role, onLogout }: Props) {
   const { chantiers, updateChantier } = useChantiers();
-  const { sessions, saveSession, deleteSession, updateSession, syncing } = useSuiviSessions();
+  const { sessions, trashedSessions, saveSession, deleteSession, restoreSession, purgeSession, updateSession, syncing } = useSuiviSessions();
+  const [historyEdit, setHistoryEdit] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [purgeConfirmId, setPurgeConfirmId] = useState<string | null>(null);
   const { liveSessions } = useLiveSessions();
   const [view, setView] = useState<View>('map');
   const [selectedSession, setSelectedSession] = useState<SuiviSession | null>(null);
@@ -1762,9 +1765,9 @@ export default function SuiviView({ role, onLogout }: Props) {
                                         )}
                                       </button>
 
-                                      {confirmDeleteId === s.id ? (
+                                      {historyEdit && (confirmDeleteId === s.id ? (
                                         <div className="flex items-center justify-between gap-2 px-3 py-2 bg-red-950/60 border-t border-red-800/40">
-                                          <span className="text-red-400 text-xs">Supprimer cette session ?</span>
+                                          <span className="text-red-400 text-xs">Mettre cette session à la corbeille ?</span>
                                           <div className="flex gap-2">
                                             <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-1 rounded-lg bg-white/[0.08] text-slate-300 text-xs">Annuler</button>
                                             <button onClick={async () => { await deleteSession(s.id); setConfirmDeleteId(null); }} className="px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold">Confirmer</button>
@@ -1772,9 +1775,9 @@ export default function SuiviView({ role, onLogout }: Props) {
                                         </div>
                                       ) : (
                                         <button onClick={() => setConfirmDeleteId(s.id)} className="w-full flex items-center justify-center gap-1.5 py-1.5 text-slate-600 hover:text-red-400 text-xs border-t border-white/[0.05] transition-colors">
-                                          <Trash2 size={11} /> Supprimer
+                                          <Trash2 size={11} /> Mettre à la corbeille
                                         </button>
-                                      )}
+                                      ))}
                                     </div>
                                   );
                                 })}
@@ -1805,7 +1808,35 @@ export default function SuiviView({ role, onLogout }: Props) {
 
               return (
                 <div className="px-3 py-3">
-                  <h2 className="text-white font-bold text-base mb-3">Historique des sessions</h2>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <h2 className="text-white font-bold text-base">Historique des sessions</h2>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button onClick={() => setShowTrash(v => !v)} className="px-2.5 py-1 rounded-lg bg-white/[0.06] text-slate-300 text-xs">Corbeille ({trashedSessions.length})</button>
+                      <button onClick={() => setHistoryEdit(v => !v)} className={`px-2.5 py-1 rounded-lg text-xs ${historyEdit ? 'bg-amber-600 text-white' : 'bg-white/[0.06] text-slate-300'}`}>{historyEdit ? 'Terminer' : 'Modifier'}</button>
+                    </div>
+                  </div>
+                  {showTrash && (
+                    <div className="mb-3 space-y-2 rounded-2xl border border-white/[0.07] p-3">
+                      {trashedSessions.length === 0 ? (
+                        <p className="text-slate-500 text-xs">Corbeille vide</p>
+                      ) : trashedSessions.map(t => (
+                        <div key={t.id} className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-slate-300 text-xs truncate">{t.chantierNom} · {format(new Date(t.dateDebut), 'dd/MM HH:mm')}</p>
+                            <p className="text-slate-500 text-[10px]">supprimée le {format(new Date(t.deletedAt!), 'dd/MM HH:mm')}</p>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button onClick={() => restoreSession(t.id)} className="px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-xs">Restaurer</button>
+                            {purgeConfirmId === t.id ? (
+                              <button onClick={async () => { await purgeSession(t.id); setPurgeConfirmId(null); }} className="px-2.5 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold">Confirmer</button>
+                            ) : (
+                              <button onClick={() => setPurgeConfirmId(t.id)} className="px-2.5 py-1 rounded-lg bg-white/[0.06] text-red-400 text-xs">Supprimer</button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {syncing && (
                     <div className="text-xs text-orange-400 mb-2 flex items-center gap-1">
                       <WifiOff size={12} /> Synchronisation…
@@ -1943,9 +1974,9 @@ export default function SuiviView({ role, onLogout }: Props) {
                                           </div>
                                         )}
                                       </button>
-                                      {confirmDeleteId === s.id ? (
+                                      {historyEdit && (confirmDeleteId === s.id ? (
                                         <div className="flex items-center justify-between gap-2 px-3 py-2 bg-red-950/60 border-t border-red-800/40">
-                                          <span className="text-red-400 text-xs">Supprimer cette session ?</span>
+                                          <span className="text-red-400 text-xs">Mettre cette session à la corbeille ?</span>
                                           <div className="flex gap-2">
                                             <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-1 rounded-lg bg-white/[0.08] text-slate-300 text-xs">Annuler</button>
                                             <button onClick={async () => { await deleteSession(s.id); setConfirmDeleteId(null); }} className="px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold">Confirmer</button>
@@ -1953,9 +1984,9 @@ export default function SuiviView({ role, onLogout }: Props) {
                                         </div>
                                       ) : (
                                         <button onClick={() => setConfirmDeleteId(s.id)} className="w-full flex items-center justify-center gap-1.5 py-1.5 text-slate-600 hover:text-red-400 text-xs border-t border-white/[0.05] transition-colors">
-                                          <Trash2 size={11} /> Supprimer
+                                          <Trash2 size={11} /> Mettre à la corbeille
                                         </button>
-                                      )}
+                                      ))}
                                     </div>
                                   );
                                 })}

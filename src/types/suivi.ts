@@ -43,6 +43,7 @@ export interface SuiviSession {
   depthSegments?: { fromTs: number; profondeurM: number }[]; // depth per time segment (dragage)
   notes?: string;
   pendingSync?: boolean;       // stored offline, not yet in Firestore
+  deletedAt?: string | null;   // ISO date when moved to the trash; null/absent = active
 }
 
 export type PinRole = 'salarie' | 'patron';

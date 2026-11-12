@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy,
   limit, Timestamp,
@@ -30,7 +30,7 @@ function sessionFromFirestore(id: string, data: Record<string, unknown>): SuiviS
 }
 
 export function useSuiviSessions() {
-  const [sessions, setSessions] = useState<SuiviSession[]>([]);
+  const [allSessions, setAllSessions] = useState<SuiviSession[]>([]);
   const [syncing, setSyncing] = useState(false);
 
   // ── Real-time listener — re-souscrit au retour au premier plan ──────────
@@ -38,7 +38,7 @@ export function useSuiviSessions() {
     const q = query(collection(db, COL), orderBy('dateDebut', 'desc'), limit(50));
 
     const subscribe = () => onSnapshot(q, snap => {
-      setSessions(snap.docs.map(d => sessionFromFirestore(d.id, d.data() as Record<string, unknown>)));
+      setAllSessions(snap.docs.map(d => sessionFromFirestore(d.id, d.data() as Record<string, unknown>)));
     }, () => { /* offline — keep stale */ });
 
     let unsub = subscribe();
@@ -114,7 +114,20 @@ export function useSuiviSessions() {
     queuePendingSession(full);
   }, []);
 
+  // Suppression douce : la session est gardée avec deletedAt, restaurable depuis la corbeille
   const deleteSession = useCallback(async (id: string) => {
+    try {
+      await updateDoc(doc(db, COL, id), { deletedAt: new Date().toISOString() });
+    } catch { /* offline or not found — ignore */ }
+  }, []);
+
+  const restoreSession = useCallback(async (id: string) => {
+    try {
+      await updateDoc(doc(db, COL, id), { deletedAt: null });
+    } catch { /* offline — ignore */ }
+  }, []);
+
+  const purgeSession = useCallback(async (id: string) => {
     try {
       await deleteDoc(doc(db, COL, id));
     } catch { /* offline or not found — ignore */ }
@@ -126,5 +139,11 @@ export function useSuiviSessions() {
     } catch { /* offline — ignore */ }
   }, []);
 
-  return { sessions, saveSession, deleteSession, updateSession, syncing };
+  const sessions = useMemo(() => allSessions.filter(s => !s.deletedAt), [allSessions]);
+  const trashedSessions = useMemo(
+    () => allSessions.filter(s => !!s.deletedAt).sort((a, b) => (b.deletedAt! > a.deletedAt! ? 1 : -1)),
+    [allSessions],
+  );
+
+  return { sessions, trashedSessions, saveSession, deleteSession, restoreSession, purgeSession, updateSession, syncing };
 }
