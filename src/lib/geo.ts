@@ -430,57 +430,24 @@ export function orientedBoundingBoxM2(
  */
 type XY = { x: number; y: number };
 
-function convexHullXY(pts: XY[]): XY[] {
-  const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
-  if (p.length < 3) return p;
-  const cross = (o: XY, a: XY, b: XY) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  const lower: XY[] = [];
-  for (const q of p) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop();
-    lower.push(q);
-  }
-  const upper: XY[] = [];
-  for (let i = p.length - 1; i >= 0; i--) {
-    const q = p[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop();
-    upper.push(q);
-  }
-  lower.pop(); upper.pop();
-  return lower.concat(upper);
-}
-
-// Minimum-area rectangle around the points: returns the direction of its long side (radians).
-function longSideAngle(pts: XY[]): { angle: number; area: number } | null {
-  const hull = convexHullXY(pts);
-  if (hull.length < 3) return null;
+// Long-side direction (radians) of the smallest rectangle covering the 5th–95th percentile
+// of the points. Percentiles ignore isolated spikes that would tilt a convex hull.
+function robustLongAxis(pts: XY[]): { angle: number; area: number } | null {
+  if (pts.length < 4) return null;
+  const pct = (sorted: number[], p: number) =>
+    sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1))))];
   let best: { area: number; angle: number } | null = null;
-  for (let i = 0; i < hull.length; i++) {
-    const a = hull[i], b = hull[(i + 1) % hull.length];
-    const th = Math.atan2(b.y - a.y, b.x - a.x);
+  for (let deg = 0; deg < 180; deg += 1) {
+    const th = deg * Math.PI / 180;
     const c = Math.cos(th), s = Math.sin(th);
-    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
-    for (const q of hull) {
-      const u = q.x * c + q.y * s, v = -q.x * s + q.y * c;
-      if (u < u0) u0 = u;
-      if (u > u1) u1 = u;
-      if (v < v0) v0 = v;
-      if (v > v1) v1 = v;
-    }
-    const area = (u1 - u0) * (v1 - v0);
-    if (!best || area < best.area) {
-      best = { area, angle: (u1 - u0) >= (v1 - v0) ? th : th + Math.PI / 2 };
-    }
+    const us = pts.map(q => q.x * c + q.y * s).sort((a, b) => a - b);
+    const vs = pts.map(q => -q.x * s + q.y * c).sort((a, b) => a - b);
+    const Lu = pct(us, 0.95) - pct(us, 0.05);
+    const Lv = pct(vs, 0.95) - pct(vs, 0.05);
+    const area = Lu * Lv;
+    if (!best || area < best.area) best = { area, angle: Lu >= Lv ? th : th + Math.PI / 2 };
   }
   return best;
-}
-
-// Drops points far from the session's median position (positioning moves, GPS jumps).
-function trimFarPoints(xy: XY[]): XY[] {
-  const mx = [...xy.map(p => p.x)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
-  const my = [...xy.map(p => p.y)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
-  const d = xy.map(p => Math.hypot(p.x - mx, p.y - my));
-  const cut = [...d].sort((a, b) => a - b)[Math.floor(0.95 * (d.length - 1))];
-  return xy.filter((_, i) => d[i] <= cut);
 }
 
 export function sessionOBBsAligned(
@@ -506,7 +473,7 @@ export function sessionOBBsAligned(
   let sinSum = 0, cosSum = 0;
   for (const { points } of sessions) {
     if (points.length < 4) continue;
-    const r = longSideAngle(trimFarPoints(points.map(toXY)));
+    const r = robustLongAxis(points.map(toXY));
     if (!r) continue;
     sinSum += r.area * Math.sin(2 * r.angle);
     cosSum += r.area * Math.cos(2 * r.angle);
