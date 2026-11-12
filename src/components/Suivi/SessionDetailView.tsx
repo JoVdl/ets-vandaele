@@ -440,7 +440,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
           onClick={() => openPrintRecap(
             session, chantier, thisPct, cumulPct, rendMoyen, workColor,
             chantierZones.flatMap(z => z.polygons.filter(p => p.length >= 3)),
-            { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3: displayVolumeM3, correctedDebitM3h: displayDebitM3h, measuredWidthM: alignedRect?.measuredWidthM ?? null, advanceM: alignedRect?.lengthM ?? null },
+            { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3: displayVolumeM3, correctedDebitM3h: displayDebitM3h, measuredWidthM: alignedRect?.lengthM ?? null, advanceM: alignedRect?.measuredWidthM ?? null },
             salarieName,
           )}
           title="Récap client (PDF)"
@@ -541,8 +541,8 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
         </div>
         {isDragageSession && (
           <div className="grid grid-cols-4 gap-1 mb-2">
-            <StatCard label="Largeur mesurée"    value={alignedRect ? `${alignedRect.measuredWidthM.toFixed(1)} m` : '—'} />
-            <StatCard label="Avancement"         value={alignedRect && alignedRect.lengthM > 0 ? `${alignedRect.lengthM.toFixed(0)} m` : '—'} />
+            <StatCard label="Largeur mesurée"    value={alignedRect ? `${alignedRect.lengthM.toFixed(1)} m` : '—'} />
+            <StatCard label="Avancement"         value={alignedRect && alignedRect.measuredWidthM > 0 ? `${alignedRect.measuredWidthM.toFixed(0)} m` : '—'} />
           </div>
         )}
 

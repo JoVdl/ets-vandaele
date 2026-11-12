@@ -51,9 +51,9 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
     [sessions],
   );
 
-  const advanceM = (s: SuiviSession) => rectOf(s)?.lengthM ?? 0;
+  const advanceM = (s: SuiviSession) => rectOf(s)?.measuredWidthM ?? 0;
   const avgWidth = (list: SuiviSession[]) => {
-    const w = list.map(s => rectOf(s)?.measuredWidthM).filter((x): x is number => x != null);
+    const w = list.map(s => rectOf(s)?.lengthM).filter((x): x is number => x != null);
     return w.length > 0 ? w.reduce((a, b) => a + b, 0) / w.length : 0;
   };
 
@@ -403,7 +403,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
                                   <StatTile small label="Perdu"  value={incMin > 0 ? `${incMin} min` : '—'} accent={incMin > 0 ? 'amber' : undefined} />
                                   <StatTile small label="Volume" value={volumeOf(s) > 0 ? `${volumeOf(s).toFixed(1)} m³` : '—'} />
                                   <StatTile small label="Rend."  value={netDebit > 0 ? `${netDebit.toFixed(1)} m³/h` : '—'} />
-                                  <StatTile small label="Largeur" value={rectOf(s) ? `${rectOf(s)!.measuredWidthM.toFixed(1)} m` : '—'} />
+                                  <StatTile small label="Largeur" value={rectOf(s) ? `${rectOf(s)!.lengthM.toFixed(1)} m` : '—'} />
                                   <StatTile small label="Avancement" value={advanceM(s) > 0 ? `${advanceM(s).toFixed(0)} m` : '—'} />
                                 </div>
                               ) : (

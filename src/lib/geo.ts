@@ -435,7 +435,7 @@ function keepNearCentre(xy: XY[]): boolean[] {
   const mx = [...xy.map(p => p.x)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
   const my = [...xy.map(p => p.y)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
   const d = xy.map(p => Math.hypot(p.x - mx, p.y - my));
-  const cut = [...d].sort((a, b) => a - b)[Math.floor(0.9 * (d.length - 1))];
+  const cut = [...d].sort((a, b) => a - b)[Math.floor(0.98 * (d.length - 1))];
   return d.map(v => v <= cut);
 }
 
@@ -493,14 +493,16 @@ export function sessionOBBsAligned(
   const pctVal = (sorted: number[], pct: number) =>
     sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(pct / 100 * (sorted.length - 1))))];
 
-  // 5th–95th percentile spans 90% of a uniform spread: divide by 0.9 to recover the full extent
   interface SessionInfo { idx: number; sus: number[]; svs: number[]; vMed: number; width: number }
   const infos: (SessionInfo | null)[] = sessions.map(({ points }, idx) => {
     if (points.length < 4) return null;
-    const xy  = points.map(toXY);
-    const sus = xy.map(p => p.x * ux + p.y * uy).sort((a, b) => a - b);
-    const svs = xy.map(p => p.x * vx + p.y * vy).sort((a, b) => a - b);
-    return { idx, sus, svs, vMed: svs[Math.floor(svs.length / 2)], width: (pctVal(svs, 95) - pctVal(svs, 5)) / 0.9 };
+    const xy   = points.map(toXY);
+    const keep = keepNearCentre(xy);
+    const kept = xy.filter((_, i) => keep[i]);
+    if (kept.length < 4) return null;
+    const sus = kept.map(p => p.x * ux + p.y * uy).sort((a, b) => a - b);
+    const svs = kept.map(p => p.x * vx + p.y * vy).sort((a, b) => a - b);
+    return { idx, sus, svs, vMed: svs[Math.floor(svs.length / 2)], width: svs[svs.length - 1] - svs[0] };
   });
 
   if (largeurM > 0) {
@@ -527,10 +529,9 @@ export function sessionOBBsAligned(
       if (!info) return null;
       const strip = placed.get(idx);
       if (!strip) return null;
-      const L = (pctVal(info.sus, 95) - pctVal(info.sus, 5)) / 0.9;
+      const uMin = info.sus[0], uMax = info.sus[info.sus.length - 1];
+      const L = uMax - uMin;
       if (L < 0.5) return null;
-      const uc = (pctVal(info.sus, 95) + pctVal(info.sus, 5)) / 2;
-      const uMin = uc - L / 2, uMax = uc + L / 2;
       const vMin = strip.vMin + shift, vMax = strip.vMax + shift;
       return {
         polygon: [

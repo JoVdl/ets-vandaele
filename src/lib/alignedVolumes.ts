@@ -4,9 +4,9 @@ import { filterGpsTrack, smoothPoints, sessionOBBsAligned } from './geo';
 
 export interface AlignedRect {
   polygon:   [number, number][];   // [lat, lng] corners
-  lengthM:   number;               // advancement along the work axis
+  lengthM:   number;               // work width: extent along the passes
   widthM:    number;
-  measuredWidthM: number;          // cross-track spread of the session's GPS points
+  measuredWidthM: number;          // advancement: extent across the passes
   areaM2:    number;
   volumeM3?: number;               // areaM2 × depth × passes, when depth is known
 }

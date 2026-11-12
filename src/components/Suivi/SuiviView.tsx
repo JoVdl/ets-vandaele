@@ -630,7 +630,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   }), [sessions, chantiers, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
   const rectOf = useCallback((s: SuiviSession) => alignedRects.get(s.id), [alignedRects]);
   const avgWidth = (list: SuiviSession[]) => {
-    const w = list.map(s => rectOf(s)?.measuredWidthM).filter((x): x is number => x != null);
+    const w = list.map(s => rectOf(s)?.lengthM).filter((x): x is number => x != null);
     return w.length > 0 ? w.reduce((a, b) => a + b, 0) / w.length : 0;
   };
   const volOf = useCallback(
@@ -1687,7 +1687,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                                   <p className="text-cyan-400 text-[10px] tabular-nums">{dayVolume.toFixed(1)} m³</p>
                                 )}
                                 {isDragage && (
-                                  <p className="text-slate-400 text-[10px] tabular-nums">larg. {avgWidth(daySessions).toFixed(1)} m · avance {daySessions.reduce((a, x) => a + (rectOf(x)?.lengthM ?? 0), 0).toFixed(0)} m</p>
+                                  <p className="text-slate-400 text-[10px] tabular-nums">larg. {avgWidth(daySessions).toFixed(1)} m · avance {daySessions.reduce((a, x) => a + (rectOf(x)?.measuredWidthM ?? 0), 0).toFixed(0)} m</p>
                                 )}
                                 {!isDragage && daySurface > 0 && (
                                   <p className="text-green-400 text-[10px] tabular-nums">{formatArea(daySurface)}</p>
@@ -1730,8 +1730,8 @@ export default function SuiviView({ role, onLogout }: Props) {
                                             <SmallStat label="Perdu" value={incMin > 0 ? `${incMin} min` : '—'} />
                                             <SmallStat label="Volume" value={volOf(s) > 0 ? `${volOf(s).toFixed(1)} m³` : '—'} />
                                             <SmallStat label="Rend." value={debitOf(s) > 0 ? `${debitOf(s).toFixed(1)}` : '—'} sub="m³/h" />
-                                            <SmallStat label="Largeur" value={rectOf(s) ? `${rectOf(s)!.measuredWidthM.toFixed(1)} m` : '—'} />
-                                            <SmallStat label="Avancement" value={(rectOf(s)?.lengthM ?? 0) > 0 ? `${rectOf(s)!.lengthM.toFixed(0)} m` : '—'} />
+                                            <SmallStat label="Largeur" value={rectOf(s) ? `${rectOf(s)!.lengthM.toFixed(1)} m` : '—'} />
+                                            <SmallStat label="Avancement" value={(rectOf(s)?.measuredWidthM ?? 0) > 0 ? `${rectOf(s)!.measuredWidthM.toFixed(0)} m` : '—'} />
                                           </div>
                                         ) : (
                                           <div className="grid grid-cols-4 gap-1">
@@ -1881,7 +1881,7 @@ export default function SuiviView({ role, onLogout }: Props) {
                                   <p className="text-cyan-400 text-[10px] tabular-nums">{dayVolume.toFixed(1)} m³</p>
                                 )}
                                 {isDragage && (
-                                  <p className="text-slate-400 text-[10px] tabular-nums">larg. {avgWidth(daySessions).toFixed(1)} m · avance {daySessions.reduce((a, x) => a + (rectOf(x)?.lengthM ?? 0), 0).toFixed(0)} m</p>
+                                  <p className="text-slate-400 text-[10px] tabular-nums">larg. {avgWidth(daySessions).toFixed(1)} m · avance {daySessions.reduce((a, x) => a + (rectOf(x)?.measuredWidthM ?? 0), 0).toFixed(0)} m</p>
                                 )}
                                 {dayVolume === 0 && daySurface > 0 && (
                                   <p className="text-green-400 text-[10px] tabular-nums">{formatArea(daySurface)}</p>
@@ -1922,8 +1922,8 @@ export default function SuiviView({ role, onLogout }: Props) {
                                             <>
                                               <SmallStat label="Volume" value={`${volOf(s).toFixed(1)} m³`} />
                                               <SmallStat label="Débit" value={debitOf(s) > 0 ? `${debitOf(s).toFixed(1)}` : '—'} sub="m³/h" />
-                                              <SmallStat label="Largeur" value={rectOf(s) ? `${rectOf(s)!.measuredWidthM.toFixed(1)} m` : '—'} />
-                                              <SmallStat label="Avancement" value={(rectOf(s)?.lengthM ?? 0) > 0 ? `${rectOf(s)!.lengthM.toFixed(0)} m` : '—'} />
+                                              <SmallStat label="Largeur" value={rectOf(s) ? `${rectOf(s)!.lengthM.toFixed(1)} m` : '—'} />
+                                              <SmallStat label="Avancement" value={(rectOf(s)?.measuredWidthM ?? 0) > 0 ? `${rectOf(s)!.measuredWidthM.toFixed(0)} m` : '—'} />
                                             </>
                                           ) : (
                                             <>
