@@ -40,19 +40,22 @@ interface Props {
   isDragage:       boolean;
   volumeOf:        (s: SuiviSession) => number;
   rectOf:          (s: SuiviSession) => AlignedRect | undefined;
-  machineWidthM:   number;
   salarieName?:    string;
   onClose:         () => void;
   onSessionClick?: (session: SuiviSession) => void;
 }
 
-export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, rectOf, machineWidthM, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
+export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, rectOf, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
   const ordered = useMemo(
     () => [...sessions].sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime()),
     [sessions],
   );
 
   const advanceM = (s: SuiviSession) => rectOf(s)?.lengthM ?? 0;
+  const avgWidth = (list: SuiviSession[]) => {
+    const w = list.map(s => rectOf(s)?.measuredWidthM).filter((x): x is number => x != null);
+    return w.length > 0 ? w.reduce((a, b) => a + b, 0) / w.length : 0;
+  };
 
   // Cumul stats
   const totalVolumeM3    = sessions.reduce((a, s) => a + volumeOf(s), 0);
@@ -349,7 +352,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
                           <p className="text-cyan-400 text-[10px] tabular-nums">{dayVolume.toFixed(1)} m³</p>
                         )}
                         {isDragage && dayAdvance > 0 && (
-                          <p className="text-slate-400 text-[10px] tabular-nums">larg. {machineWidthM.toFixed(1)} m · avance {dayAdvance.toFixed(0)} m</p>
+                          <p className="text-slate-400 text-[10px] tabular-nums">larg. {avgWidth(daySessions).toFixed(1)} m · avance {dayAdvance.toFixed(0)} m</p>
                         )}
                         {!isDragage && daySurface > 0 && (
                           <p className="text-green-400 text-[10px] tabular-nums">{formatArea(daySurface)}</p>
@@ -400,7 +403,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
                                   <StatTile small label="Perdu"  value={incMin > 0 ? `${incMin} min` : '—'} accent={incMin > 0 ? 'amber' : undefined} />
                                   <StatTile small label="Volume" value={volumeOf(s) > 0 ? `${volumeOf(s).toFixed(1)} m³` : '—'} />
                                   <StatTile small label="Rend."  value={netDebit > 0 ? `${netDebit.toFixed(1)} m³/h` : '—'} />
-                                  <StatTile small label="Largeur" value={`${machineWidthM.toFixed(1)} m`} />
+                                  <StatTile small label="Largeur" value={rectOf(s) ? `${rectOf(s)!.measuredWidthM.toFixed(1)} m` : '—'} />
                                   <StatTile small label="Avancement" value={advanceM(s) > 0 ? `${advanceM(s).toFixed(0)} m` : '—'} />
                                 </div>
                               ) : (

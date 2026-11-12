@@ -6,6 +6,7 @@ export interface AlignedRect {
   polygon:   [number, number][];   // [lat, lng] corners
   lengthM:   number;               // advancement along the work axis
   widthM:    number;
+  measuredWidthM: number;          // cross-track spread of the session's GPS points
   areaM2:    number;
   volumeM3?: number;               // areaM2 × depth × passes, when depth is known
 }
@@ -42,6 +43,7 @@ export function alignedRectsBySession(
         polygon:  obb.polygon.map(p => [p.lat, p.lng] as [number, number]),
         lengthM:  obb.lengthM,
         widthM:   obb.widthM,
+        measuredWidthM: obb.measuredWidthM,
         areaM2:   obb.areaM2,
         volumeM3: depth > 0 ? obb.areaM2 * depth : undefined,
       });

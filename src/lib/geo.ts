@@ -431,7 +431,7 @@ export function orientedBoundingBoxM2(
 export function sessionOBBsAligned(
   sessions: { points: { lat: number; lng: number }[] }[],
   largeurM = 0,
-): ({ polygon: { lat: number; lng: number }[]; widthM: number; lengthM: number; areaM2: number } | null)[] {
+): ({ polygon: { lat: number; lng: number }[]; widthM: number; measuredWidthM: number; lengthM: number; areaM2: number } | null)[] {
   const all = sessions.flatMap(s => s.points);
   if (all.length < 4) return sessions.map(() => null);
 
@@ -513,7 +513,9 @@ export function sessionOBBsAligned(
           toLatLng(uMin, vMin), toLatLng(uMax, vMin),
           toLatLng(uMax, vMax), toLatLng(uMin, vMax),
         ],
-        widthM: largeurM, lengthM, areaM2: lengthM * largeurM,
+        widthM: largeurM,
+        measuredWidthM: (pctVal(info.svs, 90) - pctVal(info.svs, 10)) / 0.8,
+        lengthM, areaM2: lengthM * largeurM,
       };
     });
   }
@@ -533,7 +535,7 @@ export function sessionOBBsAligned(
         toLatLng(uMin, vMin), toLatLng(uMax, vMin),
         toLatLng(uMax, vMax), toLatLng(uMin, vMax),
       ],
-      widthM, lengthM, areaM2: lengthM * widthM,
+      widthM, measuredWidthM: widthM / 0.8, lengthM, areaM2: lengthM * widthM,
     };
   });
 }

@@ -69,7 +69,6 @@ interface Props {
   chantierZones: ChantierZone[];
   machineParams?: { largeurTravailM: number; vitesseMaxKmh: number; recouvrementPct: number };
   alignedRect?: AlignedRect;
-  machineWidthM?: number;
   workColor:     string;
   salarieName?:  string;
   onUpdateIncidents?: (incidents: SuiviIncident[]) => Promise<void>;
@@ -113,7 +112,7 @@ interface RecapExtras {
   correctedRendement: number | null;
   correctedVolumeM3:  number | null;
   correctedDebitM3h:  number | null;
-  machineWidthM:      number | null;
+  measuredWidthM:     number | null;
   advanceM:           number | null;
 }
 
@@ -152,7 +151,7 @@ function openPrintRecap(
       ['Volume dragué',        `${displayVolumeM3.toFixed(1)} m³`] as [string, string],
       ['Surface draguée',      formatArea(displaySurface)] as [string, string],
       ['Débit de dragage',     displayDebitM3h > 0 ? `${displayDebitM3h.toFixed(1)} m³/h` : '—'] as [string, string],
-      ['Largeur de travail',   extras.machineWidthM ? `${extras.machineWidthM.toFixed(1)} m` : '—'] as [string, string],
+      ['Largeur mesurée',      extras.measuredWidthM ? `${extras.measuredWidthM.toFixed(1)} m` : '—'] as [string, string],
       ['Avancement',           extras.advanceM && extras.advanceM > 0 ? `${extras.advanceM.toFixed(0)} m` : '—'] as [string, string],
       ...(session.profondeurDragageM != null ? [[
         'Profondeur par passe',
@@ -285,7 +284,7 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, machineWidthM, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose }: Props) {
   const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
 
   // Local incidents state — reflects Firestore changes via updated session prop
@@ -441,7 +440,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
           onClick={() => openPrintRecap(
             session, chantier, thisPct, cumulPct, rendMoyen, workColor,
             chantierZones.flatMap(z => z.polygons.filter(p => p.length >= 3)),
-            { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3: displayVolumeM3, correctedDebitM3h: displayDebitM3h, machineWidthM: machineWidthM ?? null, advanceM: alignedRect?.lengthM ?? null },
+            { workSpeedKmh, correctedSurfaceM2, correctedRendement, correctedVolumeM3: displayVolumeM3, correctedDebitM3h: displayDebitM3h, measuredWidthM: alignedRect?.measuredWidthM ?? null, advanceM: alignedRect?.lengthM ?? null },
             salarieName,
           )}
           title="Récap client (PDF)"
@@ -542,7 +541,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
         </div>
         {isDragageSession && (
           <div className="grid grid-cols-4 gap-1 mb-2">
-            <StatCard label="Largeur de travail" value={machineWidthM ? `${machineWidthM.toFixed(1)} m` : '—'} />
+            <StatCard label="Largeur mesurée"    value={alignedRect ? `${alignedRect.measuredWidthM.toFixed(1)} m` : '—'} />
             <StatCard label="Avancement"         value={alignedRect && alignedRect.lengthM > 0 ? `${alignedRect.lengthM.toFixed(0)} m` : '—'} />
           </div>
         )}
