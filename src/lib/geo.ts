@@ -430,24 +430,29 @@ export function orientedBoundingBoxM2(
  */
 type XY = { x: number; y: number };
 
-// Long-side direction (radians) of the smallest rectangle covering the 5th–95th percentile
-// of the points. Percentiles ignore isolated spikes that would tilt a convex hull.
-function robustLongAxis(pts: XY[]): { angle: number; area: number } | null {
-  if (pts.length < 4) return null;
-  const pct = (sorted: number[], p: number) =>
-    sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1))))];
-  let best: { area: number; angle: number } | null = null;
-  for (let deg = 0; deg < 180; deg += 1) {
-    const th = deg * Math.PI / 180;
-    const c = Math.cos(th), s = Math.sin(th);
-    const us = pts.map(q => q.x * c + q.y * s).sort((a, b) => a - b);
-    const vs = pts.map(q => -q.x * s + q.y * c).sort((a, b) => a - b);
-    const Lu = pct(us, 0.95) - pct(us, 0.05);
-    const Lv = pct(vs, 0.95) - pct(vs, 0.05);
-    const area = Lu * Lv;
-    if (!best || area < best.area) best = { area, angle: Lu >= Lv ? th : th + Math.PI / 2 };
+// Drops points far from the session's median position (spikes, positioning moves), keeping order.
+function keepNearCentre(xy: XY[]): boolean[] {
+  const mx = [...xy.map(p => p.x)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
+  const my = [...xy.map(p => p.y)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
+  const d = xy.map(p => Math.hypot(p.x - mx, p.y - my));
+  const cut = [...d].sort((a, b) => a - b)[Math.floor(0.9 * (d.length - 1))];
+  return d.map(v => v <= cut);
+}
+
+// Pass direction: length-weighted doubled-angle mean of segments between kept consecutive points.
+function passSegmentsSinCos(xy: XY[]): { s: number; c: number } {
+  const keep = keepNearCentre(xy);
+  let s = 0, c = 0;
+  for (let i = 1; i < xy.length; i++) {
+    if (!keep[i] || !keep[i - 1]) continue;
+    const dx = xy[i].x - xy[i - 1].x, dy = xy[i].y - xy[i - 1].y;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.5) continue;
+    const th = Math.atan2(dy, dx);
+    s += len * Math.sin(2 * th);
+    c += len * Math.cos(2 * th);
   }
-  return best;
+  return { s, c };
 }
 
 export function sessionOBBsAligned(
@@ -468,15 +473,13 @@ export function sessionOBBsAligned(
     y: (pt.lat - lat0) * D2R * R,
   });
 
-  // Shared work axis: area-weighted mean of each session's min-area-rectangle long side.
-  // Angles are doubled so that θ and θ+π (reverse direction) reinforce each other.
+  // Shared work axis from the pass directions of all sessions.
   let sinSum = 0, cosSum = 0;
   for (const { points } of sessions) {
     if (points.length < 4) continue;
-    const r = robustLongAxis(points.map(toXY));
-    if (!r) continue;
-    sinSum += r.area * Math.sin(2 * r.angle);
-    cosSum += r.area * Math.cos(2 * r.angle);
+    const r = passSegmentsSinCos(points.map(toXY));
+    sinSum += r.s;
+    cosSum += r.c;
   }
   const angle = 0.5 * Math.atan2(sinSum, cosSum);
   const ux = Math.cos(angle), uy = Math.sin(angle);
