@@ -64,31 +64,37 @@ function buildRows(sessions: SuiviSession[], rects: Map<string, AlignedRect>): R
   });
 }
 
-function planSvg(rects: AlignedRect[], sessions: SuiviSession[], rectMap: Map<string, AlignedRect>): string {
-  const polys = sessions
-    .map((s, i) => ({ i, p: rectMap.get(s.id)?.polygon }))
-    .filter((x): x is { i: number; p: [number, number][] } => !!x.p);
-  if (polys.length === 0 || rects.length === 0) return '';
-  const lats = polys.flatMap(x => x.p.map(q => q[0]));
-  const lngs = polys.flatMap(x => x.p.map(q => q[1]));
-  const lat0 = (Math.min(...lats) + Math.max(...lats)) / 2;
-  const kx = Math.cos(lat0 * Math.PI / 180);
-  const minX = Math.min(...lngs) * kx, maxX = Math.max(...lngs) * kx;
-  const minY = Math.min(...lats), maxY = Math.max(...lats);
-  const W = 800, pad = 20;
-  const scale = (W - 2 * pad) / Math.max(1e-9, maxX - minX);
-  const H = Math.max(200, (maxY - minY) * scale + 2 * pad);
-  const px = (lng: number) => pad + (lng * kx - minX) * scale;
-  const py = (lat: number) => pad + (maxY - lat) * scale;
-  const shapes = polys.map(({ i, p }) => {
-    const color = HIST_PALETTE[i % HIST_PALETTE.length];
-    const pts = p.map(([la, ln]) => `${px(ln).toFixed(1)},${py(la).toFixed(1)}`).join(' ');
-    return `<polygon points="${pts}" fill="${esc(color)}" fill-opacity="0.35" stroke="${esc(color)}" stroke-width="1.5"/>`;
-  }).join('');
-  return `<svg viewBox="0 0 ${W} ${H.toFixed(0)}" width="100%" xmlns="http://www.w3.org/2000/svg" style="background:#f1f5f9;border-radius:8px">${shapes}</svg>`;
+function planMap(sessions: SuiviSession[], rectMap: Map<string, AlignedRect>): string {
+  const zones = sessions
+    .map((s, i) => {
+      const rect = rectMap.get(s.id);
+      if (!rect) return null;
+      const color = HIST_PALETTE[i % HIST_PALETTE.length];
+      const label = `${format(new Date(s.dateDebut), 'dd/MM HH:mm')} · ${fmt1(rect.volumeM3 ?? s.volumeM3 ?? 0)} m³`;
+      return { color, label, poly: rect.polygon };
+    })
+    .filter((z): z is { color: string; label: string; poly: [number, number][] } => z !== null);
+  if (zones.length === 0) return '';
+  const json = JSON.stringify(zones).replace(/</g, '\\u003c');
+  return `<div id="plan" style="height:440px;border-radius:8px;overflow:hidden"></div>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  var zones = ${json};
+  var map = L.map('plan', { zoomControl: true });
+  L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', {
+    maxZoom: 19, attribution: '&copy; <a href="https://www.ign.fr">IGN</a> – Géoplateforme'
+  }).addTo(map);
+  var group = L.featureGroup(zones.map(function(z){
+    return L.polygon(z.poly, { color: z.color, fillColor: z.color, fillOpacity: 0.4, weight: 2 }).bindTooltip(z.label);
+  })).addTo(map);
+  map.fitBounds(group.getBounds(), { padding: [20, 20] });
+})();
+</script>`;
 }
 
-function buildHtml(args: {
+export function buildHtml(args: {
   chantier: Chantier; sessions: SuiviSession[]; rows: Row[]; rects: Map<string, AlignedRect>;
   sections: Set<SectionKey>; columns: Set<ColumnKey>;
 }): string {
@@ -124,8 +130,8 @@ function buildHtml(args: {
   }
 
   if (sections.has('plan')) {
-    const svg = planSvg([...rects.values()], sessions, rects);
-    parts.push(`<h2>Plan des zones travaillées</h2>${svg || '<p class="muted">Aucune zone calculée (chantier non drague ou sessions sans trace GPS).</p>'}`);
+    const map = planMap(sessions, rects);
+    parts.push(`<h2>Plan des zones travaillées</h2>${map || '<p class="muted">Aucune zone calculée (chantier non drague ou sessions sans trace GPS).</p>'}`);
   }
 
   if (sections.has('daily')) {
