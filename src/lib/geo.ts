@@ -435,7 +435,8 @@ function keepNearCentre(xy: XY[], spd?: (number | undefined)[]): boolean[] {
   const mx = [...xy.map(p => p.x)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
   const my = [...xy.map(p => p.y)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
   const d = xy.map(p => Math.hypot(p.x - mx, p.y - my));
-  const cut = [...d].sort((a, b) => a - b)[Math.floor(0.98 * (d.length - 1))];
+  // Only far spikes are removed: the pass ends are the farthest real points and must stay
+  const cut = [...d].sort((a, b) => a - b)[Math.floor(0.995 * (d.length - 1))];
   const keep = d.map(v => v <= cut);
   // Transit from the start point to the work area: leading points moving much faster than the
   // session's working speed. Display only; stored GPS points are untouched.
@@ -517,21 +518,13 @@ export function sessionOBBsAligned(
   });
 
   if (largeurM > 0) {
-    // Each session stays on its own GPS footprint (no cumulative shift). Where two footprints
-    // overlap, the overlap is shared equally between neighbours in cross-track order.
+    // Each session keeps its own GPS footprint: zones match the trail they were measured from.
+    // Overlapping sessions overlap on the map, as the ground was actually worked twice.
     const valid = infos.filter((s): s is SessionInfo => s !== null);
     if (valid.length === 0) return sessions.map(() => null);
     valid.sort((a, b) => (a.svs[0] + a.svs[a.svs.length - 1]) - (b.svs[0] + b.svs[b.svs.length - 1]));
 
     const bands = valid.map(s => ({ idx: s.idx, vMin: s.svs[0], vMax: s.svs[s.svs.length - 1] }));
-    for (let i = 1; i < bands.length; i++) {
-      const prev = bands[i - 1], cur = bands[i];
-      const ov = prev.vMax - cur.vMin;
-      if (ov > 0) {
-        prev.vMax -= ov / 2;
-        cur.vMin += ov / 2;
-      }
-    }
     const bandOf = new Map(bands.map(b => [b.idx, b]));
 
     return infos.map((info, idx) => {
