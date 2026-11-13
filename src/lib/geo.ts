@@ -431,17 +431,28 @@ export function orientedBoundingBoxM2(
 type XY = { x: number; y: number };
 
 // Drops points far from the session's median position (spikes, positioning moves), keeping order.
-function keepNearCentre(xy: XY[]): boolean[] {
+function keepNearCentre(xy: XY[], spd?: (number | undefined)[]): boolean[] {
   const mx = [...xy.map(p => p.x)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
   const my = [...xy.map(p => p.y)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
   const d = xy.map(p => Math.hypot(p.x - mx, p.y - my));
   const cut = [...d].sort((a, b) => a - b)[Math.floor(0.98 * (d.length - 1))];
-  return d.map(v => v <= cut);
+  const keep = d.map(v => v <= cut);
+  // Transit from the start point to the work area: leading points moving much faster than the
+  // session's working speed. Display only; stored GPS points are untouched.
+  if (spd) {
+    const known = spd.filter((v): v is number => v != null && v > 0).sort((a, b) => a - b);
+    if (known.length >= 5) {
+      const work = known[Math.floor(known.length / 4)];
+      let i = 0;
+      while (i < spd.length && (spd[i] ?? 0) > 2 * work) keep[i++] = false;
+    }
+  }
+  return keep;
 }
 
 // Pass direction: length-weighted doubled-angle mean of segments between kept consecutive points.
-function passSegmentsSinCos(xy: XY[]): { s: number; c: number } {
-  const keep = keepNearCentre(xy);
+function passSegmentsSinCos(xy: XY[], spd?: (number | undefined)[]): { s: number; c: number } {
+  const keep = keepNearCentre(xy, spd);
   let s = 0, c = 0;
   for (let i = 1; i < xy.length; i++) {
     if (!keep[i] || !keep[i - 1]) continue;
@@ -456,7 +467,7 @@ function passSegmentsSinCos(xy: XY[]): { s: number; c: number } {
 }
 
 export function sessionOBBsAligned(
-  sessions: { points: { lat: number; lng: number }[] }[],
+  sessions: { points: { lat: number; lng: number; spd?: number }[] }[],
   largeurM = 0,
 ): ({ polygon: { lat: number; lng: number }[]; widthM: number; measuredWidthM: number; lengthM: number; areaM2: number } | null)[] {
   const all = sessions.flatMap(s => s.points);
@@ -477,7 +488,7 @@ export function sessionOBBsAligned(
   let sinSum = 0, cosSum = 0;
   for (const { points } of sessions) {
     if (points.length < 4) continue;
-    const r = passSegmentsSinCos(points.map(toXY));
+    const r = passSegmentsSinCos(points.map(toXY), points.map(p => p.spd));
     sinSum += r.s;
     cosSum += r.c;
   }
@@ -497,7 +508,7 @@ export function sessionOBBsAligned(
   const infos: (SessionInfo | null)[] = sessions.map(({ points }, idx) => {
     if (points.length < 4) return null;
     const xy   = points.map(toXY);
-    const keep = keepNearCentre(xy);
+    const keep = keepNearCentre(xy, points.map(p => p.spd));
     const kept = xy.filter((_, i) => keep[i]);
     if (kept.length < 4) return null;
     const sus = kept.map(p => p.x * ux + p.y * uy).sort((a, b) => a - b);
