@@ -632,6 +632,12 @@ export default function SuiviView({ role, onLogout }: Props) {
     smoothAlpha:   machineParams.smoothAlpha,
   }), [sessions, chantiers, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
   const rectOf = useCallback((s: SuiviSession) => alignedRects.get(s.id), [alignedRects]);
+  const chantierTimeline = useMemo(() => {
+    if (!selectedSession) return [];
+    return sessions
+      .filter(s => s.chantierId === selectedSession.chantierId)
+      .sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime());
+  }, [sessions, selectedSession]);
   const avgWidth = (list: SuiviSession[]) => {
     const w = list.map(s => rectOf(s)?.lengthM).filter((x): x is number => x != null);
     return w.length > 0 ? w.reduce((a, b) => a + b, 0) / w.length : 0;
@@ -2267,6 +2273,16 @@ export default function SuiviView({ role, onLogout }: Props) {
             await updateSession(selectedSession.id, { incidents });
           }}
           onClose={() => setSelectedSession(null)}
+          onPrev={(() => {
+            const i = chantierTimeline.findIndex(s => s.id === selectedSession.id);
+            const p = i > 0 ? chantierTimeline[i - 1] : null;
+            return p ? () => setSelectedSession(p) : undefined;
+          })()}
+          onNext={(() => {
+            const i = chantierTimeline.findIndex(s => s.id === selectedSession.id);
+            const n = i >= 0 && i < chantierTimeline.length - 1 ? chantierTimeline[i + 1] : null;
+            return n ? () => setSelectedSession(n) : undefined;
+          })()}
         />
       )}
 

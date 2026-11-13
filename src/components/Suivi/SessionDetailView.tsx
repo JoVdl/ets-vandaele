@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ArrowLeft, Printer, AlertTriangle, Plus, X, Check } from 'lucide-react';
+import { ArrowLeft, Printer, AlertTriangle, Plus, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { INCIDENT_LABELS, INCIDENT_COLORS } from './incidentUtils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -73,6 +73,8 @@ interface Props {
   salarieName?:  string;
   onUpdateIncidents?: (incidents: SuiviIncident[]) => Promise<void>;
   onClose:       () => void;
+  onPrev?:       () => void;
+  onNext?:       () => void;
 }
 
 // Keep only GPS points with inter-point speed below maxSpeedKmh — removes transit driving
@@ -284,7 +286,7 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext }: Props) {
   const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
 
   // Local incidents state — reflects Firestore changes via updated session prop
@@ -423,6 +425,12 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
       <div className="flex items-center gap-3 px-3 py-2 bg-slate-900 border-b border-slate-800 flex-shrink-0">
         <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white flex-shrink-0">
           <ArrowLeft size={18} />
+        </button>
+        <button onClick={onPrev} disabled={!onPrev} title="Session précédente" className="p-1.5 rounded-lg text-slate-400 hover:text-white disabled:opacity-25 flex-shrink-0">
+          <ChevronLeft size={18} />
+        </button>
+        <button onClick={onNext} disabled={!onNext} title="Session suivante" className="p-1.5 rounded-lg text-slate-400 hover:text-white disabled:opacity-25 flex-shrink-0">
+          <ChevronRight size={18} />
         </button>
         <div className="flex-1 min-w-0">
           <p className="text-white text-sm font-semibold truncate">{session.chantierNom}</p>
