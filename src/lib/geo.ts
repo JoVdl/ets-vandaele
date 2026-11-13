@@ -509,8 +509,8 @@ export function sessionOBBsAligned(
     if (points.length < 4) return null;
     const xy   = points.map(toXY);
     const keep = keepNearCentre(xy, points.map(p => p.spd));
-    const kept = xy.filter((_, i) => keep[i]);
-    if (kept.length < 4) return null;
+    const trimmed = xy.filter((_, i) => keep[i]);
+    const kept = trimmed.length >= 4 ? trimmed : xy;
     const sus = kept.map(p => p.x * ux + p.y * uy).sort((a, b) => a - b);
     const svs = kept.map(p => p.x * vx + p.y * vy).sort((a, b) => a - b);
     return { idx, sus, svs, vMed: svs[Math.floor(svs.length / 2)], width: svs[svs.length - 1] - svs[0] };
@@ -540,12 +540,16 @@ export function sessionOBBsAligned(
       if (!band) return null;
       const uMin = info.sus[0], uMax = info.sus[info.sus.length - 1];
       const L = uMax - uMin;
-      const w = band.vMax - band.vMin;
-      if (L < 0.5 || w < 0.5) return null;
+      if (L < 0.5) return null;
+      // A single pass has no measurable cross-track spread: the machine still works its full width
+      const measured = band.vMax - band.vMin;
+      const w = measured >= 0.5 ? measured : largeurM;
+      const vc = (band.vMin + band.vMax) / 2;
+      const vMin = vc - w / 2, vMax = vc + w / 2;
       return {
         polygon: [
-          toLatLng(uMin, band.vMin), toLatLng(uMax, band.vMin),
-          toLatLng(uMax, band.vMax), toLatLng(uMin, band.vMax),
+          toLatLng(uMin, vMin), toLatLng(uMax, vMin),
+          toLatLng(uMax, vMax), toLatLng(uMin, vMax),
         ],
         widthM: w, measuredWidthM: w, lengthM: L, areaM2: L * w,
       };
