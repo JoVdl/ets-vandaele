@@ -506,39 +506,37 @@ export function sessionOBBsAligned(
   });
 
   if (largeurM > 0) {
-    // Each session keeps its measured width. Sessions are placed in cross-track order and
-    // pushed apart when they would overlap, so adjacent rectangles touch but never intersect.
+    // Each session stays on its own GPS footprint (no cumulative shift). Where two footprints
+    // overlap, the overlap is shared equally between neighbours in cross-track order.
     const valid = infos.filter((s): s is SessionInfo => s !== null);
     if (valid.length === 0) return sessions.map(() => null);
-    valid.sort((a, b) => a.vMed - b.vMed);
+    valid.sort((a, b) => (a.svs[0] + a.svs[a.svs.length - 1]) - (b.svs[0] + b.svs[b.svs.length - 1]));
 
-    const placed = new Map<number, { vMin: number; vMax: number; w: number }>();
-    let prevEnd = -Infinity;
-    for (const s of valid) {
-      const w = s.width >= 0.5 ? s.width : largeurM;
-      const c = Math.max(s.vMed, prevEnd + w / 2);
-      placed.set(s.idx, { vMin: c - w / 2, vMax: c + w / 2, w });
-      prevEnd = c + w / 2;
+    const bands = valid.map(s => ({ idx: s.idx, vMin: s.svs[0], vMax: s.svs[s.svs.length - 1] }));
+    for (let i = 1; i < bands.length; i++) {
+      const prev = bands[i - 1], cur = bands[i];
+      const ov = prev.vMax - cur.vMin;
+      if (ov > 0) {
+        prev.vMax -= ov / 2;
+        cur.vMin += ov / 2;
+      }
     }
-    // Keep the group centred on where the sessions actually were
-    const meanMed = valid.reduce((a, s) => a + s.vMed, 0) / valid.length;
-    const meanC   = valid.reduce((a, s) => { const p = placed.get(s.idx)!; return a + (p.vMin + p.vMax) / 2; }, 0) / valid.length;
-    const shift = meanMed - meanC;
+    const bandOf = new Map(bands.map(b => [b.idx, b]));
 
     return infos.map((info, idx) => {
       if (!info) return null;
-      const strip = placed.get(idx);
-      if (!strip) return null;
+      const band = bandOf.get(idx);
+      if (!band) return null;
       const uMin = info.sus[0], uMax = info.sus[info.sus.length - 1];
       const L = uMax - uMin;
-      if (L < 0.5) return null;
-      const vMin = strip.vMin + shift, vMax = strip.vMax + shift;
+      const w = band.vMax - band.vMin;
+      if (L < 0.5 || w < 0.5) return null;
       return {
         polygon: [
-          toLatLng(uMin, vMin), toLatLng(uMax, vMin),
-          toLatLng(uMax, vMax), toLatLng(uMin, vMax),
+          toLatLng(uMin, band.vMin), toLatLng(uMax, band.vMin),
+          toLatLng(uMax, band.vMax), toLatLng(uMin, band.vMax),
         ],
-        widthM: strip.w, measuredWidthM: strip.w, lengthM: L, areaM2: L * strip.w,
+        widthM: w, measuredWidthM: w, lengthM: L, areaM2: L * w,
       };
     });
   }
