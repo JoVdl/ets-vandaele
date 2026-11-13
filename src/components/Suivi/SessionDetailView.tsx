@@ -501,7 +501,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
                   opacity={0.80}
                 />
                 {trail.length > 1 && (
-                  <Polyline positions={trail} color={workColor} weight={1.5} opacity={0.40} dashArray="3 6" />
+                  <Polyline positions={trail} color="#ffffff" weight={2.5} opacity={0.95} dashArray="6 5" />
                 )}
               </>
             ) : (
