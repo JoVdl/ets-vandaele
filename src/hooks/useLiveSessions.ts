@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   collection, doc, onSnapshot, setDoc, deleteDoc, Timestamp,
 } from 'firebase/firestore';
@@ -44,50 +44,57 @@ export async function clearLiveSession(sessionId: string): Promise<void> {
   await deleteDoc(doc(db, COL, sessionId)).catch(() => {});
 }
 
-/** Subscribe to all active live sessions (patron view). */
+/** Subscribe to all active live sessions (patron view). Read-only: never writes to Firestore. */
 export function useLiveSessions() {
-  const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
+  const [docs, setDocs] = useState<LiveSession[]>([]);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const subscribe = () => onSnapshot(collection(db, COL), snap => {
-      const cutoff = Date.now() - 10 * 60 * 1000; // ignore stale (> 10 min)
-      setLiveSessions(
-        snap.docs
-          .map(d => {
-            const raw = d.data() as Record<string, unknown>;
-            return {
-              ...raw,
-              sessionId: d.id,
-              lastUpdate: (raw.lastUpdate as Timestamp).toDate().toISOString(),
-            } as LiveSession;
-          })
-          .filter(s => new Date(s.lastUpdate).getTime() > cutoff)
+      setDocs(
+        snap.docs.map(d => {
+          const raw = d.data() as Record<string, unknown>;
+          const ts = raw.lastUpdate as Timestamp | undefined;
+          return {
+            ...raw,
+            sessionId: d.id,
+            lastUpdate: ts ? ts.toDate().toISOString() : new Date(0).toISOString(),
+          } as LiveSession;
+        })
       );
+      setNow(Date.now());
     }, () => {});
 
     let unsub = subscribe();
 
-    // Re-subscribe on tab focus (connexion Firestore peut se figer en arrière-plan)
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        unsub();
-        unsub = subscribe();
-      }
-    };
-
-    // Re-subscribe périodique toutes les 3 min (évite les connexions WS figées)
-    const interval = setInterval(() => {
+    const resubscribe = () => {
       unsub();
       unsub = subscribe();
-    }, 3 * 60 * 1000);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') resubscribe();
+    };
+
+    // Recalcule la fraîcheur toutes les 15 s, même sans nouvel envoi du salarié
+    const tick = setInterval(() => setNow(Date.now()), 15 * 1000);
+    // Re-souscrit périodiquement (les connexions WS peuvent se figer)
+    const refresh = setInterval(resubscribe, 3 * 60 * 1000);
 
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', resubscribe);
     return () => {
       unsub();
-      clearInterval(interval);
+      clearInterval(tick);
+      clearInterval(refresh);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', resubscribe);
     };
   }, []);
+
+  const liveSessions = useMemo(() => {
+    const cutoff = now - 10 * 60 * 1000; // ignore stale (> 10 min)
+    return docs.filter(s => new Date(s.lastUpdate).getTime() > cutoff);
+  }, [docs, now]);
 
   return { liveSessions };
 }

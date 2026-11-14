@@ -984,6 +984,14 @@ export default function SuiviView({ role, onLogout }: Props) {
       {view === 'map' && (
         <>
           <div className="flex-1 relative overflow-hidden">
+            {role === 'patron' && liveSessions.filter(s => s.sessionId !== sessionIdRef.current).slice(0, 1).map(ls => (
+              <button key={ls.sessionId}
+                onClick={() => { setSelectedChantierId(ls.chantierId); setFollowGps(false); }}
+                className="absolute top-2 left-1/2 -translate-x-1/2 z-[900] flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500 text-white text-xs font-semibold shadow-lg whitespace-nowrap max-w-[92%]">
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse flex-shrink-0" />
+                <span className="truncate">{ls.operateur === 'patron' ? 'Patron' : salarieName} en cours · {ls.chantierNom}</span>
+              </button>
+            ))}
             <SuiviMap
               gpsPoints={filteredPoints}
               currentPos={currentPos}
