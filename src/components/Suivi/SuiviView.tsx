@@ -15,7 +15,7 @@ import {
   areaM2, formatArea, formatDistance, formatDuration, centroid,
   avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, orientedBoundingBoxM2, filterGpsTrack,
 } from '../../lib/geo';
-import { alignedRectsBySession } from '../../lib/alignedVolumes';
+import { chantierZones as computeChantierZones } from '../../lib/alignedVolumes';
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
 } from '../../lib/machineParams';
@@ -626,7 +626,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   }, [selectedChantierId, chantiers, sessions]);
 
   // Display volumes/débits: aligned rectangle × depth; falls back to stored values.
-  const alignedRects = useMemo(() => alignedRectsBySession(sessions, chantiers, {
+  const { rects: alignedRects, hidden: hiddenZones } = useMemo(() => computeChantierZones(sessions, chantiers, {
     vitesseMaxKmh: machineParams.vitesseMaxKmh,
     largeurM:      machineParams.largeurTravailM,
     smoothAlpha:   machineParams.smoothAlpha,
@@ -643,8 +643,8 @@ export default function SuiviView({ role, onLogout }: Props) {
     return w.length > 0 ? w.reduce((a, b) => a + b, 0) / w.length : 0;
   };
   const volOf = useCallback(
-    (s: SuiviSession) => rectOf(s)?.volumeM3 ?? s.volumeM3 ?? 0,
-    [rectOf],
+    (s: SuiviSession) => (hiddenZones.has(s.id) ? 0 : (rectOf(s)?.volumeM3 ?? s.volumeM3 ?? 0)),
+    [rectOf, hiddenZones],
   );
   const debitOf = useCallback(
     (s: SuiviSession) => (s.debitM3h && s.volumeM3 ? s.debitM3h * volOf(s) / s.volumeM3 : (s.debitM3h ?? 0)),
@@ -662,7 +662,7 @@ export default function SuiviView({ role, onLogout }: Props) {
     const selIdxMap = new Map(selSorted.map((s, i) => [s.id, i]));
 
     return sessions
-      .filter(s => s.gpsPoints.length > 1)
+      .filter(s => s.gpsPoints.length > 1 && !hiddenZones.has(s.id))
       .map(s => {
         const c = chanMap[s.chantierId];
         const isChantierDrague = c?.drague ?? false;
@@ -678,7 +678,7 @@ export default function SuiviView({ role, onLogout }: Props) {
         const color = c ? (CHANTIER_TYPES[c.type]?.color ?? '#22c55e') : '#22c55e';
         return { points: pts, color, sessionId: s.id, volumeM3: volOf(s), profondeurM, isSelected: false };
       });
-  }, [sessions, chantiers, selectedChantierId, machineParams.vitesseMaxKmh, volOf]);
+  }, [sessions, chantiers, selectedChantierId, machineParams.vitesseMaxKmh, volOf, hiddenZones]);
 
   const chantierZones = useMemo<ChantierZone[]>(() =>
     chantiers
@@ -2273,6 +2273,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           chantierZones={chantierZones}
           machineParams={machineParams}
           alignedRect={rectOf(selectedSession)}
+          zoneHidden={hiddenZones.has(selectedSession.id)}
           workColor={selectedSession.chantierId === selectedChantierId
             ? workColor
             : '#22c55e'}

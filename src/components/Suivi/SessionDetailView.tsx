@@ -74,6 +74,7 @@ interface Props {
   onUpdateIncidents?: (incidents: SuiviIncident[]) => Promise<void>;
   onClose:       () => void;
   onPrev?:       () => void;
+  zoneHidden?:   boolean;
   onNext?:       () => void;
 }
 
@@ -286,7 +287,7 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext, zoneHidden = false }: Props) {
   const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
 
   // Local incidents state — reflects Firestore changes via updated session prop
@@ -330,11 +331,11 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
     isDragageSession ? 1.6 : 2.0,
     isDragageSession ? Math.max((machineParams?.largeurTravailM ?? 6) * 10, 150) : Infinity,
   ));
-  const trail = filteredGps.map(p => [p.lat, p.lng] as [number, number]);
+  const trail = zoneHidden ? [] : filteredGps.map(p => [p.lat, p.lng] as [number, number]);
   const alignedVolumeM3 = alignedRect?.volumeM3;
-  const hullPositions: [number, number][] | null = isDragageSession && alignedRect
+  const hullPositions: [number, number][] | null = isDragageSession && !zoneHidden && alignedRect
     ? alignedRect.polygon
-    : isDragageSession && filteredGps.length >= 3
+    : isDragageSession && !zoneHidden && filteredGps.length >= 3
     ? (() => {
         const h = convexHull(filteredGps.map(p => ({ lat: p.lat, lng: p.lng })));
         return h.length >= 3 ? h.map(p => [p.lat, p.lng] as [number, number]) : null;
@@ -369,7 +370,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
   })();
 
   // Volume shown everywhere: aligned rectangle × depth when available, else the GPS-strip correction, else stored
-  const displayVolumeM3 = alignedVolumeM3 ?? correctedVolumeM3 ?? session.volumeM3 ?? 0;
+  const displayVolumeM3 = zoneHidden ? 0 : (alignedVolumeM3 ?? correctedVolumeM3 ?? session.volumeM3 ?? 0);
   const displayDebitM3h = alignedVolumeM3 != null && netDureeH > 0
     ? alignedVolumeM3 / netDureeH
     : (correctedDebitM3h ?? session.debitM3h ?? 0);

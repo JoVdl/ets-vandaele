@@ -51,3 +51,52 @@ export function alignedRectsBySession(
   }
   return out;
 }
+
+// A session that is a long straight line (aspect ≥ 8, ≥ 40 m) with most of its points more than
+// 60 m away from every other session of the chantier is a GPS artefact: it is dropped from
+// geometry and volumes. GPS points are not modified.
+export function chantierZones(
+  sessions: SuiviSession[],
+  chantiers: Chantier[],
+  params: { vitesseMaxKmh: number; largeurM: number; smoothAlpha: number },
+): { rects: Map<string, AlignedRect>; hidden: Set<string> } {
+  const hidden = findIsolatedSlivers(sessions, chantiers);
+  return { rects: alignedRectsBySession(sessions.filter(s => !hidden.has(s.id)), chantiers, params), hidden };
+}
+
+function findIsolatedSlivers(sessions: SuiviSession[], chantiers: Chantier[]): Set<string> {
+  const hidden = new Set<string>();
+  const dragueIds = new Set(chantiers.filter(c => c.drague).map(c => c.id));
+  const byChantier = new Map<string, SuiviSession[]>();
+  for (const s of sessions) {
+    if (!dragueIds.has(s.chantierId) || s.gpsPoints.length < 10) continue;
+    byChantier.set(s.chantierId, [...(byChantier.get(s.chantierId) ?? []), s]);
+  }
+  const M = 111320;
+  for (const group of byChantier.values()) {
+    if (group.length < 3) continue;
+    const all = group.flatMap(s => s.gpsPoints);
+    const lat0 = all.reduce((a, p) => a + p.lat, 0) / all.length;
+    const lng0 = all.reduce((a, p) => a + p.lng, 0) / all.length;
+    const kx = Math.cos(lat0 * Math.PI / 180) * M, ky = M;
+    const xyOf = (s: SuiviSession) => s.gpsPoints.map(p => ({ x: (p.lng - lng0) * kx, y: (p.lat - lat0) * ky }));
+    const xys = new Map(group.map(s => [s.id, xyOf(s)]));
+    for (const s of group) {
+      const xy = xys.get(s.id)!;
+      const mx = xy.reduce((a, p) => a + p.x, 0) / xy.length;
+      const my = xy.reduce((a, p) => a + p.y, 0) / xy.length;
+      let sxx = 0, sxy = 0, syy = 0;
+      for (const p of xy) { const dx = p.x - mx, dy = p.y - my; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; }
+      const tr = sxx + syy, det = sxx * syy - sxy * sxy;
+      const disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
+      const l1 = tr / 2 + disc, l2 = Math.max(1e-9, tr / 2 - disc);
+      const aspect = Math.sqrt(l1 / l2);
+      const extent = 4 * Math.sqrt(l1);
+      if (aspect < 8 || extent < 40) continue;
+      const others = group.filter(o => o.id !== s.id).flatMap(o => xys.get(o.id)!);
+      const isolated = xy.filter(p => others.every(q => Math.hypot(p.x - q.x, p.y - q.y) > 60)).length;
+      if (isolated / xy.length >= 0.6) hidden.add(s.id);
+    }
+  }
+  return hidden;
+}
