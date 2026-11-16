@@ -6,7 +6,6 @@ import type { Chantier } from '../../types';
 import type { SuiviSession } from '../../types/suivi';
 import { fetchAllChantierSessions } from '../../hooks/useSuiviSessions';
 import { alignedRectsBySession, type AlignedRect } from '../../lib/alignedVolumes';
-import { loadExcludedZones } from '../../lib/zoneExclusions';
 import { formatDuration } from '../../lib/geo';
 import { CHANTIER_TYPES } from '../../lib/constants';
 import { INCIDENT_LABELS, HIST_PALETTE } from './incidentUtils';
@@ -63,12 +62,12 @@ interface Row {
   incMin: number;
 }
 
-function buildRows(sessions: SuiviSession[], rects: Map<string, AlignedRect>, excluded: Set<string>): Row[] {
+function buildRows(sessions: SuiviSession[], rects: Map<string, AlignedRect>): Row[] {
   return sessions.map(s => {
     const rect = rects.get(s.id);
     const incMin = s.incidents?.reduce((a, i) => a + i.dureeMinutes, 0) ?? 0;
     const netH = Math.max(0, s.dureeMinutes - incMin) / 60;
-    const vol = excluded.has(s.id) ? 0 : (rect?.volumeM3 ?? s.volumeM3 ?? 0);
+    const vol = rect?.volumeM3 ?? s.volumeM3 ?? 0;
     return {
       s, vol,
       debit: netH > 0 && vol > 0 ? vol / netH : 0,
@@ -280,16 +279,15 @@ export default function ChantierReport({ chantier, machineParams, onClose }: {
     return () => { cancelled = true; };
   }, [chantier.id]);
 
-  const excluded = useMemo(() => loadExcludedZones(), []);
   const rects = useMemo(() => sessions
-    ? alignedRectsBySession(sessions.filter(s => !excluded.has(s.id)), [chantier], {
+    ? alignedRectsBySession(sessions, [chantier], {
         vitesseMaxKmh: machineParams.vitesseMaxKmh,
         largeurM:      machineParams.largeurTravailM,
         smoothAlpha:   machineParams.smoothAlpha,
       })
     : new Map<string, AlignedRect>(), [sessions, chantier, machineParams]);
 
-  const rows = useMemo(() => sessions ? buildRows(sessions, rects, excluded) : [], [sessions, rects, excluded]);
+  const rows = useMemo(() => sessions ? buildRows(sessions, rects) : [], [sessions, rects]);
 
   const toggle = <T extends string>(set: Set<T>, key: T, setter: (s: Set<T>) => void) => {
     const next = new Set(set);

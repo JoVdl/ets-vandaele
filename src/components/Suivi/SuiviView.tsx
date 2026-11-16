@@ -16,7 +16,6 @@ import {
   avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, orientedBoundingBoxM2, filterGpsTrack,
 } from '../../lib/geo';
 import { alignedRectsBySession } from '../../lib/alignedVolumes';
-import { loadExcludedZones, saveExcludedZones } from '../../lib/zoneExclusions';
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
 } from '../../lib/machineParams';
@@ -627,20 +626,11 @@ export default function SuiviView({ role, onLogout }: Props) {
   }, [selectedChantierId, chantiers, sessions]);
 
   // Display volumes/débits: aligned rectangle × depth; falls back to stored values.
-  const [excludedZones, setExcludedZones] = useState<Set<string>>(() => loadExcludedZones());
-  const toggleExcludedZone = useCallback((id: string) => {
-    setExcludedZones(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      saveExcludedZones(next);
-      return next;
-    });
-  }, []);
-  const alignedRects = useMemo(() => alignedRectsBySession(sessions.filter(s => !excludedZones.has(s.id)), chantiers, {
+  const alignedRects = useMemo(() => alignedRectsBySession(sessions, chantiers, {
     vitesseMaxKmh: machineParams.vitesseMaxKmh,
     largeurM:      machineParams.largeurTravailM,
     smoothAlpha:   machineParams.smoothAlpha,
-  }), [sessions, excludedZones, chantiers, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
+  }), [sessions, chantiers, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
   const rectOf = useCallback((s: SuiviSession) => alignedRects.get(s.id), [alignedRects]);
   const chantierTimeline = useMemo(() => {
     if (!selectedSession) return [];
@@ -653,8 +643,8 @@ export default function SuiviView({ role, onLogout }: Props) {
     return w.length > 0 ? w.reduce((a, b) => a + b, 0) / w.length : 0;
   };
   const volOf = useCallback(
-    (s: SuiviSession) => (excludedZones.has(s.id) ? 0 : (rectOf(s)?.volumeM3 ?? s.volumeM3 ?? 0)),
-    [rectOf, excludedZones],
+    (s: SuiviSession) => rectOf(s)?.volumeM3 ?? s.volumeM3 ?? 0,
+    [rectOf],
   );
   const debitOf = useCallback(
     (s: SuiviSession) => (s.debitM3h && s.volumeM3 ? s.debitM3h * volOf(s) / s.volumeM3 : (s.debitM3h ?? 0)),
@@ -672,7 +662,7 @@ export default function SuiviView({ role, onLogout }: Props) {
     const selIdxMap = new Map(selSorted.map((s, i) => [s.id, i]));
 
     return sessions
-      .filter(s => s.gpsPoints.length > 1 && !excludedZones.has(s.id))
+      .filter(s => s.gpsPoints.length > 1)
       .map(s => {
         const c = chanMap[s.chantierId];
         const isChantierDrague = c?.drague ?? false;
@@ -688,7 +678,7 @@ export default function SuiviView({ role, onLogout }: Props) {
         const color = c ? (CHANTIER_TYPES[c.type]?.color ?? '#22c55e') : '#22c55e';
         return { points: pts, color, sessionId: s.id, volumeM3: volOf(s), profondeurM, isSelected: false };
       });
-  }, [sessions, chantiers, selectedChantierId, machineParams.vitesseMaxKmh, volOf, excludedZones]);
+  }, [sessions, chantiers, selectedChantierId, machineParams.vitesseMaxKmh, volOf]);
 
   const chantierZones = useMemo<ChantierZone[]>(() =>
     chantiers
@@ -2283,8 +2273,6 @@ export default function SuiviView({ role, onLogout }: Props) {
           chantierZones={chantierZones}
           machineParams={machineParams}
           alignedRect={rectOf(selectedSession)}
-          excludedZone={excludedZones.has(selectedSession.id)}
-          onToggleZone={() => toggleExcludedZone(selectedSession.id)}
           workColor={selectedSession.chantierId === selectedChantierId
             ? workColor
             : '#22c55e'}

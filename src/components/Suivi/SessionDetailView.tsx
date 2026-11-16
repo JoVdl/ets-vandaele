@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ArrowLeft, Printer, AlertTriangle, Plus, X, Check, ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Printer, AlertTriangle, Plus, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { INCIDENT_LABELS, INCIDENT_COLORS } from './incidentUtils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -74,8 +74,6 @@ interface Props {
   onUpdateIncidents?: (incidents: SuiviIncident[]) => Promise<void>;
   onClose:       () => void;
   onPrev?:       () => void;
-  excludedZone?: boolean;
-  onToggleZone?: () => void;
   onNext?:       () => void;
 }
 
@@ -288,7 +286,7 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext, excludedZone = false, onToggleZone }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext }: Props) {
   const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
 
   // Local incidents state — reflects Firestore changes via updated session prop
@@ -332,11 +330,11 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
     isDragageSession ? 1.6 : 2.0,
     isDragageSession ? Math.max((machineParams?.largeurTravailM ?? 6) * 10, 150) : Infinity,
   ));
-  const trail = excludedZone ? [] : filteredGps.map(p => [p.lat, p.lng] as [number, number]);
+  const trail = filteredGps.map(p => [p.lat, p.lng] as [number, number]);
   const alignedVolumeM3 = alignedRect?.volumeM3;
-  const hullPositions: [number, number][] | null = isDragageSession && !excludedZone && alignedRect
+  const hullPositions: [number, number][] | null = isDragageSession && alignedRect
     ? alignedRect.polygon
-    : isDragageSession && !excludedZone && filteredGps.length >= 3
+    : isDragageSession && filteredGps.length >= 3
     ? (() => {
         const h = convexHull(filteredGps.map(p => ({ lat: p.lat, lng: p.lng })));
         return h.length >= 3 ? h.map(p => [p.lat, p.lng] as [number, number]) : null;
@@ -371,8 +369,8 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
   })();
 
   // Volume shown everywhere: aligned rectangle × depth when available, else the GPS-strip correction, else stored
-  const displayVolumeM3 = excludedZone ? 0 : (alignedVolumeM3 ?? correctedVolumeM3 ?? session.volumeM3 ?? 0);
-  const displayDebitM3h = excludedZone ? 0 : alignedVolumeM3 != null && netDureeH > 0
+  const displayVolumeM3 = alignedVolumeM3 ?? correctedVolumeM3 ?? session.volumeM3 ?? 0;
+  const displayDebitM3h = alignedVolumeM3 != null && netDureeH > 0
     ? alignedVolumeM3 / netDureeH
     : (correctedDebitM3h ?? session.debitM3h ?? 0);
 
@@ -431,11 +429,6 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
         <button onClick={onPrev} disabled={!onPrev} title="Session précédente" className="p-1.5 rounded-lg text-slate-400 hover:text-white disabled:opacity-25 flex-shrink-0">
           <ChevronLeft size={18} />
         </button>
-        {onToggleZone && (
-          <button onClick={onToggleZone} title={excludedZone ? 'Réintégrer la zone' : 'Exclure la zone du plan et des volumes'} className={`p-1.5 rounded-lg flex-shrink-0 ${excludedZone ? 'text-amber-400' : 'text-slate-400 hover:text-white'}`}>
-            {excludedZone ? <Eye size={18} /> : <EyeOff size={18} />}
-          </button>
-        )}
         <button onClick={onNext} disabled={!onNext} title="Session suivante" className="p-1.5 rounded-lg text-slate-400 hover:text-white disabled:opacity-25 flex-shrink-0">
           <ChevronRight size={18} />
         </button>
