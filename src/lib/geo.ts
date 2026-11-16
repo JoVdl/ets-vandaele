@@ -121,6 +121,7 @@ export function filterGpsTrack(
   vitesseMaxKmh: number,
   speedTolerance = 2.0,
   anchorDriftM = Infinity,
+  clusterFilter = true,
 ): GpsPoint[] {
   const ANCHOR_WINDOW = 30;
   const maxSpeedKmh = vitesseMaxKmh * speedTolerance;
@@ -154,7 +155,7 @@ export function filterGpsTrack(
   // cluster, so outliers that survived the first cut get caught on the next.
   // 3.5 × MAD keeps all real work points (diagonal of a 6×20 m zone ≈ 20 m from
   // centre) while rejecting stray readings beyond ~2× that distance.
-  if (anchorDriftM < Infinity && accepted.length >= 10) {
+  if (clusterFilter && anchorDriftM < Infinity && accepted.length >= 10) {
     let pts = accepted;
     for (let iter = 0; iter < 3 && pts.length >= 10; iter++) {
       const mid = Math.floor(pts.length / 2);

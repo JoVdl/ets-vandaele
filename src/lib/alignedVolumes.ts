@@ -32,7 +32,7 @@ export function alignedRectsBySession(
   for (const list of byChantier.values()) {
     const prepared = list.map(s => ({
       s,
-      sm: smoothPoints(filterGpsTrack(s.gpsPoints, params.vitesseMaxKmh, 1.6, 150), params.smoothAlpha),
+      sm: smoothPoints(filterGpsTrack(s.gpsPoints, params.vitesseMaxKmh, 1.6, 150, false), params.smoothAlpha),
     }));
     const obbs = sessionOBBsAligned(prepared.map(p => ({ points: p.sm })), params.largeurM);
     prepared.forEach(({ s }, i) => {
