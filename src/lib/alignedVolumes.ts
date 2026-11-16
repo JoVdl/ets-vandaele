@@ -69,7 +69,9 @@ export function chantierZones(
     if (gpsPoints.length < 4) { hidden.add(s.id); return []; }
     return [{ ...s, gpsPoints }];
   });
-  return { rects: alignedRectsBySession(geometrySessions, chantiers, params), hidden };
+  const rects = alignedRectsBySession(geometrySessions, chantiers, params);
+  applyUniqueVolumes(rects, geometrySessions);
+  return { rects, hidden };
 }
 
 function findIsolatedSlivers(sessions: SuiviSession[], chantiers: Chantier[]): Map<string, boolean[]> {
@@ -97,4 +99,50 @@ function findIsolatedSlivers(sessions: SuiviSession[], chantiers: Chantier[]): M
     }
   }
   return masks;
+}
+
+// Volume counts only ground not already covered by an earlier session of the same chantier, so
+// overlapping zones are not counted twice in totals, lists or detail views.
+function applyUniqueVolumes(rects: Map<string, AlignedRect>, sessions: SuiviSession[]): void {
+  const M = 111320, CELL = 2;
+  const byChantier = new Map<string, SuiviSession[]>();
+  for (const s of sessions) {
+    if (!rects.has(s.id)) continue;
+    byChantier.set(s.chantierId, [...(byChantier.get(s.chantierId) ?? []), s]);
+  }
+  for (const group of byChantier.values()) {
+    group.sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime());
+    const corners = group.flatMap(s => rects.get(s.id)!.polygon);
+    const lat0 = corners.reduce((a, p) => a + p[0], 0) / corners.length;
+    const lng0 = corners.reduce((a, p) => a + p[1], 0) / corners.length;
+    const kx = Math.cos(lat0 * Math.PI / 180) * M, ky = M;
+    const covered = new Set<string>();
+    for (const s of group) {
+      const r = rects.get(s.id)!;
+      const P = r.polygon.map(([la, ln]) => ({ x: (ln - lng0) * kx, y: (la - lat0) * ky }));
+      let sa = 0;
+      for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; sa += a.x * b.y - b.x * a.y; }
+      const sign = sa >= 0 ? 1 : -1;
+      const minx = Math.min(...P.map(p => p.x)), maxx = Math.max(...P.map(p => p.x));
+      const miny = Math.min(...P.map(p => p.y)), maxy = Math.max(...P.map(p => p.y));
+      let count = 0;
+      for (let ix = Math.floor(minx / CELL); ix <= Math.ceil(maxx / CELL); ix++) {
+        for (let iy = Math.floor(miny / CELL); iy <= Math.ceil(maxy / CELL); iy++) {
+          const cx = (ix + 0.5) * CELL, cy = (iy + 0.5) * CELL;
+          let inside = true;
+          for (let i = 0; i < P.length && inside; i++) {
+            const a = P[i], b = P[(i + 1) % P.length];
+            if (sign * ((b.x - a.x) * (cy - a.y) - (b.y - a.y) * (cx - a.x)) < 0) inside = false;
+          }
+          if (!inside) continue;
+          const key = `${ix},${iy}`;
+          if (covered.has(key)) continue;
+          covered.add(key);
+          count++;
+        }
+      }
+      const newArea = count * CELL * CELL;
+      if (r.areaM2 > 0 && r.volumeM3 !== undefined) r.volumeM3 = r.volumeM3 * newArea / r.areaM2;
+    }
+  }
 }
