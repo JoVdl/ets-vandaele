@@ -514,15 +514,23 @@ function keepNearCentre(xy: XY[], spd?: (number | undefined)[]): boolean[] {
 // Pass direction: length-weighted doubled-angle mean of segments between kept consecutive points.
 function passSegmentsSinCos(xy: XY[], spd?: (number | undefined)[]): { s: number; c: number } {
   const keep = keepNearCentre(xy, spd);
-  let s = 0, c = 0;
+  const segs: { len: number; th: number }[] = [];
   for (let i = 1; i < xy.length; i++) {
     if (!keep[i] || !keep[i - 1]) continue;
     const dx = xy[i].x - xy[i - 1].x, dy = xy[i].y - xy[i - 1].y;
     const len = Math.hypot(dx, dy);
     if (len < 0.5) continue;
-    const th = Math.atan2(dy, dx);
-    s += len * Math.sin(2 * th);
-    c += len * Math.cos(2 * th);
+    segs.push({ len, th: Math.atan2(dy, dx) });
+  }
+  // A single long jump (e.g. from a GPS gap or transit) must not set the work direction
+  const sorted = segs.map(g => g.len).sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  const limit = Math.max(30, 5 * median);
+  let s = 0, c = 0;
+  for (const g of segs) {
+    if (g.len > limit) continue;
+    s += g.len * Math.sin(2 * g.th);
+    c += g.len * Math.cos(2 * g.th);
   }
   return { s, c };
 }
@@ -595,8 +603,9 @@ export function sessionOBBsAligned(
       const L = uMax - uMin;
       if (L < 0.5) return null;
       // A single pass has no measurable cross-track spread: the machine still works its full width
-      const measured = band.vMax - band.vMin;
-      const w = measured >= 0.5 ? measured : largeurM;
+      // The machine covers its own width around the GPS trail: add it to the measured spread
+      const spread = band.vMax - band.vMin;
+      const w = (spread >= 0.5 ? spread : 0) + largeurM;
       const vc = (band.vMin + band.vMax) / 2;
       const vMin = vc - w / 2, vMax = vc + w / 2;
       return {

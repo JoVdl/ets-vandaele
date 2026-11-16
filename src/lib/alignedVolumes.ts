@@ -52,20 +52,28 @@ export function alignedRectsBySession(
   return out;
 }
 
-// A session that is a long straight line (aspect ≥ 8, ≥ 40 m) with most of its points more than
-// 60 m away from every other session of the chantier is a GPS artefact: it is dropped from
-// geometry and volumes. GPS points are not modified.
+// In a long straight session (aspect ≥ 8, ≥ 40 m), points more than 60 m away from every other
+// session of the chantier are GPS artefacts (transit line): they are left out of the geometry.
+// A session left with too few points is dropped. GPS points are not modified.
 export function chantierZones(
   sessions: SuiviSession[],
   chantiers: Chantier[],
   params: { vitesseMaxKmh: number; largeurM: number; smoothAlpha: number },
 ): { rects: Map<string, AlignedRect>; hidden: Set<string> } {
-  const hidden = findIsolatedSlivers(sessions, chantiers);
-  return { rects: alignedRectsBySession(sessions.filter(s => !hidden.has(s.id)), chantiers, params), hidden };
+  const masks = findIsolatedSlivers(sessions, chantiers);
+  const hidden = new Set<string>();
+  const geometrySessions = sessions.flatMap(s => {
+    const mask = masks.get(s.id);
+    if (!mask) return [s];
+    const gpsPoints = s.gpsPoints.filter((_, i) => mask[i]);
+    if (gpsPoints.length < 4) { hidden.add(s.id); return []; }
+    return [{ ...s, gpsPoints }];
+  });
+  return { rects: alignedRectsBySession(geometrySessions, chantiers, params), hidden };
 }
 
-function findIsolatedSlivers(sessions: SuiviSession[], chantiers: Chantier[]): Set<string> {
-  const hidden = new Set<string>();
+function findIsolatedSlivers(sessions: SuiviSession[], chantiers: Chantier[]): Map<string, boolean[]> {
+  const masks = new Map<string, boolean[]>();
   const dragueIds = new Set(chantiers.filter(c => c.drague).map(c => c.id));
   const byChantier = new Map<string, SuiviSession[]>();
   for (const s of sessions) {
@@ -94,9 +102,9 @@ function findIsolatedSlivers(sessions: SuiviSession[], chantiers: Chantier[]): S
       const extent = 4 * Math.sqrt(l1);
       if (aspect < 8 || extent < 40) continue;
       const others = group.filter(o => o.id !== s.id).flatMap(o => xys.get(o.id)!);
-      const isolated = xy.filter(p => others.every(q => Math.hypot(p.x - q.x, p.y - q.y) > 60)).length;
-      if (isolated / xy.length >= 0.6) hidden.add(s.id);
+      const isolatedMask = xy.map(p => others.every(q => Math.hypot(p.x - q.x, p.y - q.y) > 60));
+      masks.set(s.id, isolatedMask.map(v => !v));
     }
   }
-  return hidden;
+  return masks;
 }
