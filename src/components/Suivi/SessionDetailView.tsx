@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import EditableZone from './EditableZone';
+import { overlapM2 } from '../../lib/alignedVolumes';
 import 'leaflet/dist/leaflet.css';
 import { ArrowLeft, Printer, AlertTriangle, Plus, X, Check, ChevronLeft, ChevronRight, Maximize2, RotateCcw } from 'lucide-react';
 import { INCIDENT_LABELS, INCIDENT_COLORS } from './incidentUtils';
@@ -79,6 +80,7 @@ interface Props {
   onNext?:       () => void;
   hasZoneOverride?: boolean;
   zoneEditable?: boolean;
+  otherZones?: [number, number][][];
   onZoneChange?: (corners: [number, number][] | null) => void;
 }
 
@@ -291,7 +293,8 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext, zoneHidden = false, hasZoneOverride = false, onZoneChange, zoneEditable = true }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext, zoneHidden = false, hasZoneOverride = false, onZoneChange, zoneEditable = true, otherZones = [] }: Props) {
+  const overlapping = alignedRect ? otherZones.reduce((a, z) => a + overlapM2(alignedRect.polygon, z), 0) : 0;
   const [editingZone, setEditingZone] = useState(false);
   const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
 
@@ -473,7 +476,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
       <div className="flex-1 relative overflow-hidden">
         {editingZone && onZoneChange && (
             <div className="absolute top-2 left-2 right-2 z-[1000] flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-900/90 text-[11px] text-amber-300">
-              <span>Glisse les carrés pour redimensionner, le rond pour déplacer</span>
+              <span>Glisse les carrés pour redimensionner, le rond pour déplacer{overlapping > 0 ? <b className="text-red-400"> · chevauchement {overlapping.toFixed(0)} m²</b> : ''}</span>
               <span className="flex gap-2 flex-shrink-0">
                 {hasZoneOverride && (
                   <button onClick={() => onZoneChange(null)} className="px-2 py-0.5 rounded bg-white/10 text-slate-200 flex items-center gap-1"><RotateCcw size={11} />Rétablir</button>
@@ -538,6 +541,9 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
               <Polyline positions={trail} color={workColor} weight={4} opacity={0.9} />
             )}
 
+            {editingZone && otherZones.map((z, i) => (
+              <Polygon key={`other-${i}`} positions={z} color="#94a3b8" fillColor="#94a3b8" fillOpacity={0.12} weight={1} dashArray="2 4" />
+            ))}
             {editingZone && onZoneChange && alignedRect && (
               <EditableZone corners={alignedRect.polygon} onChange={onZoneChange} />
             )}

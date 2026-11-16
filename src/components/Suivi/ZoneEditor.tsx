@@ -7,6 +7,7 @@ import type { SuiviSession } from '../../types/suivi';
 import type { AlignedRect } from '../../lib/alignedVolumes';
 import { HIST_PALETTE } from './incidentUtils';
 import EditableZone from './EditableZone';
+import { overlapM2 } from '../../lib/alignedVolumes';
 
 function FitAll({ bounds }: { bounds: [[number, number], [number, number]] | null }) {
   const map = useMap();
@@ -38,6 +39,7 @@ export default function ZoneEditor({ sessions, rectOf, isEditable, onSave, onClo
   }, [items]);
   const selected = items.find(x => x.s.id === selectedId) ?? null;
   const selectedEditable = !!selected && isEditable(selected.s.id);
+  const overlapping = selected ? items.filter(x => x.s.id !== selected.s.id).reduce((a, x) => a + overlapM2(selected.rect.polygon, x.rect.polygon), 0) : 0;
   const handleChange = useCallback(
     (c: [number, number][]) => { if (selectedId) onSave(selectedId, c); },
     [selectedId, onSave],
@@ -94,7 +96,7 @@ export default function ZoneEditor({ sessions, rectOf, isEditable, onSave, onClo
         </div>
         {selected && (
           <div className="flex items-center justify-between text-xs text-slate-300">
-            <span>{selectedEditable ? 'Session passée : modifiable' : 'Session en cours : non modifiable'}</span>
+            <span>{selectedEditable ? 'Session passée : modifiable' : 'Session en cours : non modifiable'}{overlapping > 0 && <b className="text-red-400"> · chevauchement {overlapping.toFixed(0)} m²</b>}</span>
             {selectedEditable && selected.s.zoneOverride && (
               <button onClick={() => onSave(selected.s.id, null)} className="px-2 py-1 rounded bg-white/[0.08] flex items-center gap-1"><RotateCcw size={11} />Rétablir</button>
             )}

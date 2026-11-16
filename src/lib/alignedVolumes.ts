@@ -160,3 +160,46 @@ function applyOverrides(rects: Map<string, AlignedRect>, sessions: SuiviSession[
     });
   }
 }
+
+// Area (m²) shared by two zone polygons. Zones are convex quadrilaterals.
+export function overlapM2(a: [number, number][], b: [number, number][]): number {
+  if (a.length < 3 || b.length < 3) return 0;
+  const la0 = a.concat(b).reduce((s, p) => s + p[0], 0) / (a.length + b.length);
+  const ln0 = a.concat(b).reduce((s, p) => s + p[1], 0) / (a.length + b.length);
+  const M = 111320, kx = Math.cos(la0 * Math.PI / 180) * M, ky = M;
+  const toXY = (p: [number, number]) => ({ x: (p[1] - ln0) * kx, y: (p[0] - la0) * ky });
+  const orient = (P: { x: number; y: number }[]) => {
+    let sa = 0;
+    for (let i = 0; i < P.length; i++) { const u = P[i], v = P[(i + 1) % P.length]; sa += u.x * v.y - v.x * u.y; }
+    return sa >= 0 ? P : [...P].reverse();
+  };
+  let subject = orient(a.map(toXY));
+  const clip = orient(b.map(toXY));
+  for (let i = 0; i < clip.length && subject.length > 0; i++) {
+    const A = clip[i], B = clip[(i + 1) % clip.length];
+    const side = (P: { x: number; y: number }) => (B.x - A.x) * (P.y - A.y) - (B.y - A.y) * (P.x - A.x);
+    const out: { x: number; y: number }[] = [];
+    for (let j = 0; j < subject.length; j++) {
+      const cur = subject[j], prev = subject[(j - 1 + subject.length) % subject.length];
+      const sc = side(cur), sp = side(prev);
+      if (sc >= 0) {
+        if (sp < 0) out.push(intersect(prev, cur, A, B));
+        out.push(cur);
+      } else if (sp >= 0) {
+        out.push(intersect(prev, cur, A, B));
+      }
+    }
+    subject = out;
+  }
+  let sa = 0;
+  for (let i = 0; i < subject.length; i++) { const u = subject[i], v = subject[(i + 1) % subject.length]; sa += u.x * v.y - v.x * u.y; }
+  return Math.abs(sa) / 2;
+}
+
+function intersect(p1: { x: number; y: number }, p2: { x: number; y: number }, A: { x: number; y: number }, B: { x: number; y: number }) {
+  const d1x = p2.x - p1.x, d1y = p2.y - p1.y, d2x = B.x - A.x, d2y = B.y - A.y;
+  const den = d1x * d2y - d1y * d2x;
+  if (Math.abs(den) < 1e-12) return p1;
+  const t = ((A.x - p1.x) * d2y - (A.y - p1.y) * d2x) / den;
+  return { x: p1.x + t * d1x, y: p1.y + t * d1y };
+}

@@ -2290,6 +2290,10 @@ export default function SuiviView({ role, onLogout }: Props) {
           hasZoneOverride={!!zoneOverrides[selectedSession.id]}
           onZoneChange={c => setZoneOverride(selectedSession.id, c)}
           zoneEditable={isZoneEditable(selectedSession.id)}
+          otherZones={sessions
+            .filter(o => o.chantierId === selectedSession.chantierId && o.id !== selectedSession.id)
+            .map(o => alignedRects.get(o.id)?.polygon)
+            .filter((p): p is [number, number][] => !!p)}
           zoneHidden={hiddenZones.has(selectedSession.id)}
           workColor={selectedSession.chantierId === selectedChantierId
             ? workColor
