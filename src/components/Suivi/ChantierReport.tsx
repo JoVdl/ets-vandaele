@@ -24,8 +24,8 @@ const COLUMNS = [
   { key: 'date',       label: 'Date / heure' },
   { key: 'operateur',  label: 'Opérateur' },
   { key: 'duree',      label: 'Durée' },
-  { key: 'volume',     label: 'Volume (m³)' },
-  { key: 'debit',      label: 'Débit (m³/h)' },
+  { key: 'volume',     label: 'Volume estimé (m³)' },
+  { key: 'debit',      label: 'Débit estimé (m³/h)' },
   { key: 'largeur',    label: 'Largeur de travail (m)' },
   { key: 'avancement', label: 'Avancement (m)' },
   { key: 'incidents',  label: 'Incidents' },
@@ -34,8 +34,8 @@ const COLUMNS = [
 const SUMMARY_ITEMS = [
   { key: 'sessions',  label: 'Nombre de sessions' },
   { key: 'heures',    label: 'Heures effectives' },
-  { key: 'volume',    label: 'Volume total' },
-  { key: 'debit',     label: 'Débit moyen' },
+  { key: 'volume',    label: 'Volume estimé total' },
+  { key: 'debit',     label: 'Débit estimé moyen' },
   { key: 'largeur',   label: 'Largeur moyenne' },
   { key: 'avancement', label: 'Avancement cumulé' },
   { key: 'incidents', label: 'Incidents' },
@@ -132,8 +132,8 @@ export function buildHtml(args: {
     const cards: string[] = [];
     if (summaryItems.has('sessions'))   cards.push(kpi('Sessions', String(sessions.length)));
     if (summaryItems.has('heures'))     cards.push(kpi('Heures effectives', formatDuration(totalMin)));
-    if (summaryItems.has('volume'))     cards.push(kpi('Volume total', `${fmt1(total)} m³`));
-    if (summaryItems.has('debit'))      cards.push(kpi('Débit moyen', debitMoy != null ? `${fmt1(debitMoy)} m³/h` : '—'));
+    if (summaryItems.has('volume'))     cards.push(kpi('Volume estimé total', `${fmt1(total)} m³`));
+    if (summaryItems.has('debit'))      cards.push(kpi('Débit estimé moyen', debitMoy != null ? `${fmt1(debitMoy)} m³/h` : '—'));
     if (summaryItems.has('largeur'))    cards.push(kpi('Largeur moyenne', largeurMoy != null ? `${fmt1(largeurMoy)} m` : '—'));
     if (summaryItems.has('avancement')) cards.push(kpi('Avancement cumulé', advTotal > 0 ? `${advTotal.toFixed(0)} m` : '—'));
     if (summaryItems.has('incidents'))  cards.push(kpi('Incidents', `${incCount} · ${incMin} min`));
@@ -164,7 +164,7 @@ export function buildHtml(args: {
       return `<tr><td>${esc(format(new Date(k), 'dd/MM/yyyy'))}</td><td>${list.length}</td><td>${formatDuration(dur)}</td>
         <td>${fmt1(vol)}</td><td>${w != null ? fmt1(w) : '—'}</td><td>${adv > 0 ? adv.toFixed(0) : '—'}</td></tr>`;
     }).join('');
-    parts.push(`${h2('Récapitulatif par journée')}<table><thead><tr><th>Jour</th><th>Sessions</th><th>Durée</th><th>Volume (m³)</th><th>Largeur (m)</th><th>Avancement (m)</th></tr></thead><tbody>${lines}</tbody></table>`);
+    parts.push(`${h2('Récapitulatif par journée')}<table><thead><tr><th>Jour</th><th>Sessions</th><th>Durée</th><th>Volume estimé (m³)</th><th>Largeur (m)</th><th>Avancement (m)</th></tr></thead><tbody>${lines}</tbody></table>`);
   }
 
   if (sections.has('sessions')) {
@@ -237,6 +237,7 @@ export function buildHtml(args: {
 </div>
 
 <div style="max-width:720px;margin:auto;padding:20px 24px 40px">
+  <p class="muted" style="font-style:italic;margin:0 0 12px">Volumes et débits estimatifs, calculés à partir des tracés GPS et des paramètres machine. Ce ne sont pas des mesures.</p>
   <p class="label" style="margin-top:0">Chantier</p>
   <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 16px;font-size:13px">
     <span style="color:#64748b">Intitulé</span><span style="font-weight:600">${esc(chantier.nom)}</span>
