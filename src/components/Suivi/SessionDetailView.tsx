@@ -9,7 +9,7 @@ import { fr } from 'date-fns/locale';
 import type { SuiviSession, SuiviIncident, IncidentType, GpsPoint } from '../../types/suivi';
 import type { Chantier } from '../../types';
 import type { ChantierZone } from './SuiviMap';
-import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM, filterGpsTrack, stripVolumeM3WithSegments, convexHull } from '../../lib/geo';
+import { formatArea, formatDistance, formatDuration, centroid, distanceM, totalDistanceM, filterGpsTrack, keepMainCluster, stripVolumeM3WithSegments, convexHull } from '../../lib/geo';
 import { CHANTIER_TYPES } from '../../lib/constants';
 import type { AlignedRect } from '../../lib/alignedVolumes';
 
@@ -324,12 +324,12 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
   const totalIncidentMin = incidents.reduce((a, i) => a + i.dureeMinutes, 0);
   const curageMin = Math.max(0, session.dureeMinutes - totalIncidentMin);
   // Apply the same filter used at capture time (speed + anchor drift for dragage)
-  const filteredGps = filterGpsTrack(
+  const filteredGps = keepMainCluster(filterGpsTrack(
     session.gpsPoints,
     machineParams?.vitesseMaxKmh ?? 25,
     isDragageSession ? 1.6 : 2.0,
     isDragageSession ? Math.max((machineParams?.largeurTravailM ?? 6) * 10, 150) : Infinity,
-  );
+  ));
   const trail = filteredGps.map(p => [p.lat, p.lng] as [number, number]);
   const alignedVolumeM3 = alignedRect?.volumeM3;
   const hullPositions: [number, number][] | null = isDragageSession && alignedRect

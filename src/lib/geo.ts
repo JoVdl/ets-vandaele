@@ -431,13 +431,59 @@ export function orientedBoundingBoxM2(
 type XY = { x: number; y: number };
 
 // Drops points far from the session's median position (spikes, positioning moves), keeping order.
+// Keeps the groups of points that hold at least 10% of the track: cells of `cellM` metres, groups
+// linked when cells are within `linkCells` cells of each other. Small isolated GPS glitch
+// clusters fall outside it; the work area and the transit leading to it both stay.
+export function mainClusterMask(xy: XY[], cellM = 10, linkCells = 3): boolean[] {
+  const cellOf = xy.map(p => [Math.floor(p.x / cellM), Math.floor(p.y / cellM)] as [number, number]);
+  const count = new Map<string, number>();
+  for (const [i, j] of cellOf) count.set(`${i},${j}`, (count.get(`${i},${j}`) ?? 0) + 1);
+  const comp = new Map<string, number>();
+  const sums: number[] = [];
+  for (const key of count.keys()) {
+    if (comp.has(key)) continue;
+    const id = sums.length;
+    let total = 0;
+    const stack = [key];
+    comp.set(key, id);
+    while (stack.length) {
+      const k = stack.pop()!;
+      total += count.get(k) ?? 0;
+      const [ci, cj] = k.split(',').map(Number);
+      for (let di = -linkCells; di <= linkCells; di++) {
+        for (let dj = -linkCells; dj <= linkCells; dj++) {
+          const nk = `${ci + di},${cj + dj}`;
+          if (count.has(nk) && !comp.has(nk)) { comp.set(nk, id); stack.push(nk); }
+        }
+      }
+    }
+    sums.push(total);
+  }
+  if (sums.length === 0) return xy.map(() => false);
+  const total = sums.reduce((a, b) => a + b, 0);
+  const best = sums.indexOf(Math.max(...sums));
+  const kept = new Set(sums.map((n, id) => (n >= 0.1 * total || id === best ? id : -1)));
+  return cellOf.map(([i, j]) => kept.has(comp.get(`${i},${j}`) ?? -1));
+}
+
+// Points-level version of mainClusterMask, for drawing a trail without its GPS glitch clusters.
+export function keepMainCluster<T extends { lat: number; lng: number }>(points: T[]): T[] {
+  if (points.length < 4) return points;
+  const lat0 = points.reduce((a, p) => a + p.lat, 0) / points.length;
+  const lng0 = points.reduce((a, p) => a + p.lng, 0) / points.length;
+  const k = Math.cos(lat0 * Math.PI / 180) * Math.PI / 180 * R;
+  const mask = mainClusterMask(points.map(p => ({ x: (p.lng - lng0) * k, y: (p.lat - lat0) * Math.PI / 180 * R })));
+  return points.filter((_, i) => mask[i]);
+}
+
 function keepNearCentre(xy: XY[], spd?: (number | undefined)[]): boolean[] {
   const mx = [...xy.map(p => p.x)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
   const my = [...xy.map(p => p.y)].sort((a, b) => a - b)[Math.floor(xy.length / 2)];
   const d = xy.map(p => Math.hypot(p.x - mx, p.y - my));
   // Only far spikes are removed: the pass ends are the farthest real points and must stay
   const cut = [...d].sort((a, b) => a - b)[Math.floor(0.995 * (d.length - 1))];
-  const keep = d.map(v => v <= cut);
+  const inMain = mainClusterMask(xy);
+  const keep = d.map((v, i) => v <= cut && inMain[i]);
   // Transit from the start point to the work area: leading points moving much faster than the
   // session's working speed. Display only; stored GPS points are untouched.
   if (spd) {
