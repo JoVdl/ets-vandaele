@@ -91,15 +91,6 @@ function findIsolatedSlivers(sessions: SuiviSession[], chantiers: Chantier[]): M
     const xys = new Map(group.map(s => [s.id, xyOf(s)]));
     for (const s of group) {
       const xy = xys.get(s.id)!;
-      const mx = xy.reduce((a, p) => a + p.x, 0) / xy.length;
-      const my = xy.reduce((a, p) => a + p.y, 0) / xy.length;
-      let sxx = 0, sxy = 0, syy = 0;
-      for (const p of xy) { const dx = p.x - mx, dy = p.y - my; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; }
-      const tr = sxx + syy, det = sxx * syy - sxy * sxy;
-      const disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
-      const l1 = tr / 2 + disc, l2 = Math.max(1e-9, tr / 2 - disc);
-      const aspect = Math.sqrt(l1 / l2);
-      const extent = 4 * Math.sqrt(l1);
       const others = group.filter(o => o.id !== s.id).flatMap(o => xys.get(o.id)!);
       const isolatedMask = xy.map(p => others.every(q => Math.hypot(p.x - q.x, p.y - q.y) > 60));
       masks.set(s.id, isolatedMask.map(v => !v));
