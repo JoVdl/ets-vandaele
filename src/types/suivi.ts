@@ -44,6 +44,7 @@ export interface SuiviSession {
   notes?: string;
   pendingSync?: boolean;       // stored offline, not yet in Firestore
   deletedAt?: string | null;   // ISO date when moved to the trash; null/absent = active
+  zoneOverride?: { lat: number; lng: number }[] | null; // manually corrected work zone (4 corners)
 }
 
 export type PinRole = 'salarie' | 'patron';

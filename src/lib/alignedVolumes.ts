@@ -1,7 +1,6 @@
 import type { SuiviSession } from '../types/suivi';
 import type { Chantier } from '../types';
 import { filterGpsTrack, smoothPoints, sessionOBBsAligned } from './geo';
-import { loadZoneOverrides, type Corners } from './zoneOverrides';
 
 export interface AlignedRect {
   polygon:   [number, number][];   // [lat, lng] corners
@@ -60,7 +59,6 @@ export function chantierZones(
   sessions: SuiviSession[],
   chantiers: Chantier[],
   params: { vitesseMaxKmh: number; largeurM: number; smoothAlpha: number },
-  overrides: Record<string, Corners> = loadZoneOverrides(),
 ): { rects: Map<string, AlignedRect>; hidden: Set<string> } {
   const masks = findIsolatedSlivers(sessions, chantiers);
   const far = findFarMasks(sessions, chantiers);
@@ -75,7 +73,7 @@ export function chantierZones(
     return [{ ...s, gpsPoints }];
   });
   const rects = alignedRectsBySession(geometrySessions, chantiers, params);
-  applyOverrides(rects, sessions, overrides);
+  applyOverrides(rects, sessions);
   return { rects, hidden };
 }
 
@@ -139,10 +137,10 @@ function findFarMasks(sessions: SuiviSession[], chantiers: Chantier[]): Map<stri
 
 // Manually corrected zones replace the computed footprint; area, advancement and width follow
 // from the corners and the volume keeps the session's depth.
-function applyOverrides(rects: Map<string, AlignedRect>, sessions: SuiviSession[], overrides: Record<string, Corners>): void {
+function applyOverrides(rects: Map<string, AlignedRect>, sessions: SuiviSession[]): void {
   const M = 111320;
   for (const s of sessions) {
-    const c = overrides[s.id];
+    const c: [number, number][] | undefined = s.zoneOverride?.map(p => [p.lat, p.lng] as [number, number]);
     if (!c || c.length !== 4) continue;
     const la0 = c.reduce((a, p) => a + p[0], 0) / 4;
     const ln0 = c.reduce((a, p) => a + p[1], 0) / 4;

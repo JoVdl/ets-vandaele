@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import EditableZone from './EditableZone';
 import 'leaflet/dist/leaflet.css';
 import { ArrowLeft, Printer, AlertTriangle, Plus, X, Check, ChevronLeft, ChevronRight, Maximize2, RotateCcw } from 'lucide-react';
 import { INCIDENT_LABELS, INCIDENT_COLORS } from './incidentUtils';
@@ -77,6 +78,7 @@ interface Props {
   zoneHidden?:   boolean;
   onNext?:       () => void;
   hasZoneOverride?: boolean;
+  zoneEditable?: boolean;
   onZoneChange?: (corners: [number, number][] | null) => void;
 }
 
@@ -289,51 +291,7 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-function EditableZone({ corners, onChange }: { corners: [number, number][]; onChange: (c: [number, number][]) => void }) {
-  const map = useMap();
-  useEffect(() => {
-    let cur: [number, number][] = corners.map(c => [c[0], c[1]] as [number, number]);
-    const centre = (): [number, number] => [
-      cur.reduce((a, p) => a + p[0], 0) / cur.length,
-      cur.reduce((a, p) => a + p[1], 0) / cur.length,
-    ];
-    const cornerIcon = L.divIcon({ className: '', html: '<div style="width:14px;height:14px;border-radius:3px;background:#fff;border:2px solid #f59e0b"></div>', iconSize: [14, 14], iconAnchor: [7, 7] });
-    const centreIcon = L.divIcon({ className: '', html: '<div style="width:18px;height:18px;border-radius:50%;background:#f59e0b;border:2px solid #fff"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
-    const poly = L.polygon(cur, { color: '#f59e0b', weight: 2, fillOpacity: 0.15, dashArray: '4 4' }).addTo(map);
-    let centreMarker: L.Marker | null = null;
-    const handles = cur.map((p, i) => {
-      const m = L.marker(p, { icon: cornerIcon, draggable: true }).addTo(map);
-      m.on('drag', e => {
-        const ll = (e.target as L.Marker).getLatLng();
-        cur[i] = [ll.lat, ll.lng];
-        poly.setLatLngs(cur);
-        centreMarker?.setLatLng(centre());
-      });
-      m.on('dragend', () => onChange(cur.map(q => [q[0], q[1]] as [number, number])));
-      return m;
-    });
-    centreMarker = L.marker(centre(), { icon: centreIcon, draggable: true }).addTo(map);
-    let last = centre();
-    centreMarker.on('drag', e => {
-      const ll = (e.target as L.Marker).getLatLng();
-      const dLat = ll.lat - last[0], dLng = ll.lng - last[1];
-      cur = cur.map(q => [q[0] + dLat, q[1] + dLng] as [number, number]);
-      last = [ll.lat, ll.lng];
-      poly.setLatLngs(cur);
-      handles.forEach((h, i) => h.setLatLng(cur[i]));
-    });
-    centreMarker.on('dragend', () => onChange(cur.map(q => [q[0], q[1]] as [number, number])));
-    const cm = centreMarker;
-    return () => {
-      poly.remove();
-      handles.forEach(h => h.remove());
-      cm.remove();
-    };
-  }, [map, corners, onChange]);
-  return null;
-}
-
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext, zoneHidden = false, hasZoneOverride = false, onZoneChange }: Props) {
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext, zoneHidden = false, hasZoneOverride = false, onZoneChange, zoneEditable = true }: Props) {
   const [editingZone, setEditingZone] = useState(false);
   const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
 
@@ -477,7 +435,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
         <button onClick={onPrev} disabled={!onPrev} title="Session précédente" className="p-1.5 rounded-lg text-slate-400 hover:text-white disabled:opacity-25 flex-shrink-0">
           <ChevronLeft size={18} />
         </button>
-        {onZoneChange && alignedRect && (
+        {onZoneChange && zoneEditable && alignedRect && (
           <button onClick={() => setEditingZone(v => !v)} title="Redimensionner la zone" className={`p-1.5 rounded-lg flex-shrink-0 ${editingZone ? 'text-amber-400' : 'text-slate-400 hover:text-white'}`}>
             <Maximize2 size={18} />
           </button>

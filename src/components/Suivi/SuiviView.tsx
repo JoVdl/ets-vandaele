@@ -16,7 +16,6 @@ import {
   avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, orientedBoundingBoxM2, filterGpsTrack,
 } from '../../lib/geo';
 import { chantierZones as computeChantierZones } from '../../lib/alignedVolumes';
-import { loadZoneOverrides, saveZoneOverrides, type Corners } from '../../lib/zoneOverrides';
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
 } from '../../lib/machineParams';
@@ -627,20 +626,23 @@ export default function SuiviView({ role, onLogout }: Props) {
   }, [selectedChantierId, chantiers, sessions]);
 
   // Display volumes/débits: aligned rectangle × depth; falls back to stored values.
-  const [zoneOverrides, setZoneOverrides] = useState<Record<string, Corners>>(() => loadZoneOverrides());
-  const setZoneOverride = useCallback((id: string, corners: Corners | null) => {
-    setZoneOverrides(prev => {
-      const next = { ...prev };
-      if (corners) next[id] = corners; else delete next[id];
-      saveZoneOverrides(next);
-      return next;
-    });
-  }, []);
+  const zoneOverrides = useMemo(() => {
+    const o: Record<string, [number, number][]> = {};
+    for (const s of sessions) if (s.zoneOverride?.length === 4) o[s.id] = s.zoneOverride.map(p => [p.lat, p.lng] as [number, number]);
+    return o;
+  }, [sessions]);
+  const isZoneEditable = useCallback((id: string) =>
+    id !== sessionIdRef.current && !liveSessions.some(l => l.sessionId === id),
+  [liveSessions]);
+  const setZoneOverride = useCallback((id: string, corners: [number, number][] | null) => {
+    if (!isZoneEditable(id)) return;
+    updateSession(id, { zoneOverride: corners ? corners.map(([lat, lng]) => ({ lat, lng })) : null });
+  }, [isZoneEditable, updateSession]);
   const { rects: alignedRects, hidden: hiddenZones } = useMemo(() => computeChantierZones(sessions, chantiers, {
     vitesseMaxKmh: machineParams.vitesseMaxKmh,
     largeurM:      machineParams.largeurTravailM,
     smoothAlpha:   machineParams.smoothAlpha,
-  }, zoneOverrides), [sessions, chantiers, zoneOverrides, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
+  }), [sessions, chantiers, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
   const rectOf = useCallback((s: SuiviSession) => alignedRects.get(s.id), [alignedRects]);
   const chantierTimeline = useMemo(() => {
     if (!selectedSession) return [];
@@ -2267,6 +2269,8 @@ export default function SuiviView({ role, onLogout }: Props) {
           isDragage={isDragage}
           volumeOf={volOf}
           rectOf={rectOf}
+          onSaveZone={setZoneOverride}
+          isZoneEditable={isZoneEditable}
           machineParams={machineParams}
           salarieName={salarieName}
           onClose={() => setShowChantierDetail(false)}
@@ -2285,6 +2289,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           alignedRect={rectOf(selectedSession)}
           hasZoneOverride={!!zoneOverrides[selectedSession.id]}
           onZoneChange={c => setZoneOverride(selectedSession.id, c)}
+          zoneEditable={isZoneEditable(selectedSession.id)}
           zoneHidden={hiddenZones.has(selectedSession.id)}
           workColor={selectedSession.chantierId === selectedChantierId
             ? workColor

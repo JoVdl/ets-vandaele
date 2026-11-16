@@ -11,6 +11,7 @@ import { formatDuration, formatArea, smoothPoints, centroid, filterGpsTrack } fr
 import type { AlignedRect } from '../../lib/alignedVolumes';
 import { INCIDENT_LABELS, INCIDENT_COLORS, HIST_PALETTE, GlobalTimeline, SessionTimeline } from './incidentUtils';
 import ChantierReport from './ChantierReport';
+import ZoneEditor from './ZoneEditor';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -41,14 +42,17 @@ interface Props {
   isDragage:       boolean;
   volumeOf:        (s: SuiviSession) => number;
   rectOf:          (s: SuiviSession) => AlignedRect | undefined;
+  onSaveZone?:     (id: string, corners: [number, number][] | null) => void;
+  isZoneEditable?: (id: string) => boolean;
   machineParams:   { vitesseMaxKmh: number; largeurTravailM: number; smoothAlpha: number };
   salarieName?:    string;
   onClose:         () => void;
   onSessionClick?: (session: SuiviSession) => void;
 }
 
-export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, rectOf, machineParams, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
+export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, rectOf, machineParams, onSaveZone, isZoneEditable, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
   const [showReport, setShowReport] = useState(false);
+  const [showZones, setShowZones] = useState(false);
   const ordered = useMemo(
     () => [...sessions].sort((a, b) => new Date(a.dateDebut).getTime() - new Date(b.dateDebut).getTime()),
     [sessions],
@@ -175,10 +179,18 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
         {isDragage && (
           <span className="px-1.5 py-0.5 rounded-full bg-cyan-900 text-cyan-300 text-[9px] font-semibold uppercase tracking-wide flex-shrink-0">Drague</span>
         )}
+        {onSaveZone && isZoneEditable && isDragage && (
+          <button onClick={() => setShowZones(true)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-slate-300 text-xs flex-shrink-0">
+            Zones
+          </button>
+        )}
         <button onClick={() => setShowReport(true)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-slate-300 text-xs flex-shrink-0">
           <FileText size={13} /> Rapport
         </button>
       </div>
+      {showZones && onSaveZone && isZoneEditable && (
+        <ZoneEditor sessions={sessions} rectOf={rectOf} isEditable={isZoneEditable} onSave={onSaveZone} onClose={() => setShowZones(false)} />
+      )}
       {showReport && (
         <ChantierReport chantier={chantier} machineParams={machineParams} onClose={() => setShowReport(false)} />
       )}
