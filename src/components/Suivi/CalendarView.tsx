@@ -10,6 +10,9 @@ import type { Chantier } from '../../types';
 import { formatDuration } from '../../lib/geo';
 
 interface Props {
+  offDays?:     Set<string>;
+  onToggleOffDay?: (key: string) => void;
+  estimate?:   { date: Date; ratePerDay: number; remainingH: number } | null;
   sessions:    SuiviSession[];
   chantiers:   Chantier[];
   salarieName?: string;
@@ -28,7 +31,8 @@ const JOURS_LONG  = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
 type ViewMode = 'month' | 'week';
 
-export default function CalendarView({ sessions, chantiers, salarieName = 'Hugo', volumeOf = s => s.volumeM3 ?? 0, onSessionClick }: Props) {
+export default function CalendarView({ sessions, chantiers, salarieName = 'Hugo', volumeOf = s => s.volumeM3 ?? 0, onSessionClick, offDays = new Set<string>(), onToggleOffDay, estimate = null }: Props) {
+  const [offMode, setOffMode] = useState(false);
   const [cursor, setCursor] = useState(() => {
     const last = [...sessions].sort((a, b) =>
       new Date(b.dateDebut).getTime() - new Date(a.dateDebut).getTime())[0];
@@ -130,6 +134,11 @@ export default function CalendarView({ sessions, chantiers, salarieName = 'Hugo'
         </button>
 
         {/* View toggle */}
+        {onToggleOffDay && viewMode === 'month' && (
+          <button onClick={() => setOffMode(v => !v)} className={`ml-1 px-2 py-1 rounded-md text-[10px] font-semibold ${offMode ? 'bg-amber-600 text-white' : 'bg-white/[0.07] text-slate-400'}`}>
+            Jours off
+          </button>
+        )}
         <div className="flex items-center bg-white/[0.07] rounded-lg p-0.5 ml-1">
           {(['week', 'month'] as ViewMode[]).map(m => (
             <button key={m}
@@ -142,6 +151,12 @@ export default function CalendarView({ sessions, chantiers, salarieName = 'Hugo'
           ))}
         </div>
       </div>
+
+      {estimate && (
+        <div className="mx-3 mt-2 px-3 py-2 rounded-xl bg-cyan-900/30 border border-cyan-800/40 text-xs text-cyan-200">
+          Fin estimée : <b>{format(estimate.date, 'dd/MM/yyyy')}</b> · {estimate.ratePerDay.toFixed(1)} h/jour · reste {estimate.remainingH.toFixed(0)} h
+        </div>
+      )}
 
       {/* ── WEEK VIEW ─────────────────────────────────────────────────────────── */}
       {viewMode === 'week' && (
@@ -264,9 +279,11 @@ export default function CalendarView({ sessions, chantiers, salarieName = 'Hugo'
               return (
                 <button
                   key={key}
-                  onClick={() => setSelectedDay(isSel ? null : day)}
-                  disabled={!isActive}
+                  onClick={() => (offMode && onToggleOffDay ? onToggleOffDay(key) : setSelectedDay(isSel ? null : day))}
+                  disabled={!isActive && !offMode}
                   className={`relative flex flex-col items-center rounded-xl py-1.5 transition-colors ${
+                    offDays.has(key) ? 'bg-amber-900/40 ring-1 ring-amber-600/50' : ''
+                  } ${
                     isSel
                       ? 'bg-white/[0.12] border border-white/[0.15]'
                       : isActive

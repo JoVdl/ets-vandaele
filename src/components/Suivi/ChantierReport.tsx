@@ -6,6 +6,7 @@ import type { Chantier } from '../../types';
 import type { SuiviSession } from '../../types/suivi';
 import { fetchAllChantierSessions } from '../../hooks/useSuiviSessions';
 import { chantierZones, type AlignedRect } from '../../lib/alignedVolumes';
+import { estimateEnd, type EndEstimate } from '../../lib/estimateEnd';
 import { formatDuration } from '../../lib/geo';
 import { CHANTIER_TYPES } from '../../lib/constants';
 import { INCIDENT_LABELS, HIST_PALETTE } from './incidentUtils';
@@ -39,7 +40,7 @@ const SUMMARY_ITEMS = [
   { key: 'largeur',   label: 'Largeur moyenne' },
   { key: 'avancement', label: 'Avancement cumulé' },
   { key: 'incidents', label: 'Incidents' },
-  { key: 'budget',    label: 'Budget (si défini)' },
+  { key: 'budget',    label: 'Budget et fin estimée' },
   { key: 'dates',     label: 'Dates première / dernière session' },
 ] as const;
 
@@ -108,9 +109,9 @@ function planMap(sessions: SuiviSession[], rectMap: Map<string, AlignedRect>): s
 
 export function buildHtml(args: {
   chantier: Chantier; sessions: SuiviSession[]; rows: Row[]; rects: Map<string, AlignedRect>;
-  sections: Set<SectionKey>; columns: Set<ColumnKey>; summaryItems: Set<SummaryKey>;
+  sections: Set<SectionKey>; columns: Set<ColumnKey>; summaryItems: Set<SummaryKey>; estimate: EndEstimate | null;
 }): string {
-  const { chantier, sessions, rows, rects, sections, columns, summaryItems } = args;
+  const { chantier, sessions, rows, rects, sections, columns, summaryItems, estimate } = args;
   const total = rows.reduce((a, r) => a + r.vol, 0);
   const totalMin = sessions.reduce((a, s) => a + s.dureeMinutes, 0);
   const incMin = rows.reduce((a, r) => a + r.incMin, 0);
@@ -138,6 +139,7 @@ export function buildHtml(args: {
     if (summaryItems.has('avancement')) cards.push(kpi('Avancement cumulé', advTotal > 0 ? `${advTotal.toFixed(0)} m` : '—'));
     if (summaryItems.has('incidents'))  cards.push(kpi('Incidents', `${incCount} · ${incMin} min`));
     if (summaryItems.has('budget') && budgetH > 0) cards.push(kpi('Budget', `${formatDuration(totalMin)} / ${budgetH} h`));
+    if (summaryItems.has('budget') && estimate) cards.push(kpi(`Fin estimée (${budgetH} h prévues)`, format(estimate.date, 'dd/MM/yyyy')));
     const dates = summaryItems.has('dates')
       ? `<p class="muted">Première session : ${first ? esc(format(new Date(first.dateDebut), 'dd/MM/yyyy')) : '—'} · Dernière : ${last ? esc(format(new Date(last.dateDebut), 'dd/MM/yyyy')) : '—'}</p>`
       : '';
@@ -289,6 +291,9 @@ export default function ChantierReport({ chantier, machineParams, onClose }: {
   const rects = zones.rects;
 
   const rows = useMemo(() => sessions ? buildRows(sessions, rects, zones.hidden) : [], [sessions, rects, zones.hidden]);
+  const estimate = useMemo(() => sessions
+    ? estimateEnd(sessions, chantier.dureeEstimeeH ?? 0, new Set(chantier.joursOff ?? []))
+    : null, [sessions, chantier]);
 
   const toggle = <T extends string>(set: Set<T>, key: T, setter: (s: Set<T>) => void) => {
     const next = new Set(set);
@@ -299,7 +304,7 @@ export default function ChantierReport({ chantier, machineParams, onClose }: {
   // Written straight into a same-origin window opened by the tap: printing works from it on iOS
   const generate = () => {
     if (!sessions) return;
-    const html = buildHtml({ chantier, sessions, rows, rects, sections, columns, summaryItems });
+    const html = buildHtml({ chantier, sessions, rows, rects, sections, columns, summaryItems, estimate });
     const w = window.open('', '_blank');
     if (w) {
       w.document.open();

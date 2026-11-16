@@ -57,6 +57,7 @@ export interface Chantier {
 
   // Durée estimée totale du chantier (h) — pour les chantiers facturés au temps plutôt qu'à la surface
   dureeEstimeeH?: number;
+  joursOff?: string[];          // yyyy-MM-dd days the chantier is not worked (Suivi calendar)
 
   // Polygones délimitant les zones de travail (plusieurs zones possibles par chantier)
   polygon?: { lat: number; lng: number }[][];

@@ -16,6 +16,8 @@ import {
   avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, orientedBoundingBoxM2, filterGpsTrack,
 } from '../../lib/geo';
 import { chantierZones as computeChantierZones } from '../../lib/alignedVolumes';
+import { estimateEnd } from '../../lib/estimateEnd';
+import { setChantierOffDays } from '../../lib/chantierOffDays';
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
 } from '../../lib/machineParams';
@@ -2240,6 +2242,18 @@ export default function SuiviView({ role, onLogout }: Props) {
           chantiers={chantiers}
           salarieName={salarieName}
           volumeOf={volOf}
+          offDays={new Set(selectedChantier?.joursOff ?? [])}
+          estimate={selectedChantier?.dureeEstimeeH && selectedChantier.id ? estimateEnd(
+            sessions.filter(s => s.chantierId === selectedChantier.id),
+            selectedChantier.dureeEstimeeH,
+            new Set(selectedChantier.joursOff ?? []),
+          ) : null}
+          onToggleOffDay={key => {
+            if (!selectedChantier) return;
+            const cur = new Set(selectedChantier.joursOff ?? []);
+            if (cur.has(key)) cur.delete(key); else cur.add(key);
+            setChantierOffDays(selectedChantier.id, [...cur].sort());
+          }}
           onSessionClick={s => setSelectedSession(s)}
         />
       )}
