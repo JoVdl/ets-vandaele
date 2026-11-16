@@ -605,7 +605,7 @@ export function sessionOBBsAligned(
       // A single pass has no measurable cross-track spread: the machine still works its full width
       // The machine covers its own width around the GPS trail: add it to the measured spread
       const spread = band.vMax - band.vMin;
-      const w = (spread >= 0.5 ? spread : 0) + largeurM;
+      const w = (spread >= 0.5 ? spread : 0) + 1.5 * largeurM;
       const vc = (band.vMin + band.vMax) / 2;
       const vMin = vc - w / 2, vMax = vc + w / 2;
       return {
