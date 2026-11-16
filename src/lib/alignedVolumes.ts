@@ -100,7 +100,6 @@ function findIsolatedSlivers(sessions: SuiviSession[], chantiers: Chantier[]): M
       const l1 = tr / 2 + disc, l2 = Math.max(1e-9, tr / 2 - disc);
       const aspect = Math.sqrt(l1 / l2);
       const extent = 4 * Math.sqrt(l1);
-      if (aspect < 8 || extent < 40) continue;
       const others = group.filter(o => o.id !== s.id).flatMap(o => xys.get(o.id)!);
       const isolatedMask = xy.map(p => others.every(q => Math.hypot(p.x - q.x, p.y - q.y) > 60));
       masks.set(s.id, isolatedMask.map(v => !v));
