@@ -1,6 +1,7 @@
 import type { SuiviSession } from '../types/suivi';
 import type { Chantier } from '../types';
 import { filterGpsTrack, smoothPoints, sessionOBBsAligned } from './geo';
+import { loadZoneOverrides, type Corners } from './zoneOverrides';
 
 export interface AlignedRect {
   polygon:   [number, number][];   // [lat, lng] corners
@@ -59,6 +60,7 @@ export function chantierZones(
   sessions: SuiviSession[],
   chantiers: Chantier[],
   params: { vitesseMaxKmh: number; largeurM: number; smoothAlpha: number },
+  overrides: Record<string, Corners> = loadZoneOverrides(),
 ): { rects: Map<string, AlignedRect>; hidden: Set<string> } {
   const masks = findIsolatedSlivers(sessions, chantiers);
   const far = findFarMasks(sessions, chantiers);
@@ -72,7 +74,9 @@ export function chantierZones(
     if (gpsPoints.length < 4) { hidden.add(s.id); return []; }
     return [{ ...s, gpsPoints }];
   });
-  return { rects: alignedRectsBySession(geometrySessions, chantiers, params), hidden };
+  const rects = alignedRectsBySession(geometrySessions, chantiers, params);
+  applyOverrides(rects, sessions, overrides);
+  return { rects, hidden };
 }
 
 function findIsolatedSlivers(sessions: SuiviSession[], chantiers: Chantier[]): Map<string, boolean[]> {
@@ -131,4 +135,30 @@ function findFarMasks(sessions: SuiviSession[], chantiers: Chantier[]): Map<stri
     }
   }
   return masks;
+}
+
+// Manually corrected zones replace the computed footprint; area, advancement and width follow
+// from the corners and the volume keeps the session's depth.
+function applyOverrides(rects: Map<string, AlignedRect>, sessions: SuiviSession[], overrides: Record<string, Corners>): void {
+  const M = 111320;
+  for (const s of sessions) {
+    const c = overrides[s.id];
+    if (!c || c.length !== 4) continue;
+    const la0 = c.reduce((a, p) => a + p[0], 0) / 4;
+    const ln0 = c.reduce((a, p) => a + p[1], 0) / 4;
+    const kx = Math.cos(la0 * Math.PI / 180) * M, ky = M;
+    const P = c.map(([la, ln]) => ({ x: (ln - ln0) * kx, y: (la - la0) * ky }));
+    const d = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+    const L = (d(P[0], P[1]) + d(P[3], P[2])) / 2;
+    const W = (d(P[0], P[3]) + d(P[1], P[2])) / 2;
+    let sa = 0;
+    for (let i = 0; i < 4; i++) { const a = P[i], b = P[(i + 1) % 4]; sa += a.x * b.y - b.x * a.y; }
+    const area = Math.abs(sa) / 2;
+    const depth = (s.profondeurDragageM ?? 0) * Math.max(1, s.nbPassesParPosition ?? 1);
+    rects.set(s.id, {
+      polygon: c.map(p => [p[0], p[1]] as [number, number]),
+      lengthM: L, widthM: W, measuredWidthM: W, areaM2: area,
+      volumeM3: depth > 0 ? area * depth : undefined,
+    });
+  }
 }

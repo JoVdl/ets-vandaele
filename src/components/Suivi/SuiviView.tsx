@@ -16,6 +16,7 @@ import {
   avgSpeedKmh, instantSpeedKmh, totalDistanceM, distanceM, orientedBoundingBoxM2, filterGpsTrack,
 } from '../../lib/geo';
 import { chantierZones as computeChantierZones } from '../../lib/alignedVolumes';
+import { loadZoneOverrides, saveZoneOverrides, type Corners } from '../../lib/zoneOverrides';
 import {
   type MachineParams, defaultParams, loadMachineParams, saveMachineParams,
 } from '../../lib/machineParams';
@@ -626,11 +627,20 @@ export default function SuiviView({ role, onLogout }: Props) {
   }, [selectedChantierId, chantiers, sessions]);
 
   // Display volumes/débits: aligned rectangle × depth; falls back to stored values.
+  const [zoneOverrides, setZoneOverrides] = useState<Record<string, Corners>>(() => loadZoneOverrides());
+  const setZoneOverride = useCallback((id: string, corners: Corners | null) => {
+    setZoneOverrides(prev => {
+      const next = { ...prev };
+      if (corners) next[id] = corners; else delete next[id];
+      saveZoneOverrides(next);
+      return next;
+    });
+  }, []);
   const { rects: alignedRects, hidden: hiddenZones } = useMemo(() => computeChantierZones(sessions, chantiers, {
     vitesseMaxKmh: machineParams.vitesseMaxKmh,
     largeurM:      machineParams.largeurTravailM,
     smoothAlpha:   machineParams.smoothAlpha,
-  }), [sessions, chantiers, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
+  }, zoneOverrides), [sessions, chantiers, zoneOverrides, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
   const rectOf = useCallback((s: SuiviSession) => alignedRects.get(s.id), [alignedRects]);
   const chantierTimeline = useMemo(() => {
     if (!selectedSession) return [];
@@ -673,12 +683,12 @@ export default function SuiviView({ role, onLogout }: Props) {
         if (s.chantierId === selectedChantierId) {
           const idx   = selIdxMap.get(s.id) ?? 0;
           const color = HIST_PALETTE[idx % HIST_PALETTE.length];
-          return { points: pts, color, sessionId: s.id, volumeM3: volOf(s), profondeurM, isSelected: true };
+          return { points: pts, color, sessionId: s.id, volumeM3: volOf(s), profondeurM, isSelected: true, overridePolygon: zoneOverrides[s.id] };
         }
         const color = c ? (CHANTIER_TYPES[c.type]?.color ?? '#22c55e') : '#22c55e';
-        return { points: pts, color, sessionId: s.id, volumeM3: volOf(s), profondeurM, isSelected: false };
+        return { points: pts, color, sessionId: s.id, volumeM3: volOf(s), profondeurM, isSelected: false, overridePolygon: zoneOverrides[s.id] };
       });
-  }, [sessions, chantiers, selectedChantierId, machineParams.vitesseMaxKmh, volOf, hiddenZones]);
+  }, [sessions, chantiers, selectedChantierId, machineParams.vitesseMaxKmh, volOf, hiddenZones, zoneOverrides]);
 
   const chantierZones = useMemo<ChantierZone[]>(() =>
     chantiers
@@ -2273,6 +2283,8 @@ export default function SuiviView({ role, onLogout }: Props) {
           chantierZones={chantierZones}
           machineParams={machineParams}
           alignedRect={rectOf(selectedSession)}
+          hasZoneOverride={!!zoneOverrides[selectedSession.id]}
+          onZoneChange={c => setZoneOverride(selectedSession.id, c)}
           zoneHidden={hiddenZones.has(selectedSession.id)}
           workColor={selectedSession.chantierId === selectedChantierId
             ? workColor

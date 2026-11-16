@@ -246,7 +246,7 @@ interface Props {
   jumpToPos:                [number, number] | null;
   liveSessions:             LiveSession[];
   mySessionId:              string;
-  historicalTrails:         { points: GpsPoint[]; color: string; sessionId?: string; volumeM3?: number; profondeurM?: number; isSelected?: boolean }[];
+  historicalTrails:         { points: GpsPoint[]; color: string; sessionId?: string; volumeM3?: number; profondeurM?: number; isSelected?: boolean; overridePolygon?: [number, number][] }[];
   currentVolumeM3?:         number;
   isDragage?:               boolean;
   onHistoricalTrailClick?:  (sessionId: string) => void;
@@ -323,8 +323,11 @@ export default function SuiviMap({
     let selIdx = 0;
     smoothedTrails.forEach((t, i) => { if (t.isSelected) obbByOriginalIndex.set(i, alignedObbs[selIdx++]); });
 
-    return smoothedTrails.map(({ color, sessionId, volumeM3: vol, profondeurM: depth, isSelected, sm }, i) => {
+    return smoothedTrails.map(({ color, sessionId, volumeM3: vol, profondeurM: depth, isSelected, sm, overridePolygon }, i) => {
       const obb = obbByOriginalIndex.get(i) ?? null;
+      if (overridePolygon) {
+        return { kind: 'obb' as const, color, sessionId, isSelected, data: overridePolygon, hullArea: areaM2(overridePolygon.map(([lat, lng]) => ({ lat, lng }))), vol, depth: depth ?? 0 };
+      }
       if (obb) {
         return { kind: 'obb' as const, color, sessionId, isSelected, data: obb.polygon.map(p => [p.lat, p.lng] as [number, number]), hullArea: obb.areaM2, vol, depth: depth ?? 0 };
       }

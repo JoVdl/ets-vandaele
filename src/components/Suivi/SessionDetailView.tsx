@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Polygon, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ArrowLeft, Printer, AlertTriangle, Plus, X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Printer, AlertTriangle, Plus, X, Check, ChevronLeft, ChevronRight, Maximize2, RotateCcw } from 'lucide-react';
 import { INCIDENT_LABELS, INCIDENT_COLORS } from './incidentUtils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -76,6 +76,8 @@ interface Props {
   onPrev?:       () => void;
   zoneHidden?:   boolean;
   onNext?:       () => void;
+  hasZoneOverride?: boolean;
+  onZoneChange?: (corners: [number, number][] | null) => void;
 }
 
 // Keep only GPS points with inter-point speed below maxSpeedKmh — removes transit driving
@@ -287,7 +289,52 @@ function openPrintRecap(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext, zoneHidden = false }: Props) {
+function EditableZone({ corners, onChange }: { corners: [number, number][]; onChange: (c: [number, number][]) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    let cur: [number, number][] = corners.map(c => [c[0], c[1]] as [number, number]);
+    const centre = (): [number, number] => [
+      cur.reduce((a, p) => a + p[0], 0) / cur.length,
+      cur.reduce((a, p) => a + p[1], 0) / cur.length,
+    ];
+    const cornerIcon = L.divIcon({ className: '', html: '<div style="width:14px;height:14px;border-radius:3px;background:#fff;border:2px solid #f59e0b"></div>', iconSize: [14, 14], iconAnchor: [7, 7] });
+    const centreIcon = L.divIcon({ className: '', html: '<div style="width:18px;height:18px;border-radius:50%;background:#f59e0b;border:2px solid #fff"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
+    const poly = L.polygon(cur, { color: '#f59e0b', weight: 2, fillOpacity: 0.15, dashArray: '4 4' }).addTo(map);
+    let centreMarker: L.Marker | null = null;
+    const handles = cur.map((p, i) => {
+      const m = L.marker(p, { icon: cornerIcon, draggable: true }).addTo(map);
+      m.on('drag', e => {
+        const ll = (e.target as L.Marker).getLatLng();
+        cur[i] = [ll.lat, ll.lng];
+        poly.setLatLngs(cur);
+        centreMarker?.setLatLng(centre());
+      });
+      m.on('dragend', () => onChange(cur.map(q => [q[0], q[1]] as [number, number])));
+      return m;
+    });
+    centreMarker = L.marker(centre(), { icon: centreIcon, draggable: true }).addTo(map);
+    let last = centre();
+    centreMarker.on('drag', e => {
+      const ll = (e.target as L.Marker).getLatLng();
+      const dLat = ll.lat - last[0], dLng = ll.lng - last[1];
+      cur = cur.map(q => [q[0] + dLat, q[1] + dLng] as [number, number]);
+      last = [ll.lat, ll.lng];
+      poly.setLatLngs(cur);
+      handles.forEach((h, i) => h.setLatLng(cur[i]));
+    });
+    centreMarker.on('dragend', () => onChange(cur.map(q => [q[0], q[1]] as [number, number])));
+    const cm = centreMarker;
+    return () => {
+      poly.remove();
+      handles.forEach(h => h.remove());
+      cm.remove();
+    };
+  }, [map, corners, onChange]);
+  return null;
+}
+
+export default function SessionDetailView({ session, chantier, chantierCumul, chantierZones, machineParams, alignedRect, workColor, salarieName = 'Hugo', onUpdateIncidents, onClose, onPrev, onNext, zoneHidden = false, hasZoneOverride = false, onZoneChange }: Props) {
+  const [editingZone, setEditingZone] = useState(false);
   const isDragageSession = !!(chantier?.drague ?? (session.volumeM3 != null && session.volumeM3 > 0));
 
   // Local incidents state — reflects Firestore changes via updated session prop
@@ -430,6 +477,11 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
         <button onClick={onPrev} disabled={!onPrev} title="Session précédente" className="p-1.5 rounded-lg text-slate-400 hover:text-white disabled:opacity-25 flex-shrink-0">
           <ChevronLeft size={18} />
         </button>
+        {onZoneChange && alignedRect && (
+          <button onClick={() => setEditingZone(v => !v)} title="Redimensionner la zone" className={`p-1.5 rounded-lg flex-shrink-0 ${editingZone ? 'text-amber-400' : 'text-slate-400 hover:text-white'}`}>
+            <Maximize2 size={18} />
+          </button>
+        )}
         <button onClick={onNext} disabled={!onNext} title="Session suivante" className="p-1.5 rounded-lg text-slate-400 hover:text-white disabled:opacity-25 flex-shrink-0">
           <ChevronRight size={18} />
         </button>
@@ -461,6 +513,17 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
 
       {/* Map */}
       <div className="flex-1 relative overflow-hidden">
+        {editingZone && onZoneChange && (
+            <div className="absolute top-2 left-2 right-2 z-[1000] flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-900/90 text-[11px] text-amber-300">
+              <span>Glisse les carrés pour redimensionner, le rond pour déplacer</span>
+              <span className="flex gap-2 flex-shrink-0">
+                {hasZoneOverride && (
+                  <button onClick={() => onZoneChange(null)} className="px-2 py-0.5 rounded bg-white/10 text-slate-200 flex items-center gap-1"><RotateCcw size={11} />Rétablir</button>
+                )}
+                <button onClick={() => setEditingZone(false)} className="px-2 py-0.5 rounded bg-amber-600 text-white">OK</button>
+              </span>
+            </div>
+          )}
         {trail.length >= 2 ? (
           <MapContainer
             center={center}
@@ -515,6 +578,10 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
               </>
             ) : (
               <Polyline positions={trail} color={workColor} weight={4} opacity={0.9} />
+            )}
+
+            {editingZone && onZoneChange && alignedRect && (
+              <EditableZone corners={alignedRect.polygon} onChange={onZoneChange} />
             )}
 
             {/* Start / end markers */}
