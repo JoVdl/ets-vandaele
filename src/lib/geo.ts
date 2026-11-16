@@ -494,6 +494,19 @@ function keepNearCentre(xy: XY[], spd?: (number | undefined)[]): boolean[] {
       while (i < spd.length && (spd[i] ?? 0) > 2 * work) keep[i++] = false;
     }
   }
+  // Without usable speeds, the leading points outside the work area (second half of the track,
+  // radius = its 98th percentile plus a margin) are the transit from the start point.
+  const half0 = Math.floor(xy.length / 2);
+  const second = xy.slice(half0);
+  if (second.length >= 4) {
+    const hx = [...second.map(p => p.x)].sort((a, b) => a - b)[Math.floor(second.length / 2)];
+    const hy = [...second.map(p => p.y)].sort((a, b) => a - b)[Math.floor(second.length / 2)];
+    const dh = second.map(p => Math.hypot(p.x - hx, p.y - hy)).sort((a, b) => a - b);
+    const R = Math.max(dh[Math.floor(0.995 * (dh.length - 1))] + 5, 2 * dh[Math.floor(0.5 * (dh.length - 1))]);
+    const maxTrim = Math.min(half0, Math.floor(0.2 * xy.length));
+    let i = 0;
+    while (i < maxTrim && Math.hypot(xy[i].x - hx, xy[i].y - hy) > R) keep[i++] = false;
+  }
   return keep;
 }
 
