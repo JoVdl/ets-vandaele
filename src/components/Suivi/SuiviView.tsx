@@ -646,6 +646,13 @@ export default function SuiviView({ role, onLogout }: Props) {
     smoothAlpha:   machineParams.smoothAlpha,
   }), [sessions, chantiers, machineParams.vitesseMaxKmh, machineParams.largeurTravailM, machineParams.smoothAlpha]);
   const rectOf = useCallback((s: SuiviSession) => alignedRects.get(s.id), [alignedRects]);
+  const selectedEstimate = useMemo(() => (selectedChantier?.dureeEstimeeH
+    ? estimateEnd(
+        sessions.filter(s => s.chantierId === selectedChantier.id && !hiddenZones.has(s.id)),
+        selectedChantier.dureeEstimeeH,
+        new Set(selectedChantier.joursOff ?? []),
+      )
+    : null), [sessions, selectedChantier, hiddenZones]);
   const chantierTimeline = useMemo(() => {
     if (!selectedSession) return [];
     return sessions
@@ -927,6 +934,12 @@ export default function SuiviView({ role, onLogout }: Props) {
           <span className="text-white text-sm font-semibold truncate">
             {selectedChantier ? selectedChantier.nom : 'Sélectionner un chantier'}
           </span>
+          {selectedEstimate && (
+            <span title={`${selectedEstimate.ratePerDay.toFixed(1)} h par jour disponible · reste ${selectedEstimate.remainingH.toFixed(0)} h`}
+              className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-cyan-900/60 text-cyan-200 text-[10px] font-semibold whitespace-nowrap">
+              Fin est. {format(selectedEstimate.date, 'dd/MM/yy')}
+            </span>
+          )}
           {clientFilter && !selectedChantier && (
             <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-indigo-700/80 text-indigo-200 text-[9px] font-bold uppercase tracking-wide">
               {clientFilter}
@@ -2243,11 +2256,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           salarieName={salarieName}
           volumeOf={volOf}
           offDays={new Set(selectedChantier?.joursOff ?? [])}
-          estimate={selectedChantier?.dureeEstimeeH && selectedChantier.id ? estimateEnd(
-            sessions.filter(s => s.chantierId === selectedChantier.id),
-            selectedChantier.dureeEstimeeH,
-            new Set(selectedChantier.joursOff ?? []),
-          ) : null}
+          estimate={selectedEstimate}
           onToggleOffDay={key => {
             if (!selectedChantier) return;
             const cur = new Set(selectedChantier.joursOff ?? []);
