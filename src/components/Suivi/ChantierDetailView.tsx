@@ -12,6 +12,7 @@ import type { AlignedRect } from '../../lib/alignedVolumes';
 import { INCIDENT_LABELS, INCIDENT_COLORS, HIST_PALETTE, GlobalTimeline, SessionTimeline } from './incidentUtils';
 import ChantierReport from './ChantierReport';
 import ZoneEditor from './ZoneEditor';
+import FuelPanel from './FuelPanel';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -196,6 +197,8 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
       )}
 
       <div className="flex-1 overflow-y-auto">
+
+        {isDragage && <FuelPanel chantierId={chantier.id} sessions={sessions} />}
 
         {/* Map */}
         <div className="h-56 relative flex-shrink-0">
