@@ -51,7 +51,7 @@ export default function ZoneEditor({ sessions, rectOf, isEditable, onSave, onClo
         <button onClick={onClose} className="p-1.5 -ml-1 text-slate-400 hover:text-white"><ArrowLeft size={20} /></button>
         <div className="flex-1 min-w-0">
           <p className="text-white font-bold text-sm">Zones de travail</p>
-          <p className="text-slate-500 text-[10px]">Touche une zone pour la sélectionner, puis glisse ses carrés</p>
+          <p className="text-slate-500 text-[10px]">Touche une zone, puis carrés : coins · barres : côtés · rond : déplacer</p>
         </div>
       </div>
       <div className="flex-1 relative">

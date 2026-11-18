@@ -476,7 +476,7 @@ export default function SessionDetailView({ session, chantier, chantierCumul, ch
       <div className="flex-1 relative overflow-hidden">
         {editingZone && onZoneChange && (
             <div className="absolute top-2 left-2 right-2 z-[1000] flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-900/90 text-[11px] text-amber-300">
-              <span>Glisse les carrés pour redimensionner, le rond pour déplacer{overlapping > 0 ? <b className="text-red-400"> · chevauchement {overlapping.toFixed(0)} m²</b> : ''}</span>
+              <span>Carrés : coins · barres : côtés · rond : déplacer la zone{overlapping > 0 ? <b className="text-red-400"> · chevauchement {overlapping.toFixed(0)} m²</b> : ''}</span>
               <span className="flex gap-2 flex-shrink-0">
                 {hasZoneOverride && (
                   <button onClick={() => onZoneChange(null)} className="px-2 py-0.5 rounded bg-white/10 text-slate-200 flex items-center gap-1"><RotateCcw size={11} />Rétablir</button>
