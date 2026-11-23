@@ -13,6 +13,7 @@ import { INCIDENT_LABELS, INCIDENT_COLORS, HIST_PALETTE, GlobalTimeline, Session
 import ChantierReport from './ChantierReport';
 import ZoneEditor from './ZoneEditor';
 import FuelPanel from './FuelPanel';
+import BillingPanel from './BillingPanel';
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -44,6 +45,7 @@ interface Props {
   volumeOf:        (s: SuiviSession) => number;
   rectOf:          (s: SuiviSession) => AlignedRect | undefined;
   onSaveZone?:     (id: string, corners: [number, number][] | null) => void;
+  isPatron?:       boolean;
   isZoneEditable?: (id: string) => boolean;
   machineParams:   { vitesseMaxKmh: number; largeurTravailM: number; smoothAlpha: number };
   salarieName?:    string;
@@ -51,7 +53,7 @@ interface Props {
   onSessionClick?: (session: SuiviSession) => void;
 }
 
-export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, rectOf, machineParams, onSaveZone, isZoneEditable, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
+export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, rectOf, machineParams, onSaveZone, isZoneEditable, isPatron = false, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
   const [showReport, setShowReport] = useState(false);
   const [showZones, setShowZones] = useState(false);
   const ordered = useMemo(
@@ -198,6 +200,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
 
       <div className="flex-1 overflow-y-auto">
 
+        {isPatron && <BillingPanel chantier={chantier} sessions={sessions} />}
         {isDragage && <FuelPanel chantierId={chantier.id} sessions={sessions} />}
 
         {/* Map */}

@@ -58,6 +58,11 @@ export interface Chantier {
   // Durée estimée totale du chantier (h) — pour les chantiers facturés au temps plutôt qu'à la surface
   dureeEstimeeH?: number;
   joursOff?: string[];          // yyyy-MM-dd days the chantier is not worked (Suivi calendar)
+  facturation?: {                // patron-only billing data
+    tarifHoraire?: number;        // € per hour sold
+    montantTotal?: number;        // € total sold (alternative to tarifHoraire)
+    factures?: { id: string; date: string; montant: number; note?: string }[];
+  };
 
   // Polygones délimitant les zones de travail (plusieurs zones possibles par chantier)
   polygon?: { lat: number; lng: number }[][];

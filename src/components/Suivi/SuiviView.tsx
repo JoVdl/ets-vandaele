@@ -2294,6 +2294,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           rectOf={rectOf}
           onSaveZone={setZoneOverride}
           isZoneEditable={isZoneEditable}
+          isPatron={role === 'patron'}
           machineParams={machineParams}
           salarieName={salarieName}
           onClose={() => setShowChantierDetail(false)}
