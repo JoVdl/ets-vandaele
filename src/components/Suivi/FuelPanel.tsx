@@ -38,11 +38,11 @@ export default function FuelPanel({ chantierId, sessions }: { chantierId: string
         </div>
         <div className="bg-white/[0.04] rounded-xl py-2">
           <p className="text-white font-bold text-sm tabular-nums">{stats.lPerH != null ? stats.lPerH.toFixed(1) : '—'}</p>
-          <p className="text-slate-500 text-[9px] uppercase">L / h (lissé)</p>
+          <p className="text-slate-500 text-[9px] uppercase">L / h (moyenne)</p>
         </div>
         <div className="bg-white/[0.04] rounded-xl py-2">
-          <p className="text-white font-bold text-sm tabular-nums">{stats.hoursSpan.toFixed(1)} h</p>
-          <p className="text-slate-500 text-[9px] uppercase">Heures couvertes</p>
+          <p className="text-white font-bold text-sm tabular-nums">{stats.hoursTotal.toFixed(1)} h</p>
+          <p className="text-slate-500 text-[9px] uppercase">Heures totales</p>
         </div>
       </div>
 
