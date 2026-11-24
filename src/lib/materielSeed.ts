@@ -66,3 +66,53 @@ export const PELLES_DE_DEPART: Seed[] = [
     },
   },
 ];
+
+// Transport: tractors, trucks and tipping equipment. Missing figures are noted in specs.
+export const TRANSPORT_DE_DEPART: Seed[] = [
+  {
+    nom: 'Renault 155-54 TZ', famille: 'transport', marque: 'Renault', modele: '155-54 TZ',
+    etat: 'operationnel',
+    specs: {
+      'Puissance': '≈ 145 ch (108 kW)',
+      'Poids': '≈ 5 626 kg',
+      'Moteur': 'MWM TD226-B6, 6,2 L',
+      'Boîte': '16 AV / 16 AR, mécanique',
+      'Relevage arrière': '≈ 8 681 kg',
+    },
+  },
+  {
+    nom: 'Iseki TA 537', famille: 'transport', marque: 'Iseki', modele: 'TA 537',
+    etat: 'operationnel',
+    specs: {
+      'Puissance': '37 ch (27 kW)',
+      'Poids': '≈ 1 534 kg',
+      'Moteur': 'Isuzu 4JD1, 2,04 L',
+      'Transmission': '4x4, 16 AV, mécanique synchronisée',
+      'Relevage arrière': '≈ 1 799 kg',
+    },
+  },
+  {
+    nom: 'Volvo FH500 + semi porte-engin TRAX', famille: 'transport', marque: 'Volvo', modele: 'FH500',
+    etat: 'non_utilisable',
+    specs: {
+      'Puissance': '≈ 500 ch (368 kW)',
+      'Poids à vide': '≈ 7,9 à 8,5 t (tracteur)',
+      'PTRA': '44 t (ensemble)',
+      'Remarque': 'Porte-engin : charge utile et dimensions à confirmer auprès du carrossier',
+    },
+  },
+  {
+    nom: 'Benne TP Decroix', famille: 'transport', marque: 'Decroix', modele: 'Benne TP',
+    etat: 'operationnel',
+    specs: {
+      'Remarque': 'Caractéristiques non trouvées : charge utile, dimensions et poids à compléter',
+    },
+  },
+  {
+    nom: 'Petite benne tracteur', famille: 'transport', modele: 'Benne tractée',
+    etat: 'operationnel',
+    specs: {
+      'Remarque': 'Caractéristiques à compléter',
+    },
+  },
+];

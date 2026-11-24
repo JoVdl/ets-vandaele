@@ -5,7 +5,7 @@ import { useMateriel } from '../../hooks/useMateriel';
 import { FAMILLES, ETATS, type FamilleMateriel, type EtatMateriel, type Materiel } from '../../types/materiel';
 import { heuresCompteur, tauxUtilisation, tachesOuvertes } from '../../lib/materielStats';
 import { uploadMaterielPhoto } from '../../lib/storage';
-import { PELLES_DE_DEPART } from '../../lib/materielSeed';
+import { PELLES_DE_DEPART, TRANSPORT_DE_DEPART } from '../../lib/materielSeed';
 
 const uid = () => crypto.randomUUID();
 
@@ -20,7 +20,7 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
     famille: f,
     list: items.filter(m => m.famille === f && m.etat !== 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)),
   })).filter(g => g.list.length > 0), [items]);
-  const pellesManquantes = PELLES_DE_DEPART.filter(p => !items.some(m => m.nom === p.nom));
+  const pellesManquantes = [...PELLES_DE_DEPART, ...TRANSPORT_DE_DEPART].filter(p => !items.some(m => m.nom === p.nom));
   const addPelles = async () => {
     for (const p of pellesManquantes) {
       await add({ ...p, journal: [], taches: [], suiviDepuis: new Date().toISOString() } as Omit<Materiel, 'id'>);
@@ -30,8 +30,8 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (!loaded) return;
     try {
-      if (localStorage.getItem('materiel_seed_pelles') === '1') return;
-      localStorage.setItem('materiel_seed_pelles', '1');
+      if (localStorage.getItem('materiel_seed_v2') === '1') return;
+      localStorage.setItem('materiel_seed_v2', '1');
     } catch { return; }
     if (pellesManquantes.length > 0) addPelles();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -51,7 +51,7 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
         {pellesManquantes.length > 0 && (
           <button onClick={addPelles} className="w-full py-2 rounded-lg bg-white/[0.06] text-slate-300 text-xs">
-            Ajouter les {pellesManquantes.length} pelles de départ (fiches avec caractéristiques)
+            Ajouter les {pellesManquantes.length} engins de départ (fiches avec caractéristiques)
           </button>
         )}
         {nonUtilisables.length > 0 && (
