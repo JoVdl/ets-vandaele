@@ -1,10 +1,11 @@
-export type FamilleMateriel = 'pelle' | 'transport' | 'compactage' | 'autre';
+export type FamilleMateriel = 'pelle' | 'transport' | 'compactage' | 'drague' | 'autre';
 export type EtatMateriel = 'operationnel' | 'maintenance' | 'panne' | 'non_utilisable';
 
 export const FAMILLES: Record<FamilleMateriel, { label: string; color: string }> = {
   pelle:      { label: 'Pelles', color: '#f59e0b' },
   transport:  { label: 'Transport (tracteurs, dumpers, bennes)', color: '#38bdf8' },
   compactage: { label: 'Compactage', color: '#a78bfa' },
+  drague:     { label: 'Dragues', color: '#22d3ee' },
   autre:      { label: 'Autres', color: '#94a3b8' },
 };
 

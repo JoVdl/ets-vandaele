@@ -67,6 +67,17 @@ export const PELLES_DE_DEPART: Seed[] = [
   },
 ];
 
+// Dredges.
+export const DRAGUES_DE_DEPART: Seed[] = [
+  {
+    nom: 'Drague diesel', famille: 'drague', etat: 'operationnel',
+    specs: {
+      'Motorisation': 'Diesel',
+      'Remarque': 'Marque, modèle, année et caractéristiques à compléter',
+    },
+  },
+];
+
 // Transport: tractors, trucks and tipping equipment. Missing figures are noted in specs.
 export const TRANSPORT_DE_DEPART: Seed[] = [
   {
