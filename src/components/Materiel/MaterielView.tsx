@@ -5,7 +5,7 @@ import { useMateriel } from '../../hooks/useMateriel';
 import { FAMILLES, ETATS, type FamilleMateriel, type EtatMateriel, type Materiel } from '../../types/materiel';
 import { heuresCompteur, tauxUtilisation, tachesOuvertes } from '../../lib/materielStats';
 import { uploadMaterielPhoto } from '../../lib/storage';
-import { PELLES_DE_DEPART, TRANSPORT_DE_DEPART } from '../../lib/materielSeed';
+import { PELLES_DE_DEPART, TRANSPORT_DE_DEPART, DRAGUES_DE_DEPART } from '../../lib/materielSeed';
 
 const uid = () => crypto.randomUUID();
 
@@ -20,7 +20,7 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
     famille: f,
     list: items.filter(m => m.famille === f && m.etat !== 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)),
   })).filter(g => g.list.length > 0), [items]);
-  const pellesManquantes = [...PELLES_DE_DEPART, ...TRANSPORT_DE_DEPART].filter(p => !items.some(m => m.nom === p.nom));
+  const pellesManquantes = [...PELLES_DE_DEPART, ...TRANSPORT_DE_DEPART, ...DRAGUES_DE_DEPART].filter(p => !items.some(m => m.nom === p.nom));
   const addPelles = async () => {
     for (const p of pellesManquantes) {
       await add({ ...p, journal: [], taches: [], suiviDepuis: new Date().toISOString() } as Omit<Materiel, 'id'>);
@@ -30,8 +30,8 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (!loaded) return;
     try {
-      if (localStorage.getItem('materiel_seed_v3') === '1') return;
-      localStorage.setItem('materiel_seed_v3', '1');
+      if (localStorage.getItem('materiel_seed_v4') === '1') return;
+      localStorage.setItem('materiel_seed_v4', '1');
     } catch { return; }
     if (pellesManquantes.length > 0) addPelles();
   // eslint-disable-next-line react-hooks/exhaustive-deps
