@@ -18,6 +18,13 @@ export const PELLES_DE_DEPART: Seed[] = [
     },
   },
   {
+    nom: 'Pelle JCB 818 Super', famille: 'pelle', marque: 'JCB', modele: '818 Super',
+    etat: 'non_utilisable',
+    specs: {
+      'Remarque': 'Pas opérationnelle. Poids, dimensions, année et caractéristiques non trouvés : à compléter',
+    },
+  },
+  {
     nom: 'Kubota KH 35', famille: 'pelle', marque: 'Kubota', modele: 'KH 35', annee: 1984,
     etat: 'operationnel',
     specs: {
