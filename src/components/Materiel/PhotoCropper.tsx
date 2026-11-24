@@ -3,7 +3,7 @@ import { X, Check } from 'lucide-react';
 import type { Crop } from './PhotoView';
 
 type Box = { x: number; y: number; w: number; h: number };
-const ASPECT = 4 / 3;
+const ASPECT = 3 / 4;
 
 // Crop box at fixed aspect, centred and as large as the image allows.
 function initialBox(W: number, H: number): Box {
@@ -82,7 +82,7 @@ export default function PhotoCropper({ src, initial, onCancel, onDone }: {
 
   const confirm = () => {
     if (!img || !box) return;
-    onDone({ x: box.x / img.naturalWidth, y: box.y / img.naturalHeight, w: box.w / img.naturalWidth, h: box.h / img.naturalHeight });
+    onDone({ x: box.x / img.naturalWidth, y: box.y / img.naturalHeight, w: box.w / img.naturalWidth, h: box.h / img.naturalHeight, aspect: ASPECT });
   };
 
   const ready = img && box;
@@ -120,7 +120,7 @@ export default function PhotoCropper({ src, initial, onCancel, onDone }: {
           </div>
         )}
       </div>
-      <p className="text-center text-slate-400 text-[11px] pb-4 px-4">Glisse le cadre pour le placer, et un coin pour l'agrandir ou le réduire. Format 4:3.</p>
+      <p className="text-center text-slate-400 text-[11px] pb-4 px-4">Glisse le cadre pour le placer, et un coin pour l'agrandir ou le réduire. Format portrait 3:4.</p>
     </div>
   );
 }

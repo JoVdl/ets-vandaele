@@ -230,7 +230,7 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
               if (file) { e.preventDefault(); onPhoto(file); }
             }}
             className="h-44 rounded-2xl bg-slate-800 overflow-hidden flex items-center justify-center relative outline-none focus:ring-2 focus:ring-amber-500/50">
-            {m.photoUrl ? <PhotoView src={m.photoUrl} crop={m.photoCrop} className="!aspect-auto w-full h-full" /> : (
+            {m.photoUrl ? <PhotoView src={m.photoUrl} crop={m.photoCrop} fill /> : (
               <div className="text-center text-slate-500 text-[11px] px-4">
                 <Camera size={24} className="mx-auto mb-1 text-slate-600" />
                 Colle une photo ici (Ctrl+V), ou utilise un lien ci-dessous
