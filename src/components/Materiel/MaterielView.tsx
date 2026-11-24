@@ -81,14 +81,6 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
             Ajouter les {pellesManquantes.length} engins de départ (fiches avec caractéristiques)
           </button>
         )}
-        {nonUtilisables.length > 0 && (
-          <section>
-            <p className="sticky top-0 z-10 bg-slate-950/95 py-1 text-[10px] font-semibold uppercase tracking-wide mb-2 text-slate-400">Non utilisables · à remettre en état</p>
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-              {nonUtilisables.map(m => <MaterielCard key={m.id} m={m} onOpen={() => setSelectedId(m.id)} />)}
-            </div>
-          </section>
-        )}
         {groups.length === 0 && nonUtilisables.length === 0 && <p className="text-slate-500 text-sm text-center py-10">Aucun engin pour l'instant</p>}
         {groups.map(g => (
           <section key={g.famille}>
@@ -98,6 +90,14 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
             </div>
           </section>
         ))}
+        {nonUtilisables.length > 0 && (
+          <section>
+            <p className="sticky top-0 z-10 bg-slate-950/95 py-1 text-[10px] font-semibold uppercase tracking-wide mb-2 text-slate-400">Non utilisables · à remettre en état</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+              {nonUtilisables.map(m => <MaterielCard key={m.id} m={m} onOpen={() => setSelectedId(m.id)} />)}
+            </div>
+          </section>
+        )}
       </div>
 
       {creating && (
