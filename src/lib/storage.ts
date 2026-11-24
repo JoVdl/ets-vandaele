@@ -41,3 +41,11 @@ export async function deleteChantierDocument(d: ChantierDocument): Promise<void>
     // File may already be gone — ignore
   }
 }
+
+export async function uploadMaterielPhoto(materielId: string, file: File): Promise<{ url: string; path: string }> {
+  const path = `materiel/${materielId}/photo-${crypto.randomUUID()}-${file.name}`;
+  const storageRef = ref(storage, path);
+  await uploadBytesResumable(storageRef, file, { contentType: file.type }).then(() => undefined);
+  const url = await getDownloadURL(storageRef);
+  return { url, path };
+}

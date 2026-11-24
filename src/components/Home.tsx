@@ -1,4 +1,4 @@
-import { CalendarDays, Tractor, ChevronRight } from 'lucide-react';
+import { CalendarDays, Tractor, Wrench, ChevronRight } from 'lucide-react';
 
 const tools = [
   {
@@ -18,6 +18,15 @@ const tools = [
     description: 'GPS, surface et rendement en temps réel',
     accent: 'bg-green-600',
     hover: 'hover:ring-green-500/30',
+  },
+  {
+    id: 'materiel',
+    href: '#materiel',
+    icon: Wrench,
+    label: 'Matériel',
+    description: 'Parc, état, entretien et utilisation (patron)',
+    accent: 'bg-amber-600',
+    hover: 'hover:ring-amber-500/30',
   },
 ] as const;
 

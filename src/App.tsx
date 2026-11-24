@@ -4,10 +4,11 @@ import PlanDeCharge from './components/PlanDeCharge';
 import PlanningPinGate from './components/PlanningPinGate';
 import PinGate from './components/Suivi/PinGate';
 import SuiviView from './components/Suivi/SuiviView';
+import MaterielView from './components/Materiel/MaterielView';
 import { loadSession, loadPlanningSession } from './lib/suiviConfig';
 import type { PinRole } from './types/suivi';
 
-type Tool = 'home' | 'planning' | 'suivi';
+type Tool = 'home' | 'planning' | 'suivi' | 'materiel';
 
 function isPwa(): boolean {
   return window.matchMedia('(display-mode: standalone)').matches
@@ -18,6 +19,7 @@ function getToolFromHash(): Tool {
   const h = location.hash;
   if (h === '#planning') return 'planning';
   if (h === '#suivi')    return 'suivi';
+  if (h === '#materiel') return 'materiel';
   // When launched from home screen (PWA), go directly to suivi
   if (isPwa()) return 'suivi';
   return 'home';
@@ -41,6 +43,11 @@ export default function App() {
         <PlanDeCharge />
       </div>
     );
+  }
+
+  if (tool === 'materiel') {
+    if (!planningOk) return <PlanningPinGate onUnlock={() => setPlanningOk(true)} />;
+    return <MaterielView onClose={() => { location.hash = ''; }} />;
   }
 
   if (tool === 'suivi') {
