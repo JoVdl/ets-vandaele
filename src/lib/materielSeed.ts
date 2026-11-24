@@ -1,0 +1,68 @@
+import type { Materiel } from '../types/materiel';
+
+type Seed = Omit<Materiel, 'id' | 'journal' | 'taches' | 'suiviDepuis'>;
+
+// Starting data for the excavators, from manufacturer and specification sites. Sources disagree on some
+// figures (noted in specs); photos are added in the app.
+export const PELLES_DE_DEPART: Seed[] = [
+  {
+    nom: 'Kubota KH 35', famille: 'pelle', marque: 'Kubota', modele: 'KH 35', annee: 1984,
+    etat: 'operationnel',
+    specs: {
+      'Poids': '≈ 1,35 t',
+      'Longueur de transport': '3,33 m',
+      'Largeur de transport': '0,98 m',
+      'Hauteur de transport': '2,12 m (une source indique 2,25 m)',
+      'Largeur des chenilles': '230 mm',
+      'Profondeur de fouille': '2,25 m',
+      'Portée maximale': '3,7 m',
+      'Moteur': 'D850 (modèle abandonné)',
+    },
+  },
+  {
+    nom: 'JCB 8026 CTS', famille: 'pelle', marque: 'JCB', modele: '8026 CTS (« 802.6 »)', annee: 2007,
+    etat: 'operationnel',
+    specs: {
+      'Poids en ordre de marche': '2 867 kg (ISO 6016)',
+      'Poids de transport': '≈ 2,7 t',
+      'Longueur de transport': '4,08 m',
+      'Hauteur de transport': '2,40 m',
+      'Largeur hors tout': '1,55 m',
+      'Largeur des chenilles': '250 mm',
+      'Profondeur de fouille': '≈ 3,05 m',
+      'Portée maximale': '4,77 m',
+      'Hauteur de déversement': '3,22 m',
+      'Puissance': '18,4 kW (25 ch)',
+    },
+  },
+  {
+    nom: 'Schaeff HR 32', famille: 'pelle', marque: 'Schaeff (Terex)', modele: 'HR 32',
+    etat: 'operationnel',
+    specs: {
+      'Poids': '≈ 7,5 t (une source indique 2,4 t, probablement erronée)',
+      'Longueur de transport': '4,16 m',
+      'Largeur de transport': '2,33 m',
+      'Hauteur de transport': '4,34 m',
+      'Largeur des chenilles': '450 mm',
+      'Capacité du godet': '0,335 m³',
+      'Profondeur de fouille': '≈ 4 m',
+      'Portée au sol': '≈ 7 m',
+      'Moteur': 'Deutz BF4M2011, 54 kW',
+    },
+  },
+  {
+    nom: 'Komatsu PC160LC-7', famille: 'pelle', marque: 'Komatsu', modele: 'PC160LC-7', annee: 2007,
+    etat: 'operationnel',
+    specs: {
+      'Poids en ordre de marche': '≈ 16,5 à 17,1 t (selon configuration)',
+      'Longueur de transport': '8,60 m',
+      'Largeur de transport': '3,30 m',
+      'Hauteur de transport': '2,50 m',
+      'Garde au sol': '440 mm',
+      'Rayon de rotation arrière': '2,44 m',
+      'Profondeur de fouille': '≈ 6,3 m',
+      'Portée au sol': '≈ 9,2 m',
+      'Puissance nette': '82 kW (111 ch)',
+    },
+  },
+];

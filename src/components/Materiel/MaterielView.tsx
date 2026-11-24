@@ -5,6 +5,7 @@ import { useMateriel } from '../../hooks/useMateriel';
 import { FAMILLES, ETATS, type FamilleMateriel, type EtatMateriel, type Materiel } from '../../types/materiel';
 import { heuresCompteur, tauxUtilisation, tachesOuvertes } from '../../lib/materielStats';
 import { uploadMaterielPhoto } from '../../lib/storage';
+import { PELLES_DE_DEPART } from '../../lib/materielSeed';
 
 const uid = () => crypto.randomUUID();
 
@@ -14,10 +15,17 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
   const [creating, setCreating] = useState(false);
   const selected = items.find(m => m.id === selectedId) ?? null;
 
+  const nonUtilisables = useMemo(() => items.filter(m => m.etat === 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)), [items]);
   const groups = useMemo(() => (Object.keys(FAMILLES) as FamilleMateriel[]).map(f => ({
     famille: f,
-    list: items.filter(m => m.famille === f).sort((a, b) => a.nom.localeCompare(b.nom)),
+    list: items.filter(m => m.famille === f && m.etat !== 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)),
   })).filter(g => g.list.length > 0), [items]);
+  const pellesManquantes = PELLES_DE_DEPART.filter(p => !items.some(m => m.nom === p.nom));
+  const addPelles = async () => {
+    for (const p of pellesManquantes) {
+      await add({ ...p, journal: [], taches: [], suiviDepuis: new Date().toISOString() } as Omit<Materiel, 'id'>);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[500] bg-slate-950 flex flex-col">
@@ -31,7 +39,20 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
-        {groups.length === 0 && <p className="text-slate-500 text-sm text-center py-10">Aucun engin pour l'instant</p>}
+        {pellesManquantes.length > 0 && (
+          <button onClick={addPelles} className="w-full py-2 rounded-lg bg-white/[0.06] text-slate-300 text-xs">
+            Ajouter les {pellesManquantes.length} pelles de départ (fiches avec caractéristiques)
+          </button>
+        )}
+        {nonUtilisables.length > 0 && (
+          <section>
+            <p className="text-[10px] font-semibold uppercase tracking-wide mb-2 text-slate-400">Non utilisables · à remettre en état</p>
+            <div className="grid grid-cols-2 gap-2">
+              {nonUtilisables.map(m => <MaterielCard key={m.id} m={m} onOpen={() => setSelectedId(m.id)} />)}
+            </div>
+          </section>
+        )}
+        {groups.length === 0 && nonUtilisables.length === 0 && <p className="text-slate-500 text-sm text-center py-10">Aucun engin pour l'instant</p>}
         {groups.map(g => (
           <section key={g.famille}>
             <p className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: FAMILLES[g.famille].color }}>{FAMILLES[g.famille].label}</p>
