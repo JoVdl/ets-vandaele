@@ -8,8 +8,10 @@ const COL = 'materiel';
 // Equipment records: patron-only UI; each record is updated as a whole from explicit actions.
 export function useMateriel() {
   const [items, setItems] = useState<Materiel[]>([]);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => onSnapshot(collection(db, COL), snap => {
     setItems(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Materiel, 'id'>) })));
+    setLoaded(true);
   }, () => { /* offline — keep last known */ }), []);
 
   const add = useCallback(async (m: Omit<Materiel, 'id'>) => {
@@ -25,5 +27,5 @@ export function useMateriel() {
     await deleteDoc(doc(db, COL, id));
   }, []);
 
-  return { items, add, update, remove };
+  return { items, loaded, add, update, remove };
 }

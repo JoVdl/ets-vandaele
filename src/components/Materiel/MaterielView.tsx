@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Plus, X, Trash2, Camera } from 'lucide-react';
 import { format } from 'date-fns';
 import { useMateriel } from '../../hooks/useMateriel';
@@ -10,7 +10,7 @@ import { PELLES_DE_DEPART } from '../../lib/materielSeed';
 const uid = () => crypto.randomUUID();
 
 export default function MaterielView({ onClose }: { onClose: () => void }) {
-  const { items, add, update, remove } = useMateriel();
+  const { items, loaded, add, update, remove } = useMateriel();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const selected = items.find(m => m.id === selectedId) ?? null;
@@ -26,6 +26,16 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
       await add({ ...p, journal: [], taches: [], suiviDepuis: new Date().toISOString() } as Omit<Materiel, 'id'>);
     }
   };
+  // One-time import of the starting excavators, only once the database has answered.
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      if (localStorage.getItem('materiel_seed_pelles') === '1') return;
+      localStorage.setItem('materiel_seed_pelles', '1');
+    } catch { return; }
+    if (pellesManquantes.length > 0) addPelles();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   return (
     <div className="fixed inset-0 z-[500] bg-slate-950 flex flex-col">
