@@ -164,6 +164,14 @@ export const TRANSPORT_DE_DEPART: Seed[] = [
     },
   },
   {
+    nom: 'Plateau mini-pelle 3,5 t PTAC', famille: 'transport', modele: 'Plateau mini-pelle',
+    etat: 'operationnel',
+    specs: {
+      'PTAC': '3,5 t',
+      'Remarque': 'Longueur, largeur et charge utile à compléter',
+    },
+  },
+  {
     nom: 'Petite benne tracteur', famille: 'transport', modele: 'Benne tractée',
     etat: 'operationnel',
     specs: {
