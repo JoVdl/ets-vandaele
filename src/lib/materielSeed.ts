@@ -179,6 +179,20 @@ export const TRANSPORT_DE_DEPART: Seed[] = [
     },
   },
   {
+    nom: 'Véhicule Toyota Hiace (fourgon)', famille: 'transport', marque: 'Toyota', modele: 'Hiace',
+    etat: 'non_utilisable',
+    specs: {
+      'Remarque': 'Pas opérationnel. Année et charge utile à compléter',
+    },
+  },
+  {
+    nom: 'Véhicule Ford Ranger', famille: 'transport', marque: 'Ford', modele: 'Ranger',
+    etat: 'non_utilisable',
+    specs: {
+      'Remarque': 'Pas opérationnel. Année et charge utile à compléter',
+    },
+  },
+  {
     nom: 'Petite benne tracteur', famille: 'transport', modele: 'Benne tractée',
     etat: 'operationnel',
     specs: {

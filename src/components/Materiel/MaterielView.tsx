@@ -30,8 +30,8 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (!loaded) return;
     try {
-      if (localStorage.getItem('materiel_seed_v10') === '1') return;
-      localStorage.setItem('materiel_seed_v10', '1');
+      if (localStorage.getItem('materiel_seed_v11') === '1') return;
+      localStorage.setItem('materiel_seed_v11', '1');
     } catch { return; }
     if (pellesManquantes.length > 0) addPelles();
   // eslint-disable-next-line react-hooks/exhaustive-deps
