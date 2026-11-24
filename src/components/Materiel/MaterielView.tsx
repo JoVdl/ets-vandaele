@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { useMateriel } from '../../hooks/useMateriel';
 import { FAMILLES, ETATS, type FamilleMateriel, type EtatMateriel, type Materiel } from '../../types/materiel';
 import { heuresCompteur, tauxUtilisation, tachesOuvertes } from '../../lib/materielStats';
-import { imageToDataUrl } from '../../lib/imageResize';
+import PhotoCropper from './PhotoCropper';
 import { PELLES_DE_DEPART, TRANSPORT_DE_DEPART, DRAGUES_DE_DEPART } from '../../lib/materielSeed';
 
 const uid = () => crypto.randomUUID();
@@ -192,14 +192,15 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
     await onUpdate({ photoUrl: photoLink.trim(), photoPath: '' });
     setPhotoLink('');
   };
-  const onPhoto = async (file: File) => {
+  const [toCrop, setToCrop] = useState<File | null>(null);
+  const onPhoto = (file: File) => { setPhotoError(null); setToCrop(file); };
+  const savePhoto = async (dataUrl: string) => {
+    setToCrop(null);
     setPhotoBusy(true);
-    setPhotoError(null);
     try {
-      const dataUrl = await imageToDataUrl(file);
       await onUpdate({ photoUrl: dataUrl, photoPath: '' });
     } catch (e) {
-      setPhotoError(`Envoi impossible : ${e instanceof Error ? e.message : 'erreur inconnue'}`);
+      setPhotoError(`Enregistrement impossible : ${e instanceof Error ? e.message : 'erreur inconnue'}`);
     } finally { setPhotoBusy(false); }
   };
 
@@ -297,6 +298,8 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
           )}
         </div>
       </div>
+
+      {toCrop && <PhotoCropper file={toCrop} onCancel={() => setToCrop(null)} onDone={savePhoto} />}
 
       {editing && (
         <EditSheet
