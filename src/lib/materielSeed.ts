@@ -120,6 +120,14 @@ export const TRANSPORT_DE_DEPART: Seed[] = [
     },
   },
   {
+    nom: 'Télescopique JCB 536-40', famille: 'transport', marque: 'JCB', modele: '536-40',
+    etat: 'operationnel',
+    specs: {
+      'Capacité de levage': '≈ 3,2 t (valeur indicative de la gamme 536)',
+      'Remarque': 'Année, poids, dimensions et hauteur de levage à compléter',
+    },
+  },
+  {
     nom: 'Chenillette LH420', famille: 'transport', modele: 'LH420',
     etat: 'operationnel',
     specs: {
