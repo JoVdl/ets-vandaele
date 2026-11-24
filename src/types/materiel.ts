@@ -42,6 +42,7 @@ export interface Materiel {
   annee?: number;
   photoUrl?: string;
   photoPath?: string;
+  photoCrop?: { x: number; y: number; w: number; h: number }; // fractions of the photo (0–1), 4:3 frame
   etat: EtatMateriel;
   heuresInitiales?: number;   // approximate hour meter given at start of tracking
   suiviDepuis: string;        // ISO date: tracking start

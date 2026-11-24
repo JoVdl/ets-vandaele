@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Check } from 'lucide-react';
+import type { Crop } from './PhotoView';
 
 type Box = { x: number; y: number; w: number; h: number };
 const ASPECT = 4 / 3;
@@ -12,24 +13,28 @@ function initialBox(W: number, H: number): Box {
 }
 
 // Picks a photo's framing: drag the box to move it, drag a corner to resize (aspect kept).
-export default function PhotoCropper({ file, onCancel, onDone }: {
-  file: File;
+export default function PhotoCropper({ src, initial, onCancel, onDone }: {
+  src: string;
+  initial?: Crop;
   onCancel: () => void;
-  onDone: (dataUrl: string) => void;
+  onDone: (crop: Crop) => void;
 }) {
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [box, setBox] = useState<Box | null>(null);
-  const [busy, setBusy] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ mode: 'move' | 'nw' | 'ne' | 'sw' | 'se'; start: Box; px: number; py: number } | null>(null);
-  const url = useMemo(() => URL.createObjectURL(file), [file]);
+  const url = src;
 
   useEffect(() => {
     const i = new Image();
-    i.onload = () => { setImg(i); setBox(initialBox(i.naturalWidth, i.naturalHeight)); };
+    i.onload = () => {
+      setImg(i);
+      setBox(initial
+        ? { x: initial.x * i.naturalWidth, y: initial.y * i.naturalHeight, w: initial.w * i.naturalWidth, h: initial.h * i.naturalHeight }
+        : initialBox(i.naturalWidth, i.naturalHeight));
+    };
     i.src = url;
-    return () => URL.revokeObjectURL(url);
-  }, [url]);
+  }, [url]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scale from image pixels to on-screen pixels
   const scale = useMemo(() => {
@@ -77,17 +82,7 @@ export default function PhotoCropper({ file, onCancel, onDone }: {
 
   const confirm = () => {
     if (!img || !box) return;
-    setBusy(true);
-    const outW = Math.min(800, Math.round(box.w));
-    const outH = Math.round(outW / ASPECT);
-    const canvas = document.createElement('canvas');
-    canvas.width = outW; canvas.height = outH;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) { setBusy(false); return; }
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, outW, outH);
-    ctx.drawImage(img, box.x, box.y, box.w, box.h, 0, 0, outW, outH);
-    onDone(canvas.toDataURL('image/jpeg', 0.85));
+    onDone({ x: box.x / img.naturalWidth, y: box.y / img.naturalHeight, w: box.w / img.naturalWidth, h: box.h / img.naturalHeight });
   };
 
   const ready = img && box;
@@ -100,7 +95,7 @@ export default function PhotoCropper({ file, onCancel, onDone }: {
       <div className="flex items-center justify-between px-3 py-2.5 text-white">
         <button onClick={onCancel} className="p-1.5 text-slate-300"><X size={20} /></button>
         <p className="text-sm font-semibold">Recadrer la photo</p>
-        <button onClick={confirm} disabled={!ready || busy} className="p-1.5 text-amber-400 disabled:opacity-40"><Check size={22} /></button>
+        <button onClick={confirm} disabled={!ready} className="p-1.5 text-amber-400 disabled:opacity-40"><Check size={22} /></button>
       </div>
       <div className="flex-1 flex items-center justify-center px-4">
         {ready && (

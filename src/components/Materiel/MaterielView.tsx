@@ -6,6 +6,8 @@ import { useMateriel } from '../../hooks/useMateriel';
 import { FAMILLES, ETATS, type FamilleMateriel, type EtatMateriel, type Materiel } from '../../types/materiel';
 import { heuresCompteur, tauxUtilisation, tachesOuvertes } from '../../lib/materielStats';
 import PhotoCropper from './PhotoCropper';
+import { PhotoView, type Crop } from './PhotoView';
+import { imageToDataUrl } from '../../lib/imageResize';
 import { PELLES_DE_DEPART, TRANSPORT_DE_DEPART, DRAGUES_DE_DEPART } from '../../lib/materielSeed';
 
 const uid = () => crypto.randomUUID();
@@ -136,8 +138,8 @@ function MaterielCard({ m, onOpen }: { m: Materiel; onOpen: () => void }) {
   const probleme = enPanne ? 'Panne' : ouvertes[0]?.texte;
   return (
     <button onClick={onOpen} className={`text-left rounded-xl overflow-hidden border ${bloque ? 'border-red-600/80' : 'border-white/[0.08]'} bg-white/[0.04]`}>
-      <div className="h-16 bg-slate-800 flex items-center justify-center relative">
-        {m.photoUrl ? <img src={m.photoUrl} alt="" className="w-full h-full object-cover" /> : <Camera size={18} className="text-slate-600" />}
+      <div className="relative">
+        <PhotoView src={m.photoUrl} crop={m.photoCrop} />
         {bloque && (
           <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-600 text-white text-[9px] font-bold flex items-center justify-center shadow">
             {enPanne ? '!' : t.bloquantes}
@@ -188,17 +190,25 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
     setHeures(''); setNote('');
   };
   const [photoLink, setPhotoLink] = useState('');
-  const usePhotoLink = async () => {
-    await onUpdate({ photoUrl: photoLink.trim(), photoPath: '' });
-    setPhotoLink('');
+  const [toCrop, setToCrop] = useState<{ src: string; initial?: Crop } | null>(null);
+  const onPhoto = async (file: File) => {
+    setPhotoError(null);
+    setPhotoBusy(true);
+    try { setToCrop({ src: await imageToDataUrl(file, 1200, 0.9) }); }
+    catch (e) { setPhotoError(`Lecture impossible : ${e instanceof Error ? e.message : 'erreur inconnue'}`); }
+    finally { setPhotoBusy(false); }
   };
-  const [toCrop, setToCrop] = useState<File | null>(null);
-  const onPhoto = (file: File) => { setPhotoError(null); setToCrop(file); };
-  const savePhoto = async (dataUrl: string) => {
+  const usePhotoLink = () => {
+    const url = photoLink.trim();
+    if (!/^https?:\/\//.test(url)) return;
+    setPhotoLink('');
+    setToCrop({ src: url });
+  };
+  const savePhoto = async (src: string, crop: Crop) => {
     setToCrop(null);
     setPhotoBusy(true);
     try {
-      await onUpdate({ photoUrl: dataUrl, photoPath: '' });
+      await onUpdate({ photoUrl: src, photoCrop: crop, photoPath: '' });
     } catch (e) {
       setPhotoError(`Enregistrement impossible : ${e instanceof Error ? e.message : 'erreur inconnue'}`);
     } finally { setPhotoBusy(false); }
@@ -220,7 +230,7 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
               if (file) { e.preventDefault(); onPhoto(file); }
             }}
             className="h-44 rounded-2xl bg-slate-800 overflow-hidden flex items-center justify-center relative outline-none focus:ring-2 focus:ring-amber-500/50">
-            {m.photoUrl ? <img src={m.photoUrl} alt="" className="w-full h-full object-cover" /> : (
+            {m.photoUrl ? <PhotoView src={m.photoUrl} crop={m.photoCrop} className="!aspect-auto w-full h-full" /> : (
               <div className="text-center text-slate-500 text-[11px] px-4">
                 <Camera size={24} className="mx-auto mb-1 text-slate-600" />
                 Colle une photo ici (Ctrl+V), ou utilise un lien ci-dessous
@@ -228,6 +238,9 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
             )}
             {photoBusy && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs">Enregistrement…</div>}
             {photoError && !photoBusy && <div className="absolute inset-x-2 top-2 rounded bg-red-900/90 text-red-100 text-[11px] px-2 py-1">{photoError}</div>}
+            {m.photoUrl && (
+              <button onClick={() => setToCrop({ src: m.photoUrl!, initial: m.photoCrop })} className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-black/60 text-white text-xs">Recadrer</button>
+            )}
             <label className="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 text-white text-xs cursor-pointer">
               Choisir
               <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && onPhoto(e.target.files[0])} />
@@ -299,7 +312,7 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
         </div>
       </div>
 
-      {toCrop && <PhotoCropper file={toCrop} onCancel={() => setToCrop(null)} onDone={savePhoto} />}
+      {toCrop && <PhotoCropper src={toCrop.src} initial={toCrop.initial} onCancel={() => setToCrop(null)} onDone={c => savePhoto(toCrop.src, c)} />}
 
       {editing && (
         <EditSheet
