@@ -155,6 +155,15 @@ export const TRANSPORT_DE_DEPART: Seed[] = [
     },
   },
   {
+    nom: 'Plateau Iforwilliams', famille: 'transport', marque: 'Iforwilliams', modele: 'Plateau',
+    etat: 'operationnel',
+    specs: {
+      'Longueur': '6 m',
+      'Largeur': '2,5 m',
+      'Remarque': 'Charge utile et poids à compléter',
+    },
+  },
+  {
     nom: 'Petite benne tracteur', famille: 'transport', modele: 'Benne tractée',
     etat: 'operationnel',
     specs: {
