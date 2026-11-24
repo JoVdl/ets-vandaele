@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
 import { ArrowLeft, Plus, X, Trash2, Camera } from 'lucide-react';
 import { format } from 'date-fns';
 import { useMateriel } from '../../hooks/useMateriel';
@@ -15,11 +16,19 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
   const [creating, setCreating] = useState(false);
   const selected = items.find(m => m.id === selectedId) ?? null;
 
-  const nonUtilisables = useMemo(() => items.filter(m => m.etat === 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)), [items]);
+  const [query, setQuery] = useState('');
+  const [filtre, setFiltre] = useState<'tous' | EtatMateriel>('tous');
+  const visibles = useMemo(() => items.filter(m => {
+    if (filtre !== 'tous' && m.etat !== filtre) return false;
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return [m.nom, m.marque, m.modele, String(m.annee ?? '')].filter(Boolean).join(' ').toLowerCase().includes(q);
+  }), [items, query, filtre]);
+  const nonUtilisables = useMemo(() => visibles.filter(m => m.etat === 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)), [visibles]);
   const groups = useMemo(() => (Object.keys(FAMILLES) as FamilleMateriel[]).map(f => ({
     famille: f,
-    list: items.filter(m => m.famille === f && m.etat !== 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)),
-  })).filter(g => g.list.length > 0), [items]);
+    list: visibles.filter(m => m.famille === f && m.etat !== 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)),
+  })).filter(g => g.list.length > 0), [visibles]);
   const pellesManquantes = [...PELLES_DE_DEPART, ...TRANSPORT_DE_DEPART, ...DRAGUES_DE_DEPART].filter(p => !items.some(m => m.nom === p.nom));
   const addPelles = async () => {
     for (const p of pellesManquantes) {
@@ -48,7 +57,23 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
         <button onClick={() => setCreating(true)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold"><Plus size={13} />Ajouter</button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
+      <div className="px-3 pt-2.5 pb-2 space-y-2 border-b border-white/[0.05] flex-shrink-0">
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Rechercher un engin, une marque…"
+            className="w-full bg-white/[0.06] text-slate-200 text-xs rounded-lg pl-8 pr-2 py-2 border border-white/[0.08]" />
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto">
+          {(['tous', 'operationnel', 'maintenance', 'panne', 'non_utilisable'] as const).map(f => (
+            <button key={f} onClick={() => setFiltre(f)}
+              className={`px-2.5 py-1 rounded-full text-[11px] whitespace-nowrap ${filtre === f ? 'bg-white/[0.18] text-white' : 'bg-white/[0.05] text-slate-400'}`}>
+              {f === 'tous' ? 'Tous' : ETATS[f].label.replace(' (à remettre en état)', '')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
         {pellesManquantes.length > 0 && (
           <button onClick={addPelles} className="w-full py-2 rounded-lg bg-white/[0.06] text-slate-300 text-xs">
             Ajouter les {pellesManquantes.length} engins de départ (fiches avec caractéristiques)
@@ -56,8 +81,8 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
         )}
         {nonUtilisables.length > 0 && (
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wide mb-2 text-slate-400">Non utilisables · à remettre en état</p>
-            <div className="grid grid-cols-2 gap-2">
+            <p className="sticky top-0 z-10 bg-slate-950/95 py-1 text-[10px] font-semibold uppercase tracking-wide mb-2 text-slate-400">Non utilisables · à remettre en état</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
               {nonUtilisables.map(m => <MaterielCard key={m.id} m={m} onOpen={() => setSelectedId(m.id)} />)}
             </div>
           </section>
@@ -65,8 +90,8 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
         {groups.length === 0 && nonUtilisables.length === 0 && <p className="text-slate-500 text-sm text-center py-10">Aucun engin pour l'instant</p>}
         {groups.map(g => (
           <section key={g.famille}>
-            <p className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: FAMILLES[g.famille].color }}>{FAMILLES[g.famille].label}</p>
-            <div className="grid grid-cols-2 gap-2">
+            <p className="sticky top-0 z-10 bg-slate-950/95 py-1 text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: FAMILLES[g.famille].color }}>{FAMILLES[g.famille].label} · {g.list.length}</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
               {g.list.map(m => <MaterielCard key={m.id} m={m} onOpen={() => setSelectedId(m.id)} />)}
             </div>
           </section>
@@ -106,18 +131,18 @@ function MaterielCard({ m, onOpen }: { m: Materiel; onOpen: () => void }) {
   const taux = tauxUtilisation(m);
   const bloque = t.bloquantes > 0 || m.etat === 'panne';
   return (
-    <button onClick={onOpen} className={`text-left rounded-2xl overflow-hidden border ${bloque ? 'border-red-700/70' : 'border-white/[0.08]'} bg-white/[0.04]`}>
-      <div className="h-24 bg-slate-800 flex items-center justify-center">
-        {m.photoUrl ? <img src={m.photoUrl} alt="" className="w-full h-full object-cover" /> : <Camera size={22} className="text-slate-600" />}
+    <button onClick={onOpen} className={`text-left rounded-xl overflow-hidden border ${bloque ? 'border-red-700/70' : 'border-white/[0.08]'} bg-white/[0.04]`}>
+      <div className="h-16 bg-slate-800 flex items-center justify-center">
+        {m.photoUrl ? <img src={m.photoUrl} alt="" className="w-full h-full object-cover" /> : <Camera size={18} className="text-slate-600" />}
       </div>
-      <div className="p-2 space-y-1">
-        <p className="text-white text-xs font-semibold truncate">{m.nom}</p>
-        <p className="text-slate-500 text-[10px] truncate">{[m.marque, m.modele, m.annee].filter(Boolean).join(' · ') || '—'}</p>
+      <div className="p-1.5 space-y-0.5">
+        <p className="text-white text-[11px] font-semibold truncate leading-tight">{m.nom}</p>
+        <p className="text-slate-500 text-[9px] truncate">{[m.marque, m.annee].filter(Boolean).join(' · ') || '—'}</p>
         <div className="flex items-center justify-between gap-1">
-          <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${ETATS[m.etat].color}`}>{ETATS[m.etat].label}</span>
-          {t.total > 0 && <span className={`text-[9px] ${t.bloquantes > 0 ? 'text-red-400' : 'text-slate-400'}`}>{t.total} à faire</span>}
+          <span className={`px-1 py-px rounded text-[8px] font-semibold truncate ${ETATS[m.etat].color}`}>{ETATS[m.etat].label.replace(' (à remettre en état)', '')}</span>
+          {t.total > 0 && <span className={`text-[8px] ${t.bloquantes > 0 ? 'text-red-400' : 'text-slate-400'}`}>{t.total}</span>}
         </div>
-        <p className="text-slate-500 text-[10px] tabular-nums">{heuresCompteur(m).toFixed(0)} h · utilisation {taux != null ? taux.toFixed(0) : '—'} %</p>
+        <p className="text-slate-500 text-[9px] tabular-nums">{heuresCompteur(m).toFixed(0)} h · {taux != null ? taux.toFixed(0) : '—'} %</p>
       </div>
     </button>
   );
