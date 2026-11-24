@@ -5,6 +5,11 @@ import type { Materiel } from '../types/materiel';
 
 const COL = 'materiel';
 
+// Firestore rejects undefined values: drop them before writing.
+function clean<T extends object>(o: T): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+}
+
 // Equipment records: patron-only UI; each record is updated as a whole from explicit actions.
 export function useMateriel() {
   const [items, setItems] = useState<Materiel[]>([]);
@@ -15,12 +20,12 @@ export function useMateriel() {
   }, () => { /* offline — keep last known */ }), []);
 
   const add = useCallback(async (m: Omit<Materiel, 'id'>) => {
-    const ref = await addDoc(collection(db, COL), m);
+    const ref = await addDoc(collection(db, COL), clean(m));
     return ref.id;
   }, []);
 
   const update = useCallback(async (id: string, patch: Partial<Omit<Materiel, 'id'>>) => {
-    await updateDoc(doc(db, COL, id), patch as Record<string, unknown>);
+    await updateDoc(doc(db, COL, id), clean(patch));
   }, []);
 
   const remove = useCallback(async (id: string) => {

@@ -301,6 +301,7 @@ function EditSheet({ title, initial, onCancel, onSave }: {
   const [heures, setHeures] = useState(initial?.heuresInitiales != null ? String(initial.heuresInitiales) : '');
   const [specs, setSpecs] = useState<{ k: string; v: string }[]>(Object.entries(initial?.specs ?? {}).map(([k, v]) => ({ k, v })));
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
     if (!nom.trim()) return;
@@ -308,6 +309,7 @@ function EditSheet({ title, initial, onCancel, onSave }: {
     const specsObj: Record<string, string> = {};
     specs.forEach(({ k, v }) => { if (k.trim() && v.trim()) specsObj[k.trim()] = v.trim(); });
     const h = parseFloat(heures.replace(',', '.'));
+    setError(null);
     try {
       await onSave({
         nom: nom.trim(), famille, etat,
@@ -317,6 +319,8 @@ function EditSheet({ title, initial, onCancel, onSave }: {
         heuresInitiales: h > 0 ? h : undefined,
         specs: specsObj,
       });
+    } catch (e) {
+      setError(`Enregistrement impossible : ${e instanceof Error ? e.message : 'erreur inconnue'}`);
     } finally { setBusy(false); }
   };
 
@@ -358,6 +362,7 @@ function EditSheet({ title, initial, onCancel, onSave }: {
             <Plus size={12} /> Ajouter une caractéristique
           </button>
         </div>
+        {error && <p className="text-red-400 text-xs">{error}</p>}
         <button onClick={save} disabled={busy || !nom.trim()} className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold disabled:opacity-40">Enregistrer</button>
       </div>
     </div>
