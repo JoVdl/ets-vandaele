@@ -6,6 +6,18 @@ type Seed = Omit<Materiel, 'id' | 'journal' | 'taches' | 'suiviDepuis'>;
 // figures (noted in specs); photos are added in the app.
 export const PELLES_DE_DEPART: Seed[] = [
   {
+    nom: 'Pelle O&K RH4', famille: 'pelle', marque: 'O&K', modele: 'RH 4',
+    etat: 'non_utilisable',
+    specs: {
+      'Poids': '≈ 12,8 à 14,1 t (sources divergentes)',
+      'Longueur': '≈ 7,6 m (une source)',
+      'Largeur': '≈ 2,9 m (une source)',
+      'Hauteur': '≈ 3,3 m (une source)',
+      'Capacité du godet': '0,5 m³ (une source)',
+      'Remarque': 'Pas opérationnelle. Année et caractéristiques à confirmer',
+    },
+  },
+  {
     nom: 'Kubota KH 35', famille: 'pelle', marque: 'Kubota', modele: 'KH 35', annee: 1984,
     etat: 'operationnel',
     specs: {
