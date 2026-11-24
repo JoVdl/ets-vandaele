@@ -172,6 +172,13 @@ export const TRANSPORT_DE_DEPART: Seed[] = [
     },
   },
   {
+    nom: 'Véhicule RAM 1500', famille: 'transport', marque: 'RAM', modele: '1500',
+    etat: 'operationnel',
+    specs: {
+      'Remarque': 'Année, motorisation et charge utile à compléter',
+    },
+  },
+  {
     nom: 'Petite benne tracteur', famille: 'transport', modele: 'Benne tractée',
     etat: 'operationnel',
     specs: {
