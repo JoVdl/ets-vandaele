@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { useMateriel } from '../../hooks/useMateriel';
 import { FAMILLES, ETATS, type FamilleMateriel, type EtatMateriel, type Materiel } from '../../types/materiel';
 import { heuresCompteur, tauxUtilisation, tachesOuvertes } from '../../lib/materielStats';
-import { uploadMaterielPhoto } from '../../lib/storage';
+import { imageToDataUrl } from '../../lib/imageResize';
 import { PELLES_DE_DEPART, TRANSPORT_DE_DEPART, DRAGUES_DE_DEPART } from '../../lib/materielSeed';
 
 const uid = () => crypto.randomUUID();
@@ -172,7 +172,6 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
   const [heures, setHeures] = useState('');
   const [note, setNote] = useState('');
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [photoPct, setPhotoPct] = useState<number | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState(false);
   const taux = tauxUtilisation(m);
@@ -195,14 +194,13 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
   };
   const onPhoto = async (file: File) => {
     setPhotoBusy(true);
-    setPhotoPct(0);
     setPhotoError(null);
     try {
-      const p = await uploadMaterielPhoto(m.id, file, setPhotoPct);
-      await onUpdate({ photoUrl: p.url, photoPath: p.path });
+      const dataUrl = await imageToDataUrl(file);
+      await onUpdate({ photoUrl: dataUrl, photoPath: '' });
     } catch (e) {
       setPhotoError(`Envoi impossible : ${e instanceof Error ? e.message : 'erreur inconnue'}`);
-    } finally { setPhotoBusy(false); setPhotoPct(null); }
+    } finally { setPhotoBusy(false); }
   };
 
   return (
@@ -227,7 +225,7 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
                 Colle une photo ici (Ctrl+V), ou utilise un lien ci-dessous
               </div>
             )}
-            {photoBusy && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs">Envoi… {photoPct != null ? `${photoPct.toFixed(0)} %` : ''}</div>}
+            {photoBusy && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs">Enregistrement…</div>}
             {photoError && !photoBusy && <div className="absolute inset-x-2 top-2 rounded bg-red-900/90 text-red-100 text-[11px] px-2 py-1">{photoError}</div>}
             <label className="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 text-white text-xs cursor-pointer">
               Choisir
