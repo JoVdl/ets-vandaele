@@ -42,10 +42,25 @@ export async function deleteChantierDocument(d: ChantierDocument): Promise<void>
   }
 }
 
-export async function uploadMaterielPhoto(materielId: string, file: File): Promise<{ url: string; path: string }> {
+export function uploadMaterielPhoto(
+  materielId: string,
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<{ url: string; path: string }> {
   const path = `materiel/${materielId}/photo-${crypto.randomUUID()}-${file.name}`;
   const storageRef = ref(storage, path);
-  await uploadBytesResumable(storageRef, file, { contentType: file.type }).then(() => undefined);
-  const url = await getDownloadURL(storageRef);
-  return { url, path };
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('délai dépassé (connexion lente ou bloquée)')), 60_000);
+    const task = uploadBytesResumable(storageRef, file, { contentType: file.type || 'image/jpeg' });
+    task.on(
+      'state_changed',
+      snap => onProgress?.(snap.bytesTransferred / snap.totalBytes * 100),
+      err => { clearTimeout(timer); reject(err); },
+      async () => {
+        clearTimeout(timer);
+        const url = await getDownloadURL(task.snapshot.ref);
+        resolve({ url, path });
+      },
+    );
+  });
 }
