@@ -109,6 +109,14 @@ export const TRANSPORT_DE_DEPART: Seed[] = [
     },
   },
   {
+    nom: 'Chenillette LH420', famille: 'transport', modele: 'LH420',
+    etat: 'operationnel',
+    specs: {
+      'Largeur': '3,30 m',
+      'Remarque': 'Poids, dimensions et puissance à compléter',
+    },
+  },
+  {
     nom: 'Petite benne tracteur', famille: 'transport', modele: 'Benne tractée',
     etat: 'operationnel',
     specs: {
