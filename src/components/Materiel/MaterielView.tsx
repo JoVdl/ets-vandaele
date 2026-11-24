@@ -4,7 +4,7 @@ import { ArrowLeft, Plus, X, Trash2, Camera } from 'lucide-react';
 import { format } from 'date-fns';
 import { useMateriel } from '../../hooks/useMateriel';
 import { FAMILLES, ETATS, type FamilleMateriel, type EtatMateriel, type Materiel } from '../../types/materiel';
-import { heuresCompteur, tauxUtilisation, tachesOuvertes } from '../../lib/materielStats';
+import { heuresCompteur, tauxUtilisation, tachesOuvertes, etatEffectif } from '../../lib/materielStats';
 import PhotoCropper from './PhotoCropper';
 import { PhotoView, type Crop } from './PhotoView';
 import { imageToDataUrl } from '../../lib/imageResize';
@@ -21,15 +21,15 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('');
   const [filtre, setFiltre] = useState<'tous' | EtatMateriel>('tous');
   const visibles = useMemo(() => items.filter(m => {
-    if (filtre !== 'tous' && m.etat !== filtre) return false;
+    if (filtre !== 'tous' && etatEffectif(m) !== filtre) return false;
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return [m.nom, m.marque, m.modele, String(m.annee ?? '')].filter(Boolean).join(' ').toLowerCase().includes(q);
   }), [items, query, filtre]);
-  const nonUtilisables = useMemo(() => visibles.filter(m => m.etat === 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)), [visibles]);
+  const nonUtilisables = useMemo(() => visibles.filter(m => etatEffectif(m) === 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)), [visibles]);
   const groups = useMemo(() => (Object.keys(FAMILLES) as FamilleMateriel[]).map(f => ({
     famille: f,
-    list: visibles.filter(m => m.famille === f && m.etat !== 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)),
+    list: visibles.filter(m => m.famille === f && etatEffectif(m) !== 'non_utilisable').sort((a, b) => a.nom.localeCompare(b.nom)),
   })).filter(g => g.list.length > 0), [visibles]);
   const pellesManquantes = [...PELLES_DE_DEPART, ...TRANSPORT_DE_DEPART, ...DRAGUES_DE_DEPART].filter(p => !items.some(m => m.nom === p.nom));
   const addPelles = async () => {
@@ -131,6 +131,7 @@ export default function MaterielView({ onClose }: { onClose: () => void }) {
 function MaterielCard({ m, onOpen }: { m: Materiel; onOpen: () => void }) {
   const t = tachesOuvertes(m);
   const taux = tauxUtilisation(m);
+  const etat = etatEffectif(m);
   const enPanne = m.etat === 'panne';
   const bloque = t.bloquantes > 0 || enPanne;
   // Most urgent open item: blocking first
@@ -150,7 +151,7 @@ function MaterielCard({ m, onOpen }: { m: Materiel; onOpen: () => void }) {
         <p className="text-white text-[11px] font-semibold truncate leading-tight">{m.nom}</p>
         <p className="text-slate-500 text-[9px] truncate">{[m.marque, m.annee].filter(Boolean).join(' · ') || '—'}</p>
         <div className="flex items-center justify-between gap-1">
-          <span className={`px-1 py-px rounded text-[8px] font-semibold truncate ${ETATS[m.etat].color}`}>{ETATS[m.etat].label.replace(' (à remettre en état)', '')}</span>
+          <span className={`px-1 py-px rounded text-[8px] font-semibold truncate ${ETATS[etat].color}`}>{ETATS[etat].label.replace(' (à remettre en état)', '')}</span>
           {t.total > 0 && !bloque && <span className="text-[8px] text-slate-400">{t.total}</span>}
         </div>
         {probleme && (
@@ -257,7 +258,7 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
         <div className="grid grid-cols-3 gap-2 text-center">
           <Stat v={`${heuresCompteur(m).toFixed(0)} h`} l="Compteur" />
           <Stat v={taux != null ? `${taux.toFixed(0)} %` : '—'} l="Utilisation" />
-          <Stat v={ETATS[m.etat].label} l="État" />
+          <Stat v={ETATS[etatEffectif(m)].label} l="État" />
         </div>
 
         <div className="rounded-2xl bg-white/[0.04] border border-white/[0.06] divide-y divide-white/[0.05] overflow-hidden">

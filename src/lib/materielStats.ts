@@ -21,3 +21,8 @@ export function tachesOuvertes(m: Materiel) {
   const ouvertes = m.taches.filter(t => !t.fait);
   return { total: ouvertes.length, bloquantes: ouvertes.filter(t => t.bloquant).length };
 }
+
+// Effective state: an open blocking task makes the machine non utilisable, whatever is stored.
+export function etatEffectif(m: Materiel): Materiel['etat'] {
+  return tachesOuvertes(m).bloquantes > 0 ? 'non_utilisable' : m.etat;
+}
