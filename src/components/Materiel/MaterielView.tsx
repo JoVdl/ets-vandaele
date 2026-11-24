@@ -174,6 +174,11 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
     onUpdate({ journal: [...m.journal, { id: uid(), date: new Date().toISOString(), type: 'utilisation', heures: h, note: note.trim() || undefined }] });
     setHeures(''); setNote('');
   };
+  const [photoLink, setPhotoLink] = useState('');
+  const usePhotoLink = async () => {
+    await onUpdate({ photoUrl: photoLink.trim(), photoPath: '' });
+    setPhotoLink('');
+  };
   const onPhoto = async (file: File) => {
     setPhotoBusy(true);
     try {
@@ -190,12 +195,32 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
         <button onClick={() => setEditing(true)} className="px-2.5 py-1.5 rounded-lg bg-white/[0.08] text-slate-200 text-xs">Modifier</button>
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
-        <div className="h-44 rounded-2xl bg-slate-800 overflow-hidden flex items-center justify-center relative">
-          {m.photoUrl ? <img src={m.photoUrl} alt="" className="w-full h-full object-cover" /> : <Camera size={28} className="text-slate-600" />}
-          <label className="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 text-white text-xs cursor-pointer">
-            {photoBusy ? 'Envoi…' : 'Photo'}
-            <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && onPhoto(e.target.files[0])} />
-          </label>
+        <div className="space-y-2">
+          <div
+            tabIndex={0}
+            onPaste={e => {
+              const file = Array.from(e.clipboardData.files).find(f => f.type.startsWith('image/'));
+              if (file) { e.preventDefault(); onPhoto(file); }
+            }}
+            className="h-44 rounded-2xl bg-slate-800 overflow-hidden flex items-center justify-center relative outline-none focus:ring-2 focus:ring-amber-500/50">
+            {m.photoUrl ? <img src={m.photoUrl} alt="" className="w-full h-full object-cover" /> : (
+              <div className="text-center text-slate-500 text-[11px] px-4">
+                <Camera size={24} className="mx-auto mb-1 text-slate-600" />
+                Colle une photo ici (Ctrl+V), ou utilise un lien ci-dessous
+              </div>
+            )}
+            {photoBusy && <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs">Envoi…</div>}
+            <label className="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 text-white text-xs cursor-pointer">
+              Choisir
+              <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && onPhoto(e.target.files[0])} />
+            </label>
+          </div>
+          <div className="flex gap-2">
+            <input value={photoLink} onChange={e => setPhotoLink(e.target.value)} placeholder="Adresse d'une image en ligne (clic droit › copier l'adresse de l'image)"
+              className="flex-1 min-w-0 bg-white/[0.06] text-slate-200 text-xs rounded-lg px-2 py-2 border border-white/[0.08]" />
+            <button onClick={usePhotoLink} disabled={!/^https?:\/\//.test(photoLink.trim())}
+              className="px-3 rounded-lg bg-white/[0.1] text-slate-200 text-xs disabled:opacity-40">Utiliser</button>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2 text-center">
