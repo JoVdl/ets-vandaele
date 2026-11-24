@@ -204,13 +204,12 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
           <Stat v={ETATS[m.etat].label} l="État" />
         </div>
 
-        <div className="text-xs text-slate-300 grid grid-cols-2 gap-x-3 gap-y-1">
-          <span className="text-slate-500">Marque</span><span>{m.marque || '—'}</span>
-          <span className="text-slate-500">Modèle</span><span>{m.modele || '—'}</span>
-          <span className="text-slate-500">Année</span><span>{m.annee || '—'}</span>
-          {Object.entries(m.specs ?? {}).map(([k, v]) => (
-            <span key={k} className="contents"><span className="text-slate-500">{k}</span><span>{v}</span></span>
+        <div className="rounded-2xl bg-white/[0.04] border border-white/[0.06] divide-y divide-white/[0.05] overflow-hidden">
+          {[['Marque', m.marque], ['Modèle', m.modele], ['Année', m.annee]].map(([l, v]) => (
+            <Row key={String(l)} label={String(l)} value={v ? String(v) : '—'} />
           ))}
+          {Object.entries(m.specs ?? {}).map(([k, v]) => <Row key={k} label={k} value={v} />)}
+          {Object.keys(m.specs ?? {}).length === 0 && <p className="px-3 py-2 text-[11px] text-slate-600">Aucune caractéristique renseignée</p>}
         </div>
 
         <section className="space-y-2">
@@ -269,6 +268,15 @@ function Detail({ m, onClose, onUpdate, onDelete }: {
   );
 }
 
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 px-3 py-2">
+      <span className="text-slate-500 text-[11px]">{label}</span>
+      <span className="text-slate-100 text-xs font-medium text-right">{value}</span>
+    </div>
+  );
+}
+
 function Stat({ v, l }: { v: string; l: string }) {
   return (
     <div className="bg-white/[0.04] rounded-xl py-2">
@@ -291,17 +299,14 @@ function EditSheet({ title, initial, onCancel, onSave }: {
   const [annee, setAnnee] = useState(initial?.annee ? String(initial.annee) : '');
   const [etat, setEtat] = useState<EtatMateriel>(initial?.etat ?? 'operationnel');
   const [heures, setHeures] = useState(initial?.heuresInitiales != null ? String(initial.heuresInitiales) : '');
-  const [specs, setSpecs] = useState(Object.entries(initial?.specs ?? {}).map(([k, v]) => `${k}: ${v}`).join('\n'));
+  const [specs, setSpecs] = useState<{ k: string; v: string }[]>(Object.entries(initial?.specs ?? {}).map(([k, v]) => ({ k, v })));
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
     if (!nom.trim()) return;
     setBusy(true);
     const specsObj: Record<string, string> = {};
-    specs.split('\n').forEach(line => {
-      const i = line.indexOf(':');
-      if (i > 0) specsObj[line.slice(0, i).trim()] = line.slice(i + 1).trim();
-    });
+    specs.forEach(({ k, v }) => { if (k.trim() && v.trim()) specsObj[k.trim()] = v.trim(); });
     const h = parseFloat(heures.replace(',', '.'));
     try {
       await onSave({
@@ -336,7 +341,23 @@ function EditSheet({ title, initial, onCancel, onSave }: {
           <input className={input} inputMode="numeric" placeholder="Année" value={annee} onChange={e => setAnnee(e.target.value)} />
           <input className={input} inputMode="decimal" placeholder="Compteur initial (h)" value={heures} onChange={e => setHeures(e.target.value)} />
         </div>
-        <textarea className={input} rows={4} placeholder={'Infos techniques, une par ligne\nPoids: 8 t\nLargeur: 2,5 m'} value={specs} onChange={e => setSpecs(e.target.value)} />
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Caractéristiques</p>
+          {specs.map((row, i) => (
+            <div key={i} className="flex gap-1.5 items-center">
+              <input className={`${input} w-2/5`} placeholder="Poids" value={row.k}
+                onChange={e => setSpecs(specs.map((r, j) => j === i ? { ...r, k: e.target.value } : r))} />
+              <input className={`${input} flex-1 min-w-0`} placeholder="8 t" value={row.v}
+                onChange={e => setSpecs(specs.map((r, j) => j === i ? { ...r, v: e.target.value } : r))} />
+              <button type="button" onClick={() => setSpecs(specs.filter((_, j) => j !== i))}
+                className="p-2 text-slate-500 hover:text-red-400" title="Retirer"><X size={14} /></button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setSpecs([...specs, { k: '', v: '' }])}
+            className="w-full py-2 rounded-lg border border-dashed border-white/[0.15] text-slate-400 text-xs flex items-center justify-center gap-1">
+            <Plus size={12} /> Ajouter une caractéristique
+          </button>
+        </div>
         <button onClick={save} disabled={busy || !nom.trim()} className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold disabled:opacity-40">Enregistrer</button>
       </div>
     </div>
