@@ -2295,6 +2295,7 @@ export default function SuiviView({ role, onLogout }: Props) {
           onSaveZone={setZoneOverride}
           isZoneEditable={isZoneEditable}
           isPatron={role === 'patron'}
+          liveMinutes={liveSessions.filter(l => l.chantierId === selectedChantier.id).reduce((a, l) => a + (l.dureeMinutes ?? 0), 0)}
           machineParams={machineParams}
           salarieName={salarieName}
           onClose={() => setShowChantierDetail(false)}

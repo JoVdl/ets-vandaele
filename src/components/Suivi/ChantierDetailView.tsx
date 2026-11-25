@@ -46,6 +46,7 @@ interface Props {
   rectOf:          (s: SuiviSession) => AlignedRect | undefined;
   onSaveZone?:     (id: string, corners: [number, number][] | null) => void;
   isPatron?:       boolean;
+  liveMinutes?:    number;
   isZoneEditable?: (id: string) => boolean;
   machineParams:   { vitesseMaxKmh: number; largeurTravailM: number; smoothAlpha: number };
   salarieName?:    string;
@@ -53,7 +54,7 @@ interface Props {
   onSessionClick?: (session: SuiviSession) => void;
 }
 
-export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, rectOf, machineParams, onSaveZone, isZoneEditable, isPatron = false, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
+export default function ChantierDetailView({ chantier, sessions, isDragage, volumeOf, rectOf, machineParams, onSaveZone, isZoneEditable, isPatron = false, liveMinutes = 0, salarieName = 'Hugo', onClose, onSessionClick }: Props) {
   const [showReport, setShowReport] = useState(false);
   const [showZones, setShowZones] = useState(false);
   const ordered = useMemo(
@@ -200,7 +201,7 @@ export default function ChantierDetailView({ chantier, sessions, isDragage, volu
 
       <div className="flex-1 overflow-y-auto">
 
-        {isPatron && <BillingPanel chantier={chantier} sessions={sessions} />}
+        {isPatron && <BillingPanel chantier={chantier} sessions={sessions} liveMinutes={liveMinutes} />}
         {isDragage && <FuelPanel chantierId={chantier.id} sessions={sessions} />}
 
         {/* Map */}

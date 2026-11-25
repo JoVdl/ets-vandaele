@@ -10,7 +10,7 @@ import { estimateEnd } from '../../lib/estimateEnd';
 const eur = (n: number) => `${n.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`;
 
 // Patron-only billing follow-up: sold price, hours done, what is billable and what is still to invoice.
-export default function BillingPanel({ chantier, sessions }: { chantier: Chantier; sessions: SuiviSession[] }) {
+export default function BillingPanel({ chantier, sessions, liveMinutes = 0 }: { chantier: Chantier; sessions: SuiviSession[]; liveMinutes?: number }) {
   const f = chantier.facturation ?? {};
   const [tarif, setTarif] = useState(f.tarifHoraire != null ? String(f.tarifHoraire) : '');
   const [total, setTotal] = useState(f.montantTotal != null ? String(f.montantTotal) : '');
@@ -18,7 +18,7 @@ export default function BillingPanel({ chantier, sessions }: { chantier: Chantie
   const [fMontant, setFMontant] = useState('');
   const [fNote, setFNote] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const b = useMemo(() => computeBilling(chantier, sessions), [chantier, sessions]);
+  const b = useMemo(() => computeBilling(chantier, sessions, liveMinutes), [chantier, sessions, liveMinutes]);
   const est = useMemo(() => (chantier.dureeEstimeeH
     ? estimateEnd(sessions, chantier.dureeEstimeeH, new Set(chantier.joursOff ?? []))
     : null), [sessions, chantier]);
@@ -69,7 +69,7 @@ export default function BillingPanel({ chantier, sessions }: { chantier: Chantie
         </div>
         <div className="bg-white/[0.04] rounded-xl p-3">
           <p className="text-white text-sm font-bold tabular-nums">{eur(b.facturable)}</p>
-          <p className="text-slate-500 text-[10px] uppercase">gagné à ce jour · {b.heuresFaites.toFixed(1)} h</p>
+          <p className="text-slate-500 text-[10px] uppercase">gagné à ce jour · {b.heuresFaites.toFixed(1)} h{liveMinutes > 0 ? ` (dont ${(liveMinutes / 60).toFixed(1)} h en cours)` : ''}</p>
         </div>
         <div className="bg-white/[0.04] rounded-xl p-3">
           <p className="text-white text-sm font-bold tabular-nums">{totalPrevu != null ? eur(totalPrevu) : '—'}</p>

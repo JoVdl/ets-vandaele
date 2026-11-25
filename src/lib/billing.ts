@@ -13,9 +13,10 @@ export interface Billing {
 
 // Billable amount: hourly rate × hours done, or, for a total price, the total pro-rata of the hours done
 // against the planned hours.
-export function computeBilling(chantier: Chantier, sessions: SuiviSession[]): Billing {
+// liveMinutes: time of sessions in progress (read-only, from live reports); not yet saved as sessions.
+export function computeBilling(chantier: Chantier, sessions: SuiviSession[], liveMinutes = 0): Billing {
   const f = chantier.facturation ?? {};
-  const heuresFaites = sessions.reduce((a, s) => a + s.dureeMinutes, 0) / 60;
+  const heuresFaites = (sessions.reduce((a, s) => a + s.dureeMinutes, 0) + liveMinutes) / 60;
   const budgetH = chantier.dureeEstimeeH ?? 0;
   const tarifEffectif = f.tarifHoraire ?? (f.montantTotal && budgetH > 0 ? f.montantTotal / budgetH : null);
   const facturable = f.tarifHoraire != null
