@@ -65,7 +65,7 @@ export default function SuiviView({ role, onLogout }: Props) {
   const [historyEdit, setHistoryEdit] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [purgeConfirmId, setPurgeConfirmId] = useState<string | null>(null);
-  const { liveSessions } = useLiveSessions();
+  const { liveSessions, error: liveError, lastSync: liveSync } = useLiveSessions();
   const [view, setView] = useState<View>('map');
   const [selectedSession, setSelectedSession] = useState<SuiviSession | null>(null);
   const [restoredBanner, setRestoredBanner]   = useState<string | null>(null); // chantier nom
@@ -2059,6 +2059,11 @@ export default function SuiviView({ role, onLogout }: Props) {
               )}
             </div>
 
+            <p className={`text-[11px] mb-3 ${liveError ? 'text-red-400' : 'text-slate-500'}`}>
+              {liveError
+                ? `Erreur de connexion aux sessions en cours : ${liveError}`
+                : liveSync ? `Dernière mise à jour reçue à ${format(new Date(liveSync), 'HH:mm:ss')}` : 'Connexion en cours…'}
+            </p>
             {liveSessions.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="w-14 h-14 rounded-2xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-3">

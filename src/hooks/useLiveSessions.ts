@@ -48,6 +48,8 @@ export async function clearLiveSession(sessionId: string): Promise<void> {
 export function useLiveSessions() {
   const [docs, setDocs] = useState<LiveSession[]>([]);
   const [now, setNow] = useState(() => Date.now());
+  const [error, setError] = useState<string | null>(null);
+  const [lastSync, setLastSync] = useState<number | null>(null);
 
   useEffect(() => {
     const subscribe = () => onSnapshot(collection(db, COL), snap => {
@@ -63,7 +65,9 @@ export function useLiveSessions() {
         })
       );
       setNow(Date.now());
-    }, () => {});
+      setError(null);
+      setLastSync(Date.now());
+    }, err => setError(err.message || 'connexion impossible'));
 
     let unsub = subscribe();
 
@@ -96,5 +100,5 @@ export function useLiveSessions() {
     return docs.filter(s => new Date(s.lastUpdate).getTime() > cutoff);
   }, [docs, now]);
 
-  return { liveSessions };
+  return { liveSessions, error, lastSync };
 }
